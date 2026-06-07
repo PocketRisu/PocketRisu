@@ -150,6 +150,9 @@ export function setDatabase(data:Database){
     if(checkNullish(data.translateSoundVolume)){
         data.translateSoundVolume = 100
     }
+    if(checkNullish(data.playMessageOnTranslateEnd)){
+        data.playMessageOnTranslateEnd = false
+    }
     if(checkNullish(data.customSounds)){
         data.customSounds = []
     }

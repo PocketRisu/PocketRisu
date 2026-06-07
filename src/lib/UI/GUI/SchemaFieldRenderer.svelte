@@ -163,13 +163,13 @@
         />
     {:else if uiField.widget === 'select'}
         <SelectInput bind:value={userValues[fieldKey] as string}>
-            {#each schemaField.enum ?? [] as opt}
+            {#each (schemaField.enum ?? []).filter(Boolean) as opt}
                 <OptionInput value={String(opt.value)}>{opt.label}</OptionInput>
             {/each}
         </SelectInput>
     {:else if uiField.widget === 'segmented'}
         <SelectInput bind:value={userValues[fieldKey] as string}>
-            {#each schemaField.enum ?? [] as opt}
+            {#each (schemaField.enum ?? []).filter(Boolean) as opt}
                 <OptionInput value={String(opt.value)}>{opt.label}</OptionInput>
             {/each}
         </SelectInput>
@@ -184,7 +184,7 @@
             list={`combobox-${fieldKey}`}
         />
         <datalist id={`combobox-${fieldKey}`}>
-            {#each schemaField.enum ?? [] as opt}
+            {#each (schemaField.enum ?? []).filter(Boolean) as opt}
                 <option value={String(opt.value)}>{opt.label}</option>
             {/each}
         </datalist>

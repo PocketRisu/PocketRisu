@@ -1,0 +1,43 @@
+{
+  "id": "anthropic-compatible:custom",
+  "version": 1,
+  "displayName": "Anthropic Compatible (Custom)",
+  "providerBaseId": "anthropic-compatible",
+  "description": "Generic Anthropic Messages endpoint. Provide your own URL, key, and model id. Use for proxies that speak the Anthropic wire format (e.g. a GitHub Copilot bridge).",
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": ""
+  },
+  "auth": {
+    "kind": "x-api-key",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/api/messages"
+  ],
+  "tags": [
+    "custom",
+    "anthropic-compatible"
+  ],
+  "sortOrder": 7020,
+  "recommendedTokenizer": "claude",
+  "displayNameI18n": {
+    "ko": "Anthropic 호환 (커스텀)"
+  },
+  "descriptionI18n": {
+    "ko": "범용 Anthropic Messages 엔드포인트. URL, 키, 모델 ID를 직접 입력합니다. Anthropic 포맷을 따르는 프록시용 (예: GitHub Copilot 브릿지)."
+  },
+  "profileStatus": "current"
+}

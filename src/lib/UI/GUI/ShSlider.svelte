@@ -69,33 +69,74 @@
     // svelte-ignore state_referenced_locally
     let internal = $state<number>(typeof value === 'number' ? clamp(value) : min);
 
+    // True only while the user is actively dragging/keying the slider thumb.
+    // bits-ui re-snaps any value not aligned to `sliderStep` (its internal
+    // `watch`) and echoes it through onValueChange. When we push a precise,
+    // off-step typed value (e.g. 4321 on a 1000-step slider) into the slider,
+    // that echo must NOT flow back and clobber `value` — otherwise the typed
+    // number jumps to the nearest coarse step. We only accept onValueChange
+    // when the change actually originated from slider interaction.
+    let sliderActive = $state(false);
+
     $effect(() => {
         const v = typeof value === 'number' ? clamp(value) : min;
-        if (internal !== v) internal = v;
+        // Push to the slider only for changes larger than its (possibly
+        // coarsened) step. This lets the number input hold a precise off-step
+        // value without the slider snapping it back. bits-ui moves the thumb to
+        // the nearest step at most sliderStep/2 away, so this never loops.
+        if (Math.abs(internal - v) >= sliderStep) internal = v;
     });
 
     function onValueChange(v: number) {
+        if (!sliderActive) return;   // ignore programmatic/snap echoes
         value = v;
     }
 
+    // The number input is left uncontrolled while focused so reactive model
+    // updates (live clamping, slider drag) never rewrite the field mid-typing.
+    // Controlling it with value={value} would snap a first digit below `min`
+    // up to `min` and make multi-digit entry impossible (e.g. typing "5000"
+    // when min=128). We mirror model → field only when NOT editing.
+    let inputEl = $state<HTMLInputElement | null>(null);
+    let editing = $state(false);
+
+    $effect(() => {
+        const display = value == null ? '' : String(value);
+        if (inputEl && !editing && inputEl.value !== display) {
+            inputEl.value = display;
+        }
+    });
+
     function onInput(e: Event) {
         const el = e.currentTarget as HTMLInputElement;
+        editing = true;
+        if (el.value === '') return;     // allow a transient empty field while editing
         const n = el.valueAsNumber;
-        if (Number.isNaN(n)) return;
-        value = clamp(n);
-        // Snap the field down immediately when typing past max (can't block
-        // typing toward a multi-digit min, so under-min is snapped on commit).
-        if (n > max) el.value = String(value);
+        if (Number.isNaN(n)) return;     // partial input such as "1." or "-"
+        value = clamp(n);                // drives the slider; field keeps the typed text
     }
 
-    // On blur/enter, force the field to the clamped model value so it can never
-    // be left showing an out-of-range number.
-    function onCommit(e: Event) {
-        (e.currentTarget as HTMLInputElement).value = String(value ?? '');
+    // On blur/enter, normalize the field to the clamped model value so it can
+    // never be left showing an out-of-range or partial number.
+    function normalizeField(el: HTMLInputElement) {
+        el.value = value == null ? '' : String(value);
     }
 </script>
 
+<!-- Reset sliderActive on release anywhere. A keyup/pointerup can land outside the
+     Root (e.g. Tab moves focus away before its keyup fires), so a Root-level reset
+     would get stuck on; listen on window instead. -->
+<svelte:window
+    onpointerup={() => (sliderActive = false)}
+    onkeyup={() => (sliderActive = false)}
+/>
+
 <div class={cn('flex items-center gap-2 w-full', className)}>
+    <!-- sliderActive is set in CAPTURE phase: bits-ui's keydown handler lives on the
+         Thumb (child) and fires onValueChange synchronously, so a bubble-phase Root
+         handler would run too late and the keyboard change would be dropped (then
+         our $effect would snap the thumb back). Capturing on the Root guarantees the
+         flag is already true when bits-ui's onValueChange runs. Reset: window above. -->
     <SliderPrimitive.Root
         type="single"
         bind:value={internal}
@@ -104,6 +145,8 @@
         step={sliderStep}
         {disabled}
         {onValueChange}
+        onpointerdowncapture={() => (sliderActive = true)}
+        onkeydowncapture={() => (sliderActive = true)}
         data-slot="slider"
         data-unset={value === undefined ? '' : undefined}
         class={
@@ -142,10 +185,12 @@
         </span>
     {:else if showInput}
         <input
+            bind:this={inputEl}
             type="number"
-            value={value ?? ''}
             oninput={onInput}
-            onchange={onCommit}
+            onfocus={() => (editing = true)}
+            onblur={(e) => { editing = false; normalizeField(e.currentTarget); }}
+            onchange={(e) => normalizeField(e.currentTarget)}
             {min}
             {max}
             {step}

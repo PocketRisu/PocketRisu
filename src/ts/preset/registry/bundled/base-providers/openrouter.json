@@ -226,6 +226,10 @@
         {
           "value": "high",
           "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
         }
       ],
       "mapsTo": {

@@ -827,7 +827,11 @@ import { isMobile } from 'src/ts/platform'
                     style="{DBState.db.fixedChatTextarea ? 'z-index:29;' : ''}"
             >
               <div class="mx-auto w-full max-w-3xl px-2">
-                <div class="flex flex-wrap items-center gap-1 rounded-3xl border border-darkborderc bg-bgcolor px-2 py-1.5 transition-colors focus-within:border-textcolor">
+                <!-- "plugin-compat-items-stretch" is a compat hook (not a Tailwind class):
+                     plugins that locate the composer via div[class*="items-stretch"] (e.g. gemini-cache-keeper)
+                     relied on the pre-redesign container class. Keep it so they can still find/anchor their UI,
+                     and it scopes the timer re-flow rules in <style> below. -->
+                <div class="flex flex-wrap items-center gap-1 rounded-3xl border border-darkborderc bg-bgcolor px-2 py-1.5 transition-colors focus-within:border-textcolor plugin-compat-items-stretch">
                 {#if DBState.db.characters[$selectedCharID]?.chaId !== '§playground'}
                     <ShDropdownMenu bind:open={openMenu}>
                         <ShDropdownMenuTrigger>
@@ -995,7 +999,7 @@ import { isMobile } from 'src/ts/platform'
                 <button
                         onclick={() => composerFullscreen = true}
                         aria-label={language.chatInputExpandTitle}
-                        class="shrink-0 flex justify-center items-center w-9 h-9 rounded-full text-textcolor hover:bg-primary/20 transition-colors"
+                        class="composer-expand-btn order-1 shrink-0 flex justify-center items-center w-9 h-9 rounded-full text-textcolor hover:bg-primary/20 transition-colors"
                         class:ml-auto={multiline}
                 >
                     <Maximize2 size={18} />
@@ -1004,7 +1008,7 @@ import { isMobile } from 'src/ts/platform'
                 {#if $doingChat || doingChatInputTranslate}
                     <button
                             aria-labelledby="cancel"
-                            class="shrink-0 flex justify-center items-center w-9 h-9 rounded-full text-textcolor hover:bg-primary/20 transition-colors" onclick={abortChat}
+                            class="order-2 shrink-0 flex justify-center items-center w-9 h-9 rounded-full text-textcolor hover:bg-primary/20 transition-colors" onclick={abortChat}
                     >
                         <div class="loadmove chat-process-stage-{$chatProcessStage}"></div>
                     </button>
@@ -1012,7 +1016,7 @@ import { isMobile } from 'src/ts/platform'
                     <button
                             onclick={send}
                             aria-label={willResend ? language.reroll : language.send}
-                            class="shrink-0 flex justify-center items-center w-9 h-9 rounded-full bg-primary text-white hover:bg-primary/80 transition-colors button-icon-send"
+                            class="order-2 shrink-0 flex justify-center items-center w-9 h-9 rounded-full bg-primary text-white hover:bg-primary/80 transition-colors button-icon-send"
                     >
                         {#if willResend}
                             <RefreshCcwIcon size={18} />
@@ -1259,8 +1263,25 @@ import { isMobile } from 'src/ts/platform'
 
 
     @keyframes spin {
-        
+
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
+    }
+
+    /* gemini-cache-keeper compat: the plugin injects #gck-cache-timer into the composer
+       (found via the .plugin-compat-items-stretch hook) and absolutely positions it over
+       the send button — which now overlaps the expand button and floats at the composer's
+       vertical center. Re-flow it as an in-line flex item: order:0 (default, appended last)
+       places it just left of the expand button (order-1) and send button (order-2). */
+    :global(.plugin-compat-items-stretch #gck-cache-timer) {
+        position: relative !important;  /* stay a positioned ancestor so the popup still anchors to it */
+        inset: auto !important;         /* clear the plugin's top/right offsets */
+        transform: none !important;     /* clear translateY(-50%) */
+        margin-left: auto;              /* right-align the trailing cluster when the composer wraps (multiline) */
+    }
+    /* when the timer is present it owns the auto margin, so drop the expand button's own
+       ml-auto to avoid a double gap splitting the timer away from the buttons */
+    :global(.plugin-compat-items-stretch:has(#gck-cache-timer) .composer-expand-btn) {
+        margin-left: 0;
     }
 </style>

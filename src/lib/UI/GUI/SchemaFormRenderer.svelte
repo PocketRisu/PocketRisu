@@ -36,6 +36,9 @@
     function visibleEntries(): RenderEntry[] {
         const out: RenderEntry[] = [];
         for (const uiField of uiSchema.fields) {
+            // Tolerate null/undefined elements from a malformed/persisted snapshot
+            // so a single bad entry can't crash rendering (reading `.visibility` of null).
+            if (!uiField) continue;
             if (uiField.visibility !== visibility) continue;
             if (!evalShowIf(uiField)) continue;
             const schemaField = schema.find((f) => f.key === uiField.key);
@@ -57,7 +60,10 @@
     const entries = $derived(visibleEntries());
 
     const groupedRendered = $derived.by(() => {
-        const groupOrder = [...uiSchema.groups]
+        // Tolerate null/undefined group elements from a malformed/persisted
+        // snapshot so a bad entry can't crash the sort (reading `.order` of null).
+        const groupOrder = uiSchema.groups
+            .filter(Boolean)
             .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
 
         // entries grouped by group id (or '' for un-grouped)

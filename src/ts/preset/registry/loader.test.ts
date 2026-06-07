@@ -3,6 +3,7 @@ import { getBundledRegistryId, loadBundledRegistry } from './loader'
 
 const EXPECTED_BASE_PROVIDER_IDS = [
     'anthropic',
+    'anthropic-compatible',
     'bedrock',
     'deepinfra',
     'deepseek',
@@ -18,6 +19,8 @@ const EXPECTED_BASE_PROVIDER_IDS = [
 ]
 
 const EXPECTED_PROFILE_IDS = [
+    'anthropic-compatible:custom',
+    'anthropic-compatible:custom-noauth',
     'anthropic:haiku-45',
     'anthropic:opus-4',
     'anthropic:opus-41',

@@ -1,0 +1,46 @@
+{
+  "id": "anthropic-compatible:custom-noauth",
+  "version": 1,
+  "displayName": "Anthropic Compatible (Custom, no auth)",
+  "providerBaseId": "anthropic-compatible",
+  "description": "Generic Anthropic Messages endpoint without authentication. Use for local bridges (e.g. a GitHub Copilot proxy on localhost) or any gateway that does not require an API key.",
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": ""
+  },
+  "auth": {
+    "kind": "none",
+    "fields": []
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "hidden",
+        "group": "credentials"
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/api/messages"
+  ],
+  "tags": [
+    "custom",
+    "anthropic-compatible",
+    "noauth"
+  ],
+  "sortOrder": 7030,
+  "recommendedTokenizer": "claude",
+  "displayNameI18n": {
+    "ko": "Anthropic 호환 (커스텀, 인증 없음)"
+  },
+  "profileStatus": "current"
+}
