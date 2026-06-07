@@ -1334,6 +1334,10 @@ export const languageVietnamese = {
 
     remoteAccessTermuxWarning: "Cloudflare Quick Tunnel không hoạt động trên Termux. Hãy sử dụng Tailscale hoặc công cụ truy cập từ xa khác.",
 
+    pluginStorageDeleteFiltered: "Xóa các mục đã lọc",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `Xóa tất cả ${count} khóa đã lọc? Thao tác này không thể hoàn tác.`,
+    pluginStorageDeletedCount: (count: number) => `Đã xóa ${count} khóa.`,
+
     httpInsecureWarningTitle: "Đang kết nối qua HTTP",
     httpInsecureWarningBody: "Một số tính năng như plugin có thể không hoạt động. Hãy dùng tính năng Truy cập từ xa để có kết nối HTTPS.",
     httpInsecureOpenRemoteAccess: "Mở cài đặt",

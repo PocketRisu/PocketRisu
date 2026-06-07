@@ -1593,6 +1593,10 @@ export const languageChineseTraditional = {
     "togglePresetRenamed": (oldName: string, newName: string) => `已將「${oldName}」重新命名為「${newName}」。`,
     "togglePresetSaved": (name: string) => `預設「${name}」已儲存。`,
 
+    pluginStorageDeleteFiltered: "刪除篩選的鍵",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `是否刪除所有 ${count} 個篩選的鍵？此操作無法撤銷。`,
+    pluginStorageDeletedCount: (count: number) => `已刪除 ${count} 個鍵。`,
+
     "httpInsecureWarningTitle": "透過 HTTP 連線",
     "httpInsecureWarningBody": "插件等部分功能可能無法使用。請使用遠端存取功能以建立 HTTPS 連線。",
     "httpInsecureOpenRemoteAccess": "開啟設定",

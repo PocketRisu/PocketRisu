@@ -83,6 +83,12 @@
         })
     })
 
+    const isFiltered = $derived(
+        searchKey.trim() !== '' ||
+        searchVal.trim() !== '' ||
+        ownerFilter !== ''
+    )
+
     // Distinct origin plugins present in the current backend, for the filter.
     const ownerOptions = $derived.by(() => {
         const set = new Set<string>()
@@ -288,6 +294,33 @@
         }
     }
 
+    async function deleteFiltered() {
+        const count = filtered.length
+        if (count === 0) return
+        const ok = await alertConfirm(language.pluginStorageDeleteFilteredConfirm(count))
+        if (!ok) return
+        loading = true
+        try {
+            const keysToDelete = filtered.map((e) => e.key)
+            for (let i = 0; i < keysToDelete.length; i++) {
+                const key = keysToDelete[i]
+                await backendRemove(key)
+                if ((i & 15) === 15) {
+                    await new Promise((r) => setTimeout(r))
+                }
+            }
+            if (selected && keysToDelete.includes(selected.key)) {
+                detailOpen = false
+            }
+            notifySuccess(language.pluginStorageDeletedCount(count))
+            await load()
+        } catch (e) {
+            notifyError(e instanceof Error ? e.message : String(e))
+        } finally {
+            loading = false
+        }
+    }
+
     // Load on mount and whenever the backend tab changes; reset search per tab.
     let loadedIndex = -1
     $effect(() => {
@@ -353,10 +386,18 @@
     <span class="text-textcolor2 text-xs">
         <ShBadge variant="secondary">{filtered.length}</ShBadge> / {entries.length} keys
     </span>
-    <ShButton variant="ghost" size="sm" onclick={load} disabled={loading}>
-        <RefreshCwIcon size={14} class={loading ? 'animate-spin' : ''} />
-        {language.pluginStorageRefresh}
-    </ShButton>
+    <div class="flex items-center gap-1.5">
+        {#if isFiltered && filtered.length > 0}
+            <ShButton variant="destructive" size="sm" onclick={deleteFiltered} disabled={loading}>
+                <Trash2Icon size={14} />
+                {language.pluginStorageDeleteFiltered}
+            </ShButton>
+        {/if}
+        <ShButton variant="ghost" size="sm" onclick={load} disabled={loading}>
+            <RefreshCwIcon size={14} class={loading ? 'animate-spin' : ''} />
+            {language.pluginStorageRefresh}
+        </ShButton>
+    </div>
 </div>
 
 <!-- List -->

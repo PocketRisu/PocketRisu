@@ -1334,6 +1334,10 @@ export const languageGerman = {
 
     remoteAccessTermuxWarning: "Cloudflare Quick Tunnel funktioniert auf Termux nicht. Verwenden Sie stattdessen Tailscale oder ein anderes Tool für den Fernzugriff.",
 
+    pluginStorageDeleteFiltered: "Gefilterte löschen",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `Alle ${count} gefilterten Schlüssel löschen? Dies kann nicht rückgängig gemacht werden.`,
+    pluginStorageDeletedCount: (count: number) => `${count} Schlüssel gelöscht.`,
+
     httpInsecureWarningTitle: "Über HTTP verbunden",
     httpInsecureWarningBody: "Einige Funktionen wie Plugins funktionieren möglicherweise nicht. Verwenden Sie den Fernzugriff für eine HTTPS-Verbindung.",
     httpInsecureOpenRemoteAccess: "Einstellungen öffnen",
