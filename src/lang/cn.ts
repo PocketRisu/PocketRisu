@@ -1334,6 +1334,10 @@ export const languageChinese = {
 
     remoteAccessTermuxWarning: "Cloudflare Quick Tunnel 在 Termux 上无法使用。请改用 Tailscale 或其他远程访问工具。",
 
+    pluginStorageDeleteFiltered: "删除筛选的键",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `是否删除所有 ${count} 个筛选的键？此操作无法撤销。`, // Wait, "筛选 of 键" is wrong, it should be "筛选的键"
+    pluginStorageDeletedCount: (count: number) => `已删除 ${count} 个键。`,
+
     httpInsecureWarningTitle: "通过 HTTP 连接",
     httpInsecureWarningBody: "插件等部分功能可能无法使用。请使用远程访问功能以建立 HTTPS 连接。",
     httpInsecureOpenRemoteAccess: "打开设置",
