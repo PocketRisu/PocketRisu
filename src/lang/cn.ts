@@ -1339,4 +1339,7 @@ export const languageChinese = {
     httpInsecureOpenRemoteAccess: "打开设置",
 
     selectBotHint: "选择一个机器人开始聊天",
+    pluginStorageDeleteFiltered: "删除筛选的键",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `是否删除所有 ${count} 个筛选的键？此操作无法撤销。`, // Wait, let's translate "filtered keys" correctly: "个筛选的键"
+    pluginStorageDeletedCount: (count: number) => `已删除 ${count} 个键。`,
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

@@ -1339,4 +1339,7 @@ export const languageSpanish = {
     httpInsecureOpenRemoteAccess: "Abrir configuración",
 
     selectBotHint: "Selecciona un bot para empezar a chatear",
+    pluginStorageDeleteFiltered: "Eliminar filtrados",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `¿Eliminar las ${count} claves filtradas? Esto no se puede deshacer.`,
+    pluginStorageDeletedCount: (count: number) => `${count} claves eliminadas.`,
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

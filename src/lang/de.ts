@@ -1339,4 +1339,7 @@ export const languageGerman = {
     httpInsecureOpenRemoteAccess: "Einstellungen öffnen",
 
     selectBotHint: "Wählen Sie einen Bot zum Chatten",
+    pluginStorageDeleteFiltered: "Gefilterte löschen",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `Alle ${count} gefilterten Schlüssel löschen? Dies kann nicht rückgängig gemacht werden.`,
+    pluginStorageDeletedCount: (count: number) => `${count} Schlüssel gelöscht.`,
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

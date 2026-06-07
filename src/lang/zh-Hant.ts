@@ -1598,4 +1598,7 @@ export const languageChineseTraditional = {
     "httpInsecureOpenRemoteAccess": "開啟設定",
 
     "selectBotHint": "選擇一個機器人開始聊天",
+    "pluginStorageDeleteFiltered": "刪除篩選的鍵",
+    "pluginStorageDeleteFilteredConfirm": (count: number) => `是否刪除所有 ${count} 個篩選的鍵？此操作無法撤銷。`,
+    "pluginStorageDeletedCount": (count: number) => `已刪除 ${count} 個鍵。`,
 } satisfies DeepPartial<typeof import('./en').languageEnglish>

@@ -1339,4 +1339,7 @@ export const languageVietnamese = {
     httpInsecureOpenRemoteAccess: "Mở cài đặt",
 
     selectBotHint: "Chọn một bot để bắt đầu trò chuyện",
+    pluginStorageDeleteFiltered: "Xóa các mục đã lọc",
+    pluginStorageDeleteFilteredConfirm: (count: number) => `Xóa tất cả ${count} khóa đã lọc? Thao tác này không thể hoàn tác.`,
+    pluginStorageDeletedCount: (count: number) => `Đã xóa ${count} khóa.`,
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;
