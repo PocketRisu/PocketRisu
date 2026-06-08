@@ -1,6 +1,6 @@
 import { writable, type Writable } from "svelte/store"
 import { alertCardExport, alertConfirm, alertError, alertInput, alertStore, alertTOS, alertWait, notifySuccess, notifyError } from "./alert"
-import { defaultSdDataFunc, type character, setDatabase, type customscript, type loreSettings, type loreBook, type triggerscript, importPreset, getDatabase, setDatabaseLite, appVer } from "./storage/database.svelte"
+import { defaultSdDataFunc, type character, setDatabase, type customscript, type loreSettings, type loreBook, type triggerscript, importPreset, getDatabase, setDatabaseLite, appVer, newChatModelDefaults } from "./storage/database.svelte"
 import { checkNullish, decryptBuffer, isKnownUri, selectFileByDom, sleep } from "./util"
 import { language } from "src/lang"
 import { v4 as uuidv4, v4 } from 'uuid';
@@ -570,7 +570,8 @@ function convertOffSpecCards(charaData:OldTavernChar|CharacterCardV2Risu, imgp:s
             message: [],
             note: '',
             name: 'Chat 1',
-            localLore: []
+            localLore: [],
+            ...newChatModelDefaults()
         }],
         chatPage: 0,
         image: imgp,
@@ -867,7 +868,8 @@ async function importCharacterCardSpec(card:CharacterCardV2Risu|CharacterCardV3,
             message: [],
             note: '',
             name: 'Chat 1',
-            localLore: []
+            localLore: [],
+            ...newChatModelDefaults()
         }],
         chatPage: 0,
         image: im,

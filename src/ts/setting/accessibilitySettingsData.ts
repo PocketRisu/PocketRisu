@@ -234,6 +234,38 @@ export const accessibilitySettingsItems: SettingItem[] = [
         keywords: ['scroll', 'button', 'navigate', 'message'],
     },
     {
+        id: 'acc.modelModeLock',
+        type: 'radio',
+        labelKey: 'modelModeLockLabel',
+        bindKey: 'nodeOnlyModelModeLock',
+        helpKey: 'modelModeLock',
+        options: {
+            selectOptions: [
+                { value: 'legacy', labelKey: 'modelModeLockLegacy', descriptionKey: 'modelModeLockLegacyDesc' },
+                { value: 'preset', labelKey: 'modelModeLockPreset', descriptionKey: 'modelModeLockPresetDesc' },
+                { value: 'none', labelKey: 'modelModeLockNone', descriptionKey: 'modelModeLockNoneDesc' },
+            ],
+        },
+        keywords: ['model', 'mode', 'legacy', 'preset', 'binding', 'lock', 'sidebar'],
+    },
+    {
+        id: 'acc.newChatModelMode',
+        type: 'select',
+        labelKey: 'newChatModelModeLabel',
+        helpKey: 'newChatModelMode',
+        condition: (ctx) => (ctx.db.nodeOnlyModelModeLock ?? 'none') === 'none',
+        // Backed by the existing boolean useModelPresetByDefault (preset=true).
+        getValue: (db) => (db.useModelPresetByDefault ? 'preset' : 'legacy'),
+        setValue: (db, val) => { db.useModelPresetByDefault = val === 'preset'; },
+        options: {
+            selectOptions: [
+                { value: 'legacy', labelKey: 'modelModeLegacy' },
+                { value: 'preset', labelKey: 'modelModePreset' },
+            ],
+        },
+        keywords: ['model', 'mode', 'new', 'chat', 'default', 'legacy', 'preset'],
+    },
+    {
         id: 'acc.showModelInSidebar',
         type: 'check',
         labelKey: 'showModelInSidebar',
@@ -305,6 +337,8 @@ export const accessibilityScrollItems = pick([
 ]);
 
 export const accessibilitySidebarItems = pick([
+    'acc.modelModeLock',
+    'acc.newChatModelMode',
     'acc.showMenuChatList',
     'acc.showMenuHypaMemoryModal',
     'acc.sideMenuRerollButton',

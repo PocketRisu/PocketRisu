@@ -54,6 +54,8 @@ export interface SelectOption {
     label?: string;
     /** i18n key for translation — takes precedence over label */
     labelKey?: string;
+    /** i18n key for an optional sub-description line (radio groups only) */
+    descriptionKey?: string;
     /** Optional condition — when provided, the option is only shown if this returns true */
     condition?: (ctx: SettingContext) => boolean;
 }

@@ -150,6 +150,17 @@
     color: var(--color-gray-400);
   }
 
+  /* Keep the chat composer placeholder on a single line: the textarea height is
+     measured from its (empty) content, so a wrapped placeholder would overflow a
+     1-line box on narrow screens and get clipped. Ellipsis instead. Scoped to the
+     composer only — typed text still wraps normally. */
+  textarea.text-input-area {
+    text-overflow: ellipsis;
+  }
+  textarea.text-input-area::placeholder {
+    white-space: nowrap;
+  }
+
   dialog {
     margin: auto;
   }

@@ -30,6 +30,7 @@ import {
     type AdapterReasoningPart, type AdapterToolCall, type AdapterToolDef,
 } from "src/ts/preset/adapter";
 import { TOOL_CAPABLE_ADAPTER_KINDS, VISION_CAPABLE_ADAPTER_KINDS, type AdapterKind, type ModelPreset } from "src/ts/preset/types";
+import { pumpPresetStream } from "./presetStreamPump";
 import { resolveChatModelBinding, buildModelPresetCredential } from "./modelPresetBinding";
 import { expandAdapterMessages, toAdapterMessage, toolResponseText } from "./modelPresetMessages";
 import { isLocalNetworkUrl } from "src/ts/network/localNetwork";
@@ -283,7 +284,7 @@ export function reformater(formated:OpenAIChat[],modelInfo:LLMModel|LLMFlags[]){
 
     if(!flags.includes(LLMFlags.hasFullSystemPrompt)){
         if(flags.includes(LLMFlags.hasFirstSystemPrompt)){
-            while(formated[0].role === 'system'){
+            while(formated.length > 0 && formated[0].role === 'system'){
                 if(systemPrompt){
                     systemPrompt.content += '\n\n' + formated[0].content
                 }
@@ -583,6 +584,14 @@ function resolvePresetStreaming(preset: ModelPreset, arg: RequestDataArgumentExt
 // follow-up re-run already-executed (possibly write-side) tools.
 const MODEL_PRESET_MAX_TOOL_STEPS = 8
 
+// How often (ms) a streaming response flushes accumulated text to the chat
+// renderer. Adapters yield one delta per token; each emitted chunk forces a full
+// re-parse of the whole message (markdown + sanitize) downstream, so emitting
+// every token makes the re-parse count scale with token count and stalls slow
+// (mobile) devices. Coalescing to ~20fps keeps streaming visibly live while
+// bounding re-parse cost. The final chunk is always flushed regardless.
+const STREAM_FLUSH_INTERVAL_MS = 50
+
 function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
     return {
         name: tool.name,
@@ -633,12 +642,46 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         ? arg.tools.map(toAdapterToolDef)
         : undefined
 
-    // Vision gate (no per-preset toggle): send attached images when the profile
-    // declares the 'vision' capability and the adapter implements image wire.
-    // Additive — the preset path otherwise drops images, so OFF (no capability)
-    // is byte-identical to the prior text-only behavior.
+    // Vision gate: send attached images when the adapter implements image wire AND
+    // either the profile declares the 'vision' capability OR the user opted in via
+    // the preset's imageInput toggle (for profiles like ollama / openai-compatible
+    // whose snapshot does not declare 'vision'). Additive — both branches default
+    // off, so OFF is byte-identical to the prior text-only behavior.
     const supportsVision = VISION_CAPABLE_ADAPTER_KINDS.includes(kind)
-        && (caps?.includes('vision') ?? false)
+        && ((caps?.includes('vision') ?? false) || preset.imageInput === true)
+
+    // System/role normalization. The classic path always runs reformater() before
+    // dispatch (~431); the preset path skipped it, so models without a native system
+    // role (e.g. Ollama Gemma3) never saw bot/persona info folded into user turns.
+    // Synthesize the relevant LLMFlags from the preset's ability toggles and reuse
+    // reformater (which also honors db.systemRoleReplacement/ContentReplacement, also
+    // previously ignored here). All toggles default off → flags = [hasFullSystemPrompt]
+    // → reformater is a no-op (byte-identical to the prior preset behavior).
+    //
+    // Folding is gated on the LIVE adapter kind, not just the toggle: only literal-role
+    // adapters (openai-compatible) may fold. anthropic-messages / google-gemini extract
+    // system natively (collectSystemAndChat), so folding system→user would strip their
+    // system instruction — and gating on `kind` also defuses a stale foldSystemPrompt
+    // left over from a profile swap (its UI toggle is hidden on the new kind). Sequence
+    // shaping (alternate role / user-first) is adapter-agnostic and applies to all kinds.
+    const foldSystem = kind === 'openai-compatible' && preset.foldSystemPrompt === true
+    const presetFlags: LLMFlags[] = []
+    if (!foldSystem) presetFlags.push(LLMFlags.hasFullSystemPrompt)
+    else if (preset.keepFirstSystemPrompt) presetFlags.push(LLMFlags.hasFirstSystemPrompt)
+    if (preset.alternateRole) presetFlags.push(LLMFlags.requiresAlternateRole)
+    if (preset.startWithUserInput) presetFlags.push(LLMFlags.mustStartWithUserInput)
+    // reformater mutates its input in place (requiresAlternateRole appends merged
+    // content onto the first message of a run). The preset path returns before the
+    // classic clone at ~405, and the retry loop (while(true)) only re-clones per
+    // fallback model, so mutating arg.formated directly would re-merge on every retry
+    // (A,B → A\nB → A\nB\nB). Clone first, matching the classic path's safeStructuredClone.
+    // Also guarded: reformater runs outside the request try below, so a throw returns
+    // a graceful fail instead of propagating (mirrors the previewBody/request catches).
+    try {
+        arg.formated = reformater(safeStructuredClone(arg.formated), presetFlags)
+    } catch (err) {
+        return { type: 'fail', result: err instanceof Error ? err.message : String(err), model: preset.name }
+    }
 
     // Expand `<tool_call>` history into structured tool turns ONLY on the active
     // tool path. With tools off, fall back to the plain mapping so existing chats
@@ -682,26 +725,12 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         if(useStreaming){
             const gen = streamModelPreset(kind, preset, options, credential)
             const stream = new ReadableStream<StreamResponseChunk>({
-                async start(controller){
-                    let fullText = ''
-                    let reasoningText = ''
-                    try {
-                        for await (const delta of gen){
-                            if (delta.reasoningDelta) reasoningText += delta.reasoningDelta
-                            fullText += delta.textDelta
-                            // Prepend the accumulated reasoning wrapped in <Thoughts>
-                            // (mirrors the non-streaming path), so thinking is shown
-                            // as reasoning and never merged into the saved answer.
-                            const prefix = reasoningText.length > 0
-                                ? formatPresetReasoning([{ text: reasoningText }])
-                                : ''
-                            controller.enqueue({ "0": prefix + fullText })
-                        }
-                        controller.close()
-                    } catch (err) {
-                        console.error('[ModelPreset] stream error', describeModelPresetError(err))
-                        controller.error(err)
-                    }
+                start(controller){
+                    return pumpPresetStream(gen, controller, {
+                        intervalMs: STREAM_FLUSH_INTERVAL_MS,
+                        formatReasoning: (text) => formatPresetReasoning([{ text }]),
+                        onError: (err) => console.error('[ModelPreset] stream error', describeModelPresetError(err)),
+                    })
                 }
             })
             return { type: 'streaming', result: stream, model: preset.name }

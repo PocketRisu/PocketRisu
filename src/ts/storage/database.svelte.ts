@@ -17,6 +17,7 @@ import { safeStructuredClone } from '../polyfill';
 import { v4 as uuidv4 } from 'uuid';
 import { applyModelPresetDefaults } from '../preset/dbDefaults';
 import type { ApiKeyPoolEntry, ModelBindingFields, ModelBindingSet, ModelPreset, ModelPresetMigrationSummary, RegistryCache } from '../preset/types';
+import { emptyModelBinding } from '../preset/types';
 
 //APP_VERSION_POINT is to locate the app version in the database file for version bumping
 export let appVer = "2026.2.291" //<APP_VERSION_POINT>
@@ -678,6 +679,7 @@ export function setDatabase(data:Database){
     data.showModelInSidebar ??= true
     data.showPresetInSidebar ??= true
     data.showPersonaInSidebar ??= true
+    data.nodeOnlyModelModeLock ??= 'none'
     data.disableMobileDragDrop ??= false
     data.disableToggleBinding ??= false
     data.hideAllImages ??= false
@@ -781,6 +783,27 @@ export function setCurrentChat(chat:Chat){
     const char = getCurrentCharacter()
     char.chats[char.chatPage] = normalizeChat(chat)
     setCurrentCharacter(char)
+}
+
+/**
+ * Model-mode fields seeded into a freshly created (empty) chat so the
+ * "default model mode for new chats" preference (useModelPresetByDefault)
+ * applies AT BIRTH — a snapshot, not a runtime fallback. A runtime fallback
+ * would retroactively flip every existing chat that never chose a mode, and
+ * couple un-opened chats live to db.defaultModelBinding. Snapshotting here keeps
+ * each chat independent. Returns {} when the default is legacy (leave the field
+ * absent → classic), so existing chats are unaffected. Spread into new Chat
+ * literals. Do NOT call for hydration placeholders or chats being restored with
+ * their own mode.
+ */
+export function newChatModelDefaults(): Partial<Pick<Chat, 'useModelPreset' | 'modelBinding'>> {
+    const db = getDatabase()
+    if (!db.useModelPresetByDefault) return {}
+    const def = db.defaultModelBinding
+    return {
+        useModelPreset: true,
+        modelBinding: def ? structuredClone($state.snapshot(def)) : emptyModelBinding(),
+    }
 }
 
 // ── Prompt Option State (per-chat toggle sync) ──────────────────────
@@ -1338,6 +1361,11 @@ export interface Database{
     // (seeding); useModelPresetByDefault seeds the new-chat regime toggle.
     useModelPresetByDefault?: boolean
     defaultModelBinding?: ModelBindingSet
+    // Global model-mode lock. 'legacy'/'preset' force every chat into that
+    // regime (the per-chat dropdown is hidden); 'none' lets each chat decide,
+    // falling back to useModelPresetByDefault for chats that never chose. Read
+    // by resolveChatModelBinding (the runtime regime chokepoint).
+    nodeOnlyModelModeLock?: 'legacy' | 'preset' | 'none'
     modelPresetMigrationVersion?: number
     modelPresetMigrationAppliedAt?: number
     modelPresetMigrationReport?: ModelPresetMigrationSummary

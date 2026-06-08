@@ -20,7 +20,7 @@
     import { alertConfirm, notifySuccess } from "src/ts/alert";
     import { getOfficialRegistry, getPresetUpdateStatus, syncRemoteRegistry } from "src/ts/preset/registry";
     import { buildSeenMap, computeRegistryNotice, noticeCount } from "src/ts/preset/registry/notice";
-    import { TOOL_CAPABLE_ADAPTER_KINDS } from "src/ts/preset/types";
+    import { TOOL_CAPABLE_ADAPTER_KINDS, VISION_CAPABLE_ADAPTER_KINDS } from "src/ts/preset/types";
     import { onMount } from "svelte";
     import { v4 as uuidv4 } from "uuid";
 
@@ -61,6 +61,30 @@
             editingId = null;
         }
     });
+
+    // Visibility of the advanced "model abilities" toggles. Image input only when
+    // the adapter implements vision wire and the snapshot does not already declare
+    // 'vision' (declared profiles auto-send, so the toggle would be redundant).
+    // System-prompt folding only for openai-compatible (literal role passthrough);
+    // anthropic/gemini extract system natively, so folding would strip their system
+    // instruction. Sequence shaping (alternate role / user-first) is adapter-agnostic
+    // and shows for every preset. Tool use mirrors the prior gate (moved here from
+    // the basic-settings tab).
+    const showImageInputToggle = $derived(
+        !!editingPreset
+        && VISION_CAPABLE_ADAPTER_KINDS.includes(editingPreset.profileSnapshot.adapterKind)
+        && !(editingPreset.profileSnapshot.capabilities ?? []).includes('vision')
+    );
+    const showFoldToggles = $derived(
+        !!editingPreset && editingPreset.profileSnapshot.adapterKind === 'openai-compatible'
+    );
+    const showSequenceToggles = $derived(!!editingPreset);
+    const showToolUseToggle = $derived(
+        !!editingPreset
+        && (editingPreset.profileSnapshot.capabilities ?? []).includes('tools')
+        && TOOL_CAPABLE_ADAPTER_KINDS.includes(editingPreset.profileSnapshot.adapterKind)
+    );
+    const showAbilities = $derived(showImageInputToggle || showFoldToggles || showSequenceToggles || showToolUseToggle);
 
     // Open a freshly-created preset directly in its editor.
     $effect(() => {
@@ -137,17 +161,6 @@
                             <ShSwitch checked={!!editingPreset.useStreaming} onCheckedChange={(v) => { editingPreset.useStreaming = v }} />
                         </div>
                     </div>
-                    {#if (editingPreset.profileSnapshot.capabilities ?? []).includes('tools') && TOOL_CAPABLE_ADAPTER_KINDS.includes(editingPreset.profileSnapshot.adapterKind)}
-                        <div class="flex items-center justify-between gap-3">
-                            <div class="flex flex-col gap-0.5 min-w-0">
-                                <span class="text-sm text-textcolor">{language.modelPresetToolUse}</span>
-                                <span class="text-xs text-textcolor2">{language.modelPresetToolUseHelp}</span>
-                            </div>
-                            <div class="shrink-0">
-                                <ShSwitch checked={!!editingPreset.toolUse} onCheckedChange={(v) => { editingPreset.toolUse = v }} />
-                            </div>
-                        </div>
-                    {/if}
                 </div>
                 <SchemaFormRenderer
                     schema={editingPreset.profileSnapshot.schema}
@@ -157,6 +170,75 @@
                     preset={editingPreset}
                 />
             {:else if submenu === 2}
+                {#if showAbilities}
+                    <div class="flex flex-col gap-4 mb-6">
+                        <span class="text-sm font-medium text-textcolor">{language.modelPresetAbilities}</span>
+                        {#if showImageInputToggle}
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex flex-col gap-0.5 min-w-0">
+                                    <span class="text-sm text-textcolor">{language.modelPresetImageInput}</span>
+                                    <span class="text-xs text-textcolor2">{language.modelPresetImageInputHelp}</span>
+                                </div>
+                                <div class="shrink-0">
+                                    <ShSwitch checked={!!editingPreset.imageInput} onCheckedChange={(v) => { editingPreset.imageInput = v }} />
+                                </div>
+                            </div>
+                        {/if}
+                        {#if showFoldToggles}
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex flex-col gap-0.5 min-w-0">
+                                    <span class="text-sm text-textcolor">{language.modelPresetFoldSystem}</span>
+                                    <span class="text-xs text-textcolor2">{language.modelPresetFoldSystemHelp}</span>
+                                </div>
+                                <div class="shrink-0">
+                                    <ShSwitch checked={!!editingPreset.foldSystemPrompt} onCheckedChange={(v) => { editingPreset.foldSystemPrompt = v }} />
+                                </div>
+                            </div>
+                            {#if editingPreset.foldSystemPrompt}
+                                <div class="flex items-center justify-between gap-3 pl-4">
+                                    <div class="flex flex-col gap-0.5 min-w-0">
+                                        <span class="text-sm text-textcolor">{language.modelPresetKeepFirstSystem}</span>
+                                        <span class="text-xs text-textcolor2">{language.modelPresetKeepFirstSystemHelp}</span>
+                                    </div>
+                                    <div class="shrink-0">
+                                        <ShSwitch checked={!!editingPreset.keepFirstSystemPrompt} onCheckedChange={(v) => { editingPreset.keepFirstSystemPrompt = v }} />
+                                    </div>
+                                </div>
+                            {/if}
+                        {/if}
+                        {#if showSequenceToggles}
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex flex-col gap-0.5 min-w-0">
+                                    <span class="text-sm text-textcolor">{language.modelPresetAlternateRole}</span>
+                                    <span class="text-xs text-textcolor2">{language.modelPresetAlternateRoleHelp}</span>
+                                </div>
+                                <div class="shrink-0">
+                                    <ShSwitch checked={!!editingPreset.alternateRole} onCheckedChange={(v) => { editingPreset.alternateRole = v }} />
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex flex-col gap-0.5 min-w-0">
+                                    <span class="text-sm text-textcolor">{language.modelPresetStartWithUser}</span>
+                                    <span class="text-xs text-textcolor2">{language.modelPresetStartWithUserHelp}</span>
+                                </div>
+                                <div class="shrink-0">
+                                    <ShSwitch checked={!!editingPreset.startWithUserInput} onCheckedChange={(v) => { editingPreset.startWithUserInput = v }} />
+                                </div>
+                            </div>
+                        {/if}
+                        {#if showToolUseToggle}
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex flex-col gap-0.5 min-w-0">
+                                    <span class="text-sm text-textcolor">{language.modelPresetToolUse}</span>
+                                    <span class="text-xs text-textcolor2">{language.modelPresetToolUseHelp}</span>
+                                </div>
+                                <div class="shrink-0">
+                                    <ShSwitch checked={!!editingPreset.toolUse} onCheckedChange={(v) => { editingPreset.toolUse = v }} />
+                                </div>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
                 <SchemaFormRenderer
                     schema={editingPreset.profileSnapshot.schema}
                     uiSchema={editingPreset.profileSnapshot.uiSchema}

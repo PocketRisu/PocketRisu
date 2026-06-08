@@ -25,6 +25,9 @@
     // `default` for. Idempotent — only writes when the key is still undefined.
     $effect(() => {
         for (const field of schema) {
+            // Tolerate null/undefined elements from a malformed/persisted snapshot
+            // so a single bad entry can't crash rendering (reading `.key` of null).
+            if (!field) continue;
             if (userValues[field.key] === undefined && field.default !== undefined) {
                 userValues[field.key] = field.default;
             }
@@ -41,7 +44,7 @@
             if (!uiField) continue;
             if (uiField.visibility !== visibility) continue;
             if (!evalShowIf(uiField)) continue;
-            const schemaField = schema.find((f) => f.key === uiField.key);
+            const schemaField = schema.find((f) => f?.key === uiField.key);
             if (!schemaField) continue;
             out.push({ schemaField, uiField });
         }

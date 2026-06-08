@@ -1,5 +1,5 @@
 import { get, writable } from "svelte/store";
-import { saveImage, setDatabase, type character, type Chat, defaultSdDataFunc, type loreBook, getDatabase, getCharacterByIndex, setCharacterByIndex, getCurrentChat, loadTogglesFromChat, normalizeChat } from "./storage/database.svelte";
+import { saveImage, setDatabase, type character, type Chat, defaultSdDataFunc, type loreBook, getDatabase, getCharacterByIndex, setCharacterByIndex, getCurrentChat, loadTogglesFromChat, normalizeChat, newChatModelDefaults } from "./storage/database.svelte";
 import { ensureChatHydrated } from "./storage/chatStorage";
 import { alertAddCharacter, alertConfirm, alertError, alertSelect, alertStore, alertWait, notifySuccess, notifyInfo } from "./alert";
 import { loadingOverlayStore, chatDeselected } from "./stores.svelte";
@@ -363,7 +363,8 @@ export async function importChat(){
                 name: "Imported Chat",
                 localLore: [],
                 fmIndex: -1,
-                id: v4()
+                id: v4(),
+                ...newChatModelDefaults()
             }
 
             let isFirst = true
@@ -530,7 +531,8 @@ export function characterFormatUpdate(indexOrCharacter:number|character, arg:{
             message: [],
             note: '',
             name: 'Chat 1',
-            localLore: []
+            localLore: [],
+            ...newChatModelDefaults()
         }]
     }
     if(!cha.chats[cha.chatPage]){
@@ -650,7 +652,8 @@ export function createBlankChar():character{
             message: [],
             note: '',
             name: 'Chat 1',
-            localLore: []
+            localLore: [],
+            ...newChatModelDefaults()
         }],
         chatFolders: [],
         chatPage: 0,

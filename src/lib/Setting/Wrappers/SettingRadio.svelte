@@ -36,6 +36,7 @@
             .map((opt) => ({
                 value: String(opt.value),
                 label: opt.labelKey ? (language as any)[opt.labelKey] : (opt.label ?? ''),
+                description: opt.descriptionKey ? (language as any)[opt.descriptionKey] : undefined,
             }))
     );
 

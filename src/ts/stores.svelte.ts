@@ -71,6 +71,10 @@ export const bootBackupPromptStore = writable<BootBackupPromptData | null>(null)
 // other pages can deep-link via openSettings(SettingsRoute.System,
 // SystemTab.X) — see src/ts/routing.
 export const SystemSubmenuIndex = writable(0)
+// Sub-tab index inside the Accessibility settings page. A store so the model-
+// mode gear button can deep-link to the Sidebar tab — see src/ts/routing
+// (AccessibilityTab) and Setting/Pages/AccessibilitySettings.svelte.
+export const AccessibilitySubmenuIndex = writable(0)
 export const ReloadGUIPointer = writable(0)
 export const ReloadChatPointer = writable({} as Record<number, number>)
 export const ScrollToMessageStore = $state({ value: -1 })

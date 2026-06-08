@@ -282,6 +282,32 @@ export interface ModelPreset {
     // bound chats are never routed through the tool loop. Only meaningful when
     // the profile declares the 'tools' capability. Tool runs force non-streaming.
     toolUse?: boolean
+    // Per-ModelPreset model-ability flags. The classic (custom model) path lets
+    // users toggle LLMFlags directly; the preset path had no equivalent, so it
+    // could neither attach images nor normalize system/role for models that need
+    // it (e.g. Ollama Gemma3 — no native system role). These mirror the relevant
+    // LLMFlags and feed reformater()/the vision gate in requestModelPreset. All
+    // default off → byte-identical to the prior text-only, no-attachment behavior.
+    //
+    // Send attached images. Additive opt-in for profiles whose snapshot does not
+    // declare the 'vision' capability (e.g. ollama / openai-compatible); profiles
+    // that DO declare 'vision' already send images and ignore this.
+    imageInput?: boolean
+    // Fold non-leading system messages into user turns (role + content rewrite via
+    // db.systemRoleReplacement/ContentReplacement). For models without a native
+    // system role. Maps to the absence of LLMFlags.hasFullSystemPrompt.
+    foldSystemPrompt?: boolean
+    // When folding, keep the leading system block as a real system message instead
+    // of rewriting it. Only meaningful with foldSystemPrompt on. Maps to
+    // LLMFlags.hasFirstSystemPrompt.
+    keepFirstSystemPrompt?: boolean
+    // Merge consecutive same-role turns into one. For models that require strictly
+    // alternating roles (e.g. Gemma). Maps to LLMFlags.requiresAlternateRole.
+    alternateRole?: boolean
+    // Prepend an empty user turn when the conversation does not start with user.
+    // For models that reject a non-user first turn. Maps to
+    // LLMFlags.mustStartWithUserInput.
+    startWithUserInput?: boolean
     // Per-ModelPreset input (context) token budget — how much prompt to send,
     // mirroring the global db.maxContext but per binding. Empty → 65000 default,
     // clamped to the profile's contextWindowTokens when known. NOT the output
@@ -343,6 +369,13 @@ export interface ModelBindingSet {
         translate?: string
         otherAx?: string
     }
+}
+
+/** A fully-normalized empty binding bundle (every slot a defined primitive, so
+ * `bind:value` / `bind:checked` on a $bindable never sees undefined). Shared by
+ * the sidebar seeder and the new-chat default seeder. */
+export function emptyModelBinding(): ModelBindingSet {
+    return { main: '', sub: '', separateAux: false, aux: { memory: '', emotion: '', translate: '', otherAx: '' } }
 }
 
 export interface ApiKeyPoolEntry {

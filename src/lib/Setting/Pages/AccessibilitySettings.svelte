@@ -9,8 +9,7 @@
     import SettingPage from "src/lib/UI/GUI/SettingPage.svelte";
     import SettingTabs from "src/lib/UI/GUI/SettingTabs.svelte";
     import { language } from "src/lang";
-
-    let submenu = $state(0);
+    import { AccessibilitySubmenuIndex } from "src/ts/stores.svelte";
 </script>
 
 <SettingPage title={language.accessibility}>
@@ -21,16 +20,16 @@
         { label: language.accTabSidebar, value: 2 },
         { label: language.others, value: 3 },
     ]}
-    bind:selected={submenu}
+    bind:selected={$AccessibilitySubmenuIndex}
 />
 
-{#if submenu === 0}
+{#if $AccessibilitySubmenuIndex === 0}
     <SettingRenderer items={accessibilityEditingItems} layout="row" />
-{:else if submenu === 1}
+{:else if $AccessibilitySubmenuIndex === 1}
     <SettingRenderer items={accessibilityScrollItems} layout="row" />
-{:else if submenu === 2}
+{:else if $AccessibilitySubmenuIndex === 2}
     <SettingRenderer items={accessibilitySidebarItems} layout="row" />
-{:else if submenu === 3}
+{:else if $AccessibilitySubmenuIndex === 3}
     <SettingRenderer items={accessibilityOtherItems} layout="row" />
 {/if}
 </SettingPage>

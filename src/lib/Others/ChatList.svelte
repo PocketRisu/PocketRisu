@@ -3,6 +3,7 @@
     import { language } from "../../lang";
     
     import { DBState } from 'src/ts/stores.svelte';
+    import { newChatModelDefaults } from 'src/ts/storage/database.svelte';
     import { ReloadGUIPointer, selectedCharID } from "../../ts/stores.svelte";
     import { DownloadIcon, SquarePenIcon, HardDriveUploadIcon, PlusIcon, TrashIcon, XIcon } from "@lucide/svelte";
     import { exportChat, importChat } from "../../ts/characters";
@@ -74,7 +75,8 @@
                 const len = DBState.db.characters[$selectedCharID].chats.length
                 let chats = DBState.db.characters[$selectedCharID].chats
                 const newChat = {
-                    message:[], note:'', name:`New Chat ${len + 1}`, localLore:[], fmIndex: -1, id: v4()
+                    message:[], note:'', name:`New Chat ${len + 1}`, localLore:[], fmIndex: -1, id: v4(),
+                    ...newChatModelDefaults()
                 }
                 chats.unshift(newChat)
                 DBState.db.characters[$selectedCharID].chats = chats

@@ -39,4 +39,28 @@ describe('applyModelPresetDefaults', () => {
         expect(db.modelPresetMigrationAppliedAt).toBe(789)
         expect(db.modelPresetMigrationReport).toEqual({ version: 1 })
     })
+
+    test('strips null elements from persisted profileSnapshot schema/uiSchema arrays', () => {
+        const db: any = {
+            modelPresets: [
+                {
+                    id: 'preset-legacy',
+                    profileSnapshot: {
+                        schema: [{ key: 'apiKey' }, null, { key: 'modelId' }],
+                        uiSchema: {
+                            groups: [{ id: 'auth' }, null],
+                            fields: [null, { key: 'apiKey' }],
+                        },
+                    },
+                },
+            ],
+        }
+
+        applyModelPresetDefaults(db)
+
+        const snap = db.modelPresets[0].profileSnapshot
+        expect(snap.schema).toEqual([{ key: 'apiKey' }, { key: 'modelId' }])
+        expect(snap.uiSchema.groups).toEqual([{ id: 'auth' }])
+        expect(snap.uiSchema.fields).toEqual([{ key: 'apiKey' }])
+    })
 })
