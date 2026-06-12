@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { AdapterPreparedRequest } from 'src/ts/preset/adapter'
-import { AnthropicBatchJob, anthropicBatchBaseUrl, submitAnthropicBatchJob } from './anthropicBatchJob'
+import { AnthropicBatchJob, anthropicBatchBaseUrl, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
 
 interface CapturedCall {
     url: string
@@ -99,6 +99,26 @@ describe('Anthropic preset batch jobs', () => {
         })
     })
 
+    test('strips batch service tier from submitted batch params', async () => {
+        const { fetchImpl, calls } = captureFetch(() => jsonResponse({ id: 'batch_123' }))
+        await submitAnthropicBatchJob({
+            prepared: prepared({ body: { ...prepared().body, service_tier: 'batch' } }),
+            fetchImpl,
+            customId: 'custom-1',
+        })
+
+        expect(calls[0].body).toEqual({
+            requests: [{
+                custom_id: 'custom-1',
+                params: {
+                    model: 'claude-test',
+                    messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+                    max_tokens: 100,
+                },
+            }],
+        })
+    })
+
     test('polls until ended and parses successful JSONL results', async () => {
         let statusPolls = 0
         const { fetchImpl } = captureFetch((call) => {
@@ -132,5 +152,46 @@ describe('Anthropic preset batch jobs', () => {
         expect(calls.some((call) => call.url.endsWith('/cancel') && call.method === 'POST')).toBe(true)
         const statusCall = calls.find((call) => call.url.endsWith('/batch_123') && call.method === 'GET')
         expect(statusCall?.signal).toBeNull()
+    })
+
+    test('logs create, status, cancel, and results bodies without consuming responses', async () => {
+        const logs: AnthropicBatchFetchLogEntry[] = []
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/cancel')) return jsonResponse({ id: 'batch_123', processing_status: 'canceling' })
+            if (call.url.endsWith('/results')) return textResponse(successJsonl('Logged final text'))
+            if (call.url.endsWith('/batch_123')) return jsonResponse({ processing_status: 'ended' })
+            return jsonResponse({ id: 'batch_123' })
+        })
+
+        const submitted = await submitAnthropicBatchJob({
+            prepared: prepared(),
+            fetchImpl,
+            customId: 'custom-1',
+            sleep: async () => {},
+            logFetch: (entry) => logs.push(entry),
+        })
+
+        expect(submitted.ok).toBe(true)
+        if (submitted.ok === false) return
+
+        await submitted.job.cancel()
+        const result = await submitted.job.wait()
+
+        expect(result).toEqual({ type: 'success', result: 'Logged final text' })
+        expect(logs.map((log) => log.url)).toEqual([
+            'https://api.anthropic.com/v1/messages/batches',
+            'https://api.anthropic.com/v1/messages/batches/batch_123/cancel',
+            'https://api.anthropic.com/v1/messages/batches/batch_123',
+            'https://api.anthropic.com/v1/messages/batches/batch_123/results',
+        ])
+        expect(logs[0].body).toContain('custom-1')
+        expect(logs[0].response).toContain('batch_123')
+        expect(logs[1].body).toBe('{}')
+        expect(logs[1].response).toContain('canceling')
+        expect(logs[2].body).toBe('')
+        expect(logs[2].response).toContain('ended')
+        expect(logs[3].body).toBe('')
+        expect(logs[3].response).toContain('Logged final text')
+        expect(logs.every((log) => log.success === true && log.status === 200)).toBe(true)
     })
 })

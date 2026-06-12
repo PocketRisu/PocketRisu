@@ -495,6 +495,10 @@ import { isMobile } from 'src/ts/platform'
 
         // Save new response to swipes
         const newLastMsg = getLastCharMsg()
+        if (newLastMsg && savedSwipes.includes(newLastMsg.data)) {
+            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
+            return
+        }
         if (newLastMsg && !newLastMsg.swipes) {
             newLastMsg.swipes = [...savedSwipes, newLastMsg.data]
             newLastMsg.swipeId = newLastMsg.swipes.length - 1

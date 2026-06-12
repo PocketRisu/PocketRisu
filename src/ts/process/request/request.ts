@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama/dist/browser.mjs';
 import { language } from "../../../lang";
-import { globalFetch, fetchNative } from "../../globalApi.svelte";
+import { globalFetch, fetchNative, addFetchLog } from "../../globalApi.svelte";
 import { getModelInfo, LLMFlags, LLMFormat, type LLMModel } from "../../model/modellist";
 import { risuChatParser, risuEscape, risuUnescape } from "../../parser/parser.svelte";
 import { pluginProcess, pluginV2 } from "../../plugins/plugins.svelte";
@@ -722,12 +722,26 @@ function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
     }
 }
 
+function hasPresetBodyValue(preset: ModelPreset, path: string, value: unknown): boolean {
+    const userValues = preset.userValues ?? {}
+    for (const field of preset.profileSnapshot.schema) {
+        if (field.mapsTo?.target !== 'body' || field.mapsTo.path !== path) continue
+        const effective = Object.prototype.hasOwnProperty.call(userValues, field.key)
+            && userValues[field.key] !== undefined
+            ? userValues[field.key]
+            : field.default
+        if (effective === undefined || effective === '') continue
+        if (effective === value) return true
+    }
+    return false
+}
+
 function shouldUseAnthropicPresetBatch(arg: RequestDataArgumentExtended, preset: ModelPreset, tools: AdapterToolDef[] | undefined): boolean {
-    return getDatabase().claudeBatching === true
-        && preset.profileSnapshot.adapterKind === 'anthropic-messages'
-        && preset.profileSnapshot.providerBaseId === 'anthropic'
-        && arg.previewBody !== true
-        && tools === undefined
+    if (preset.profileSnapshot.adapterKind !== 'anthropic-messages') return false
+    if (preset.profileSnapshot.providerBaseId !== 'anthropic') return false
+    if (arg.previewBody === true) return false
+    if (tools !== undefined) return false
+    return getDatabase().claudeBatching === true || hasPresetBodyValue(preset, 'service_tier', 'batch')
 }
 
 async function createAnthropicPresetBatchJob(
@@ -735,6 +749,7 @@ async function createAnthropicPresetBatchJob(
     options: AdapterChatOptions,
     credential: AdapterCredential | undefined,
     fetchImpl: typeof fetch,
+    chatId?: string,
 ): Promise<requestDataResponse> {
     const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
     delete prepared.body.stream
@@ -743,6 +758,8 @@ async function createAnthropicPresetBatchJob(
         fetchImpl,
         signal: options.abortSignal,
         customId: uuidv4(),
+        logFetch: addFetchLog,
+        chatId,
     })
     if (submission.ok === false) return { type: 'fail', result: submission.error, model: preset.name }
     return {
@@ -901,7 +918,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         }
 
         if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
-            return await createAnthropicPresetBatchJob(preset, { messages, abortSignal: abortSignal ?? undefined, fetchImpl }, credential, fetchImpl)
+            return await createAnthropicPresetBatchJob(preset, { messages, abortSignal: abortSignal ?? undefined, fetchImpl }, credential, fetchImpl, arg.chatId)
         }
 
         const useStreaming = resolvePresetStreaming(preset, arg)
@@ -1020,6 +1037,26 @@ export async function testModelPreset(preset: ModelPreset, message: string, abor
     }
     if (res.type === 'fail') {
         return { ok: false, message: res.result, latencyMs }
+    }
+    if (res.type === 'job') {
+        try {
+            const result = await res.job.wait({ signal: abortSignal })
+            const finishedLatencyMs = Math.round(performance.now() - start)
+            if (result.type === 'success') {
+                return { ok: true, message: result.result, latencyMs: finishedLatencyMs }
+            }
+            return {
+                ok: false,
+                message: result.result ?? res.job.getStatus().message ?? 'Provider job did not complete successfully',
+                latencyMs: finishedLatencyMs,
+            }
+        } catch (err) {
+            return {
+                ok: false,
+                message: err instanceof Error ? err.message : String(err),
+                latencyMs: Math.round(performance.now() - start),
+            }
+        }
     }
     return { ok: false, message: 'Unexpected response type', latencyMs }
 }

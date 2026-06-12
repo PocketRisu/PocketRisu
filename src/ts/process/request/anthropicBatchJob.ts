@@ -9,6 +9,8 @@ interface AnthropicBatchJobOptions {
     timeoutMs?: number
     sleep?: (ms: number) => Promise<void>
     now?: () => number
+    logFetch?: (entry: AnthropicBatchFetchLogEntry) => void
+    chatId?: string
 }
 
 export interface AnthropicBatchSubmitOptions extends AnthropicBatchJobOptions {
@@ -21,6 +23,17 @@ export interface AnthropicBatchSubmitOptions extends AnthropicBatchJobOptions {
 export type AnthropicBatchSubmitResult =
     | { ok: true; job: ProviderRequestJob }
     | { ok: false; error: string }
+
+export interface AnthropicBatchFetchLogEntry {
+    body: any
+    headers?: Record<string, string>
+    response: any
+    success: boolean
+    url: string
+    resType?: string
+    chatId?: string
+    status?: number
+}
 
 function defaultSleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
@@ -53,9 +66,92 @@ export async function safeResponseText(response: Response): Promise<string> {
     }
 }
 
+function requestUrl(input: RequestInfo | URL): string {
+    return typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+}
+
+function requestBodyText(body: BodyInit | null | undefined): string {
+    if (body === undefined || body === null) return ''
+    if (typeof body === 'string') return body
+    if (body instanceof URLSearchParams) return body.toString()
+    if (body instanceof Uint8Array) return new TextDecoder().decode(body)
+    if (body instanceof ArrayBuffer) return new TextDecoder().decode(body)
+    return '[unlogged request body]'
+}
+
+function requestHeaders(headers: HeadersInit | undefined): Record<string, string> {
+    if (!headers) return {}
+    if (headers instanceof Headers) return Object.fromEntries(headers.entries())
+    if (Array.isArray(headers)) return Object.fromEntries(headers)
+    return headers as Record<string, string>
+}
+
+async function logAnthropicBatchFetch(
+    logFetch: ((entry: AnthropicBatchFetchLogEntry) => void) | undefined,
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+    response: Response,
+    chatId: string | undefined,
+): Promise<void> {
+    if (!logFetch) return
+    try {
+        logFetch({
+            body: requestBodyText(init?.body),
+            headers: requestHeaders(init?.headers),
+            response: await response.clone().text(),
+            success: response.ok,
+            url: requestUrl(input),
+            resType: 'text',
+            chatId,
+            status: response.status,
+        })
+    } catch (e) {
+        console.error('[ModelPreset] Anthropic batch logging failed', e)
+    }
+}
+
+async function fetchAnthropicBatch(
+    fetchImpl: typeof fetch,
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+    logFetch: ((entry: AnthropicBatchFetchLogEntry) => void) | undefined,
+    chatId?: string,
+): Promise<Response> {
+    try {
+        const response = await fetchImpl(input, init)
+        await logAnthropicBatchFetch(logFetch, input, init, response, chatId)
+        return response
+    } catch (e) {
+        if (logFetch) {
+            try {
+                logFetch({
+                    body: requestBodyText(init?.body),
+                    headers: requestHeaders(init?.headers),
+                    response: e instanceof Error ? e.message : String(e),
+                    success: false,
+                    url: requestUrl(input),
+                    resType: 'text',
+                    chatId,
+                })
+            } catch (logError) {
+                console.error('[ModelPreset] Anthropic batch logging failed', logError)
+            }
+        }
+        throw e
+    }
+}
+
 export function anthropicBatchBaseUrl(messagesUrl: string): string {
     const clean = messagesUrl.replace(/\/?$/, '')
     return clean.endsWith('/messages') ? `${clean}/batches` : `${clean}/messages/batches`
+}
+
+function toAnthropicBatchParams(body: AdapterPreparedRequest['body']): AdapterPreparedRequest['body'] {
+    const params = { ...body }
+    if (params.service_tier === 'batch') {
+        delete params.service_tier
+    }
+    return params
 }
 
 export class AnthropicBatchJob implements ProviderRequestJob {
@@ -68,6 +164,8 @@ export class AnthropicBatchJob implements ProviderRequestJob {
     private readonly timeoutMs: number
     private readonly sleep: (ms: number) => Promise<void>
     private readonly now: () => number
+    private readonly logFetch?: (entry: AnthropicBatchFetchLogEntry) => void
+    private readonly chatId?: string
 
     constructor(
         readonly id: string,
@@ -80,6 +178,8 @@ export class AnthropicBatchJob implements ProviderRequestJob {
         this.timeoutMs = options.timeoutMs ?? DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS
         this.sleep = options.sleep ?? defaultSleep
         this.now = options.now ?? Date.now
+        this.logFetch = options.logFetch
+        this.chatId = options.chatId
         this.createdAt = this.now()
     }
 
@@ -97,11 +197,11 @@ export class AnthropicBatchJob implements ProviderRequestJob {
         this.cancelRequested = true
         this.setStatus({ state: 'cancel-requested', message: 'Cancel requested; waiting for final batch state' })
         try {
-            await this.fetchImpl(this.cancelUrl(), {
+            await fetchAnthropicBatch(this.fetchImpl, this.cancelUrl(), {
                 method: 'POST',
                 headers: this.prepared.headers,
                 body: '{}',
-            })
+            }, this.logFetch, this.chatId)
         } catch (e) {
             console.error('[ModelPreset] Anthropic batch cancel failed', e)
         }
@@ -129,11 +229,11 @@ export class AnthropicBatchJob implements ProviderRequestJob {
 
                 let statusRes: Response
                 try {
-                    statusRes = await this.fetchImpl(this.statusUrl(), {
+                    statusRes = await fetchAnthropicBatch(this.fetchImpl, this.statusUrl(), {
                         method: 'GET',
                         headers: this.prepared.headers,
                         signal: this.cancelRequested ? undefined : options.signal ?? undefined,
-                    })
+                    }, this.logFetch, this.chatId)
                 } catch (e) {
                     if (options.signal?.aborted || this.cancelRequested) continue
                     return { type: 'fail', result: e instanceof Error ? e.message : String(e) }
@@ -171,10 +271,10 @@ export class AnthropicBatchJob implements ProviderRequestJob {
     }
 
     private async readResults(onStatus?: (status: ProviderJobStatus) => void): Promise<ProviderJobResult> {
-        const batchRes = await this.fetchImpl(this.resultsUrl(), {
+        const batchRes = await fetchAnthropicBatch(this.fetchImpl, this.resultsUrl(), {
             method: 'GET',
             headers: this.prepared.headers,
-        })
+        }, this.logFetch, this.chatId)
         if (!batchRes.ok) {
             const message = await safeResponseText(batchRes)
             this.setStatus({ state: 'failed', message }, onStatus)
@@ -239,14 +339,14 @@ export async function submitAnthropicBatchJob(options: AnthropicBatchSubmitOptio
     const batchUrl = anthropicBatchBaseUrl(options.prepared.url)
     let response: Response
     try {
-        response = await options.fetchImpl(batchUrl, {
+        response = await fetchAnthropicBatch(options.fetchImpl, batchUrl, {
             method: 'POST',
             headers: options.prepared.headers,
             body: JSON.stringify({
-                requests: [{ custom_id: options.customId, params: options.prepared.body }],
+                requests: [{ custom_id: options.customId, params: toAnthropicBatchParams(options.prepared.body) }],
             }),
             signal: options.signal,
-        })
+        }, options.logFetch, options.chatId)
     } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }

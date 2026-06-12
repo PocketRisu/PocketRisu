@@ -152,6 +152,10 @@
         {
           "value": "standard_only",
           "label": "Standard only"
+        },
+        {
+          "value": "batch",
+          "label": "Batch"
         }
       ],
       "mapsTo": {
