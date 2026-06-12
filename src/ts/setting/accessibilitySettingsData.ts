@@ -48,6 +48,14 @@ export const accessibilitySettingsItems: SettingItem[] = [
         keywords: ['send', 'enter', 'keyboard', 'submit', 'mobile']
     },
     {
+        id: 'acc.fixedChatTextarea',
+        type: 'check',
+        labelKey: 'fixedChatTextarea',
+        bindKey: 'fixedChatTextarea',
+        helpKey: 'fixedChatTextarea',
+        keywords: ['fixed', 'chat', 'textarea', 'input']
+    },
+    {
         id: 'acc.clickToEdit',
         type: 'check',
         labelKey: 'clickToEdit',
@@ -323,6 +331,7 @@ export const accessibilityEditingItems = pick([
     'acc.confirmReroll',
     'acc.sendKeyPC',
     'acc.sendKeyMobile',
+    'acc.fixedChatTextarea',
     'acc.clickToEdit',
     'acc.enableBlockPartialEdit',
     'acc.enableDragPartialEdit',
