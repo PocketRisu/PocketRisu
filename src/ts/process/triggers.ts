@@ -1463,7 +1463,11 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
                         noMultiGen: true,
                     }, 'model')
 
-                    if(result.type === 'fail' || result.type === 'streaming' || result.type === 'multiline'){
+                    if(result.type === 'job'){
+                        const jobResult = await result.job.wait()
+                        setVar(varName, jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled'))
+                    }
+                    else if(result.type === 'fail' || result.type === 'streaming' || result.type === 'multiline'){
                         setVar(varName, 'Error: ' + result.result)
                     }
                     else{
@@ -1892,6 +1896,10 @@ export async function runTrigger(char:character,mode:triggerMode, arg:{
 
                     if(result.type === 'fail' || result.type === 'multiline'){
                         setVar(risuChatParser(effect.outputVar, {chara:char}), 'null')
+                    }
+                    else if(result.type === 'job'){
+                        const jobResult = await result.job.wait()
+                        setVar(risuChatParser(effect.outputVar, {chara:char}), jobResult.type === 'success' ? jobResult.result : 'null')
                     }
                     else if(result.type === 'streaming'){
                         const text = await collectStreamingText(result.result)

@@ -24,6 +24,7 @@ import { applyParameters, collectStreamingText, type ModelModeExtended } from '.
 import {
     sendChatRequest, streamChatRequest, previewChatRequest,
     sendAnthropicChatRequest, streamAnthropicChatRequest, previewAnthropicChatRequest,
+    prepareAnthropicChatRequest,
     sendGoogleChatRequest, streamGoogleChatRequest, previewGoogleChatRequest,
     runToolLoop,
     type AdapterCacheContext,
@@ -40,6 +41,8 @@ import {
     startStatus, appendText, endStatus, setStatusTokenCounter, addBadge,
     type RequestKind,
 } from "src/ts/status/requestStatus";
+import type { ProviderRequestJob } from './providerJob';
+import { submitAnthropicBatchJob } from './anthropicBatchJob';
 
 export type ToolCall = {
     name: string;
@@ -107,6 +110,13 @@ export type requestDataResponse = {
     }
     model?: string
 }|{
+    type: "job",
+    job: ProviderRequestJob,
+    special?: {
+        emotion?: string
+    }
+    model?: string
+}|{
     type: "multiline",
     result: ['user'|'char',string][],
     special?: {
@@ -116,6 +126,29 @@ export type requestDataResponse = {
 }
 
 export interface StreamResponseChunk{[key:string]:string}
+
+function mapProviderJobResult(
+    job: ProviderRequestJob,
+    mapSuccess: (text: string) => Promise<string>,
+): ProviderRequestJob {
+    return {
+        id: job.id,
+        provider: job.provider,
+        kind: job.kind,
+        createdAt: job.createdAt,
+        getStatus: () => job.getStatus(),
+        cancel: () => job.cancel(),
+        wait: async (options) => {
+            const result = await job.wait(options)
+            if (result.type !== 'success') return result
+            try {
+                return { type: 'success', result: await mapSuccess(result.result) }
+            } catch (e) {
+                return { type: 'fail', result: e instanceof Error ? e.message : String(e) }
+            }
+        },
+    }
+}
 
 export async function requestChatData(arg:requestDataArgument, model:ModelModeExtended, abortSignal:AbortSignal=null):Promise<requestDataResponse> {
     const db = getDatabase()
@@ -144,7 +177,7 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
 
         while(true){
             
-            if(abortSignal?.aborted){
+            if(abortSignal?.aborted && da.type !== 'job'){
                 return {
                     type: 'fail',
                     result: 'Aborted'
@@ -185,6 +218,19 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
                 staticModel: fallBackModels[fallbackIndex],
                 tools: tools,
             }, model, abortSignal)
+
+            if(da.type === 'job'){
+                da = {
+                    ...da,
+                    job: mapProviderJobResult(da.job, async (text) => {
+                        if(arg.escape) text = risuEscape(text)
+                        for(const replacer of pluginV2.replacerafterRequest){
+                            text = await replacer(text, model)
+                        }
+                        return text
+                    })
+                }
+            }
 
             // A ModelPreset response that already executed tools must be returned
             // as-is and NEVER re-run: the side effects (possibly writes) are done.
@@ -651,16 +697,6 @@ const MODEL_PRESET_MAX_TOOL_STEPS = 8
 // bounding re-parse cost. The final chunk is always flushed regardless.
 const STREAM_FLUSH_INTERVAL_MS = 50
 
-function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
-    return {
-        name: tool.name,
-        description: tool.description,
-        // simplifySchema mutates; clone first. Stage 1 targets openai-compatible,
-        // whose schema shape matches the default simplification.
-        parameters: simplifySchema(safeStructuredClone(tool.inputSchema)),
-    }
-}
-
 // Render a turn's reasoning for DISPLAY, wrapped in the <Thoughts> tags the chat
 // renderer already parses (mirrors the classic anthropic path). Returns '' when
 // there is nothing to show, so non-reasoning models are byte-identical to before.
@@ -674,6 +710,46 @@ function formatPresetReasoning(reasoning?: AdapterReasoningPart[]): string {
     }
     if (body.trim().length === 0) return ''
     return `<Thoughts>\n${body}\n</Thoughts>\n\n`
+}
+
+function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
+    return {
+        name: tool.name,
+        description: tool.description,
+        // simplifySchema mutates; clone first. Stage 1 targets openai-compatible,
+        // whose schema shape matches the default simplification.
+        parameters: simplifySchema(safeStructuredClone(tool.inputSchema)),
+    }
+}
+
+function shouldUseAnthropicPresetBatch(arg: RequestDataArgumentExtended, preset: ModelPreset, tools: AdapterToolDef[] | undefined): boolean {
+    return getDatabase().claudeBatching === true
+        && preset.profileSnapshot.adapterKind === 'anthropic-messages'
+        && preset.profileSnapshot.providerBaseId === 'anthropic'
+        && arg.previewBody !== true
+        && tools === undefined
+}
+
+async function createAnthropicPresetBatchJob(
+    preset: ModelPreset,
+    options: AdapterChatOptions,
+    credential: AdapterCredential | undefined,
+    fetchImpl: typeof fetch,
+): Promise<requestDataResponse> {
+    const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
+    delete prepared.body.stream
+    const submission = await submitAnthropicBatchJob({
+        prepared,
+        fetchImpl,
+        signal: options.abortSignal,
+        customId: uuidv4(),
+    })
+    if (submission.ok === false) return { type: 'fail', result: submission.error, model: preset.name }
+    return {
+        type: 'job',
+        job: submission.job,
+        model: preset.name,
+    }
 }
 
 async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelPreset, abortSignal:AbortSignal=null, mode:ModelModeExtended='model'):Promise<requestDataResponse> {
@@ -822,6 +898,10 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         if (tools) {
             const { result, toolsExecuted } = await runModelPresetToolLoop(arg, preset, kind, credential, fetchImpl, messages, tools, abortSignal)
             return { type: 'success', result, model: preset.name, toolExecuted: toolsExecuted }
+        }
+
+        if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
+            return await createAnthropicPresetBatchJob(preset, { messages, abortSignal: abortSignal ?? undefined, fetchImpl }, credential, fetchImpl)
         }
 
         const useStreaming = resolvePresetStreaming(preset, arg)

@@ -567,6 +567,14 @@ export async function runScripted(code:string, arg:{
                     }
                 }
 
+                if(result.type === 'job'){
+                    const jobResult = await result.job.wait()
+                    return JSON.stringify({
+                        success: jobResult.type === 'success',
+                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
+                    })
+                }
+
                 if(result.type === 'multiline'){
                     return JSON.stringify({
                         success: false,
@@ -598,6 +606,14 @@ export async function runScripted(code:string, arg:{
                     return {
                         success: false,
                         result: 'Error: ' + result.result
+                    }
+                }
+
+                if(result.type === 'job'){
+                    const jobResult = await result.job.wait()
+                    return {
+                        success: jobResult.type === 'success',
+                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
                     }
                 }
 
@@ -925,6 +941,14 @@ export async function runScripted(code:string, arg:{
                             result: 'Error: ' + error
                         })
                     }
+                }
+
+                if(result.type === 'job'){
+                    const jobResult = await result.job.wait()
+                    return JSON.stringify({
+                        success: jobResult.type === 'success',
+                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
+                    })
                 }
 
                 if(result.type === 'multiline'){

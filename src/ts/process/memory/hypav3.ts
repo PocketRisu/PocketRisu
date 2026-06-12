@@ -1735,6 +1735,15 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
             "memory"
         );
 
+        let responseText = "";
+        if (response.type === "job") {
+            const jobResult = await response.job.wait();
+            if (jobResult.type !== "success") {
+                throw new Error(jobResult.result ?? "Provider job canceled");
+            }
+            responseText = jobResult.result;
+        }
+
         if (response.type === "streaming" || response.type === "multiline") {
             throw new Error("Unexpected response type");
         }
@@ -1743,13 +1752,17 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
             throw new Error(response.result);
         }
 
-        if (!response.result || response.result.trim().length === 0) {
+        if (response.type === "success") {
+            responseText = response.result;
+        }
+
+        if (!responseText || responseText.trim().length === 0) {
             throw new Error("Empty summary returned");
         }
 
         // Remove thoughts content for API
         const thoughtsRegex = /<Thoughts>[\s\S]*?<\/Thoughts>/g;
-        const result = response.result.replace(thoughtsRegex, "").trim();
+        const result = responseText.replace(thoughtsRegex, "").trim();
 
         if (result.length === 0) {
             throw new Error("Empty summary after removing thoughts content");

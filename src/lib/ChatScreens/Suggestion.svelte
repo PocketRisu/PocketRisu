@@ -85,9 +85,17 @@
                 formated: promptbody,
                 bias: {},
                 currentChar : currentChar as character
-            }, 'submodel', abortController.signal).then(rq2=>{
-                if(rq2.type !== 'fail' && rq2.type !== 'streaming' && rq2.type !== 'multiline' && progress){
-                    var suggestMessagesNew = rq2.result.split('\n').filter(msg => msg.startsWith('-')).map(msg => msg.replace('-','').trim())
+            }, 'submodel', abortController.signal).then(async rq2=>{
+                let resultText = ''
+                if(rq2.type === 'job'){
+                    const jobResult = await rq2.job.wait({ signal: abortController.signal })
+                    if(jobResult.type === 'success') resultText = jobResult.result
+                }
+                else if(rq2.type !== 'fail' && rq2.type !== 'streaming' && rq2.type !== 'multiline'){
+                    resultText = rq2.result
+                }
+                if(resultText && progress){
+                    var suggestMessagesNew = resultText.split('\n').filter(msg => msg.startsWith('-')).map(msg => msg.replace('-','').trim())
                     const db:Database = DBState.db;
                     db.characters[$selectedCharID].chats[currentChar.chatPage].suggestMessages = suggestMessagesNew
                     suggestMessages = suggestMessagesNew
@@ -193,4 +201,3 @@
         100% { transform: rotate(360deg); }
     }
 </style>
-

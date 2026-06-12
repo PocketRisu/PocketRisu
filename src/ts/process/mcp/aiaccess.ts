@@ -67,11 +67,23 @@ export class AIAccessClient extends MCPClientLike {
                 bias: {}
             }, model === 'lite' ? 'otherAx' : 'model')
 
+            let success = r.type === 'success'
+            let message = r.type === 'success' || r.type === 'fail'
+                ? r.result
+                : 'Unexpected response type'
+            if (r.type === 'job') {
+                const jobResult = await r.job.wait()
+                success = jobResult.type === 'success'
+                message = jobResult.type === 'success'
+                    ? jobResult.result
+                    : (jobResult.result ?? 'Provider job canceled')
+            }
+
             return [{
                 type: 'text',
                 text: JSON.stringify({
-                    success: r.type === 'success',
-                    message: r.result
+                    success,
+                    message
                 })
             }]
         }

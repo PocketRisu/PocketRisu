@@ -39,7 +39,7 @@ export {
 } from './error'
 export { parseSseEventBlock, parseSseStream } from './sse'
 export { sendChatRequest, streamChatRequest, previewChatRequest } from './openaiCompatible'
-export { sendAnthropicChatRequest, streamAnthropicChatRequest, previewAnthropicChatRequest } from './anthropicMessages'
+export { sendAnthropicChatRequest, streamAnthropicChatRequest, previewAnthropicChatRequest, prepareAnthropicChatRequest, parseAnthropicMessage } from './anthropicMessages'
 export { sendGoogleChatRequest, streamGoogleChatRequest, previewGoogleChatRequest } from './googleGemini'
 export { runToolLoop } from './toolLoop'
 export type { ToolLoopDeps, ToolStepResult } from './toolLoop'

@@ -148,6 +148,15 @@ export function previewAnthropicChatRequest(
     return prepareAnthropicBody(preset, options, credential, false)
 }
 
+export function prepareAnthropicChatRequest(
+    preset: ModelPreset,
+    options: AdapterChatOptions,
+    credential: AdapterCredential | undefined,
+    stream: boolean,
+): Promise<AdapterPreparedRequest> {
+    return prepareAnthropicBody(preset, options, credential, stream)
+}
+
 async function prepareAnthropicBody(
     preset: ModelPreset,
     options: AdapterChatOptions,
@@ -317,7 +326,7 @@ function deriveStreamError(data: string): ModelPresetAdapterError {
     return new ModelPresetAdapterError('server', message)
 }
 
-function parseAnthropicMessage(raw: unknown): AdapterChatResponse {
+export function parseAnthropicMessage(raw: unknown): AdapterChatResponse {
     if (!isPlainObject(raw)) {
         throw new ModelPresetAdapterError('parse', 'Anthropic response is not an object')
     }

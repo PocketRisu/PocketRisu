@@ -172,20 +172,36 @@
                 schema: JSON.stringify(schema)
             }, 'translate')
 
+            let responseText = ''
+            if(d.type === 'job'){
+                const jobResult = await d.job.wait()
+                if(jobResult.type !== 'success'){
+                    loading = false;
+                    return notifyError(jobResult.result ?? 'Provider job canceled')
+                }
+                responseText = jobResult.result
+            }
+
             if(d.type === 'streaming' || d.type === 'multiline'){
                 loading = false;
                 return notifyError('This model is not supported in the playground')
             }
 
-            if(d.type !== 'success'){
+            if(d.type === 'fail'){
+                loading = false;
                 notifyError(d.result)
+                return
+            }
+
+            if(d.type === 'success'){
+                responseText = d.result
             }
 
             if(mode === 'manual'){
                 let outputObj:any[] = []
-                console.log(d.result)
-                console.log(jsonOutputTrimmer(d.result))
-                const resultParsed = JSON.parse(jsonOutputTrimmer(d.result));
+                console.log(responseText)
+                console.log(jsonOutputTrimmer(responseText))
+                const resultParsed = JSON.parse(jsonOutputTrimmer(responseText));
                 if(output){
                     try {
                     outputObj = JSON.parse(output);                        
@@ -213,8 +229,8 @@
             }
             else{
 
-                output = d.result
-                output = JSON.stringify(JSON.parse(jsonOutputTrimmer(d.result)), null, 2);
+                output = responseText
+                output = JSON.stringify(JSON.parse(jsonOutputTrimmer(responseText)), null, 2);
                 loading = false;
                 render()
             }

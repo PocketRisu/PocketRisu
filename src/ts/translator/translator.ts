@@ -584,6 +584,19 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
         notifyError(rq.result)
         return text
     }
+    if(rq.type === 'job'){
+        const jobResult = await rq.job.wait()
+        if(jobResult.type !== 'success'){
+            notifyError(jobResult.result ?? 'Provider job canceled')
+            return text
+        }
+        const result = jobResult.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
+            return styleDecodes[parseInt(p1)] ?? ''
+        }).replace(/<\/style-data>/g, '')
+        llmTranslateCache.set(text, result)
+        void setPersistentLLMCache(text, result)
+        return result
+    }
     if(rq.type === 'streaming' || rq.type === 'multiline'){
         notifyError('Unexpected response type')
         return text

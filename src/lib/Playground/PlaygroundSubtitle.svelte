@@ -92,21 +92,31 @@
             return
         }
 
-        if(v.type !== 'streaming'){
+        if(v.type === 'job'){
+            const jobResult = await v.job.wait()
+            if(jobResult.type !== 'success'){
+                notifyError(jobResult.result ?? 'Provider job canceled')
+                return
+            }
+            outputText = jobResult.result
+        }
+        else if(v.type !== 'streaming'){
             notifyError(v.result)
             return
         }
 
-        const reader = v.result.getReader()
+        if(v.type === 'streaming'){
+            const reader = v.result.getReader()
 
-        while(true){
-            const { done, value } = await reader.read()
-            if(done){
-                break
+            while(true){
+                const { done, value } = await reader.read()
+                if(done){
+                    break
+                }
+                const firstKey = Object.keys(value)[0]
+
+                outputText = value[firstKey]
             }
-            const firstKey = Object.keys(value)[0]
-
-            outputText = value[firstKey]
         }
 
         const extracted = outputText.matchAll(/```(web)?(vtt)?\n(.*?)\n```/gs)
@@ -311,23 +321,33 @@
             return
         }
 
-        if(v.type !== 'streaming'){
+        if(v.type === 'job'){
+            const jobResult = await v.job.wait()
+            if(jobResult.type !== 'success'){
+                notifyError(jobResult.result ?? 'Provider job canceled')
+                return
+            }
+            outputText = jobResult.result
+        }
+        else if(v.type !== 'streaming'){
             notifyError(v.result)
             return
         }
 
         console.log("Reading...")
 
-        const reader = v.result.getReader()
+        if(v.type === 'streaming'){
+            const reader = v.result.getReader()
 
-        while(true){
-            const { done, value } = await reader.read()
-            if(done){
-                break
+            while(true){
+                const { done, value } = await reader.read()
+                if(done){
+                    break
+                }
+                const firstKey = Object.keys(value)[0]
+
+                outputText = value[firstKey]
             }
-            const firstKey = Object.keys(value)[0]
-
-            outputText = value[firstKey]
         }
         if(!outputText.trim().endsWith('```')){
             outputText = outputText.trim() + '\n```'
