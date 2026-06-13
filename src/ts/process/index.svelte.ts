@@ -1430,14 +1430,15 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         return false
     }
     else if(req.type === 'job'){
-        let msgIndex = DBState.db.characters[selectedChar].chats[selectedChat].message.length
+        const message = DBState.db.characters[selectedChar].chats[selectedChat].message
+        let msgIndex = message.length
+        let statusMsgIndex = msgIndex
         let prefix = ''
+        let statusMessage: Message
         if(arg.continue){
             msgIndex -= 1
-            prefix = DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data
-        }
-        else{
-            DBState.db.characters[selectedChar].chats[selectedChat].message.push({
+            prefix = message[msgIndex].data
+            statusMessage = {
                 role: 'char',
                 data: req.job.getStatus().message ?? 'Provider job submitted',
                 saying: currentChar.chaId,
@@ -1445,7 +1446,22 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 generationInfo,
                 promptInfo,
                 chatId: generationId,
-            })
+                disabled: true,
+            }
+            message.push(statusMessage)
+            statusMsgIndex = message.length - 1
+        }
+        else{
+            statusMessage = {
+                role: 'char',
+                data: req.job.getStatus().message ?? 'Provider job submitted',
+                saying: currentChar.chaId,
+                time: Date.now(),
+                generationInfo,
+                promptInfo,
+                chatId: generationId,
+            }
+            message.push(statusMessage)
         }
         DBState.db.characters[selectedChar].chats[selectedChat].isStreaming = true
         DBState.db.characters[selectedChar].reloadKeys += 1
@@ -1456,7 +1472,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 signal: abortSignal,
                 onStatus: (status) => {
                     const msg = status.message ?? status.state
-                    DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = msg
+                    message[statusMsgIndex].data = msg
                     DBState.db.characters[selectedChar].reloadKeys += 1
                 },
             })
@@ -1468,13 +1484,24 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
 
         if(jobResult.type === 'canceled'){
-            DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = jobResult.result ?? 'Provider job canceled'
+            const msg = message[statusMsgIndex]
+            msg.data = jobResult.result ?? 'Provider job canceled'
+            if(!arg.continue){
+                msg.disabled = true
+            }
             return false
         }
         if(jobResult.type === 'fail'){
-            DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = jobResult.result
+            message[statusMsgIndex].data = jobResult.result
             throwError(jobResult.result)
             return false
+        }
+
+        if(arg.continue){
+            const temporaryStatusIndex = message.indexOf(statusMessage)
+            if(temporaryStatusIndex !== -1){
+                message.splice(temporaryStatusIndex, 1)
+            }
         }
 
         result = jobResult.result

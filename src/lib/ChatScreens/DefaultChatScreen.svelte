@@ -476,6 +476,7 @@ import { isMobile } from 'src/ts/platform'
             let msg = cha.pop()
             if(!msg) return
         }
+        const generationStartMessageCount = cha.length
         DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = cha
         const generated = await sendChatMain()
 
@@ -483,7 +484,23 @@ import { isMobile } from 'src/ts/platform'
 
         // If generation failed, restore original messages
         if (!generated) {
-            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
+            const disabledCanceledMessages = currentMsgs.slice(generationStartMessageCount).filter((msg) => (
+                msg.role === 'char' &&
+                msg.disabled === true &&
+                msg.chatId
+            ))
+            if (disabledCanceledMessages.length > 0) {
+                const trailingCount = trailingComments.length
+                const insertIndex = originalMessages.length - trailingCount
+                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = [
+                    ...originalMessages.slice(0, insertIndex),
+                    ...disabledCanceledMessages,
+                    ...originalMessages.slice(insertIndex),
+                ]
+            }
+            else {
+                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
+            }
             return
         }
 
