@@ -518,10 +518,24 @@ export const languageChineseTraditional = {
     "prompt": "提示詞",
     "loreBookDepth": "Lorebook 搜尋深度",
     "loreBookToken": "Lorebook 最大 Token",
+
+    "chatLoadInitialPages": "對話初始載入數",
+
+
+    "chatLoadAdditionalPages": "對話額外載入數",
     "removeCharacter": "移除角色",
     "exportCharacter": "匯出角色",
     "characterPackage": "角色包",
     "characterPackageExport": "匯出角色包",
+
+    "convertToModule": "轉換為模組",
+
+
+    "convertToCharacter": "轉換為角色",
+
+
+
+    "successfullyConverted": "轉換成功。",
     "characterPackageImport": "匯入角色包（zip）",
     "characterPackageCharacter": "角色",
     "characterPackageChats": "對話記錄",
@@ -1105,6 +1119,8 @@ export const languageChineseTraditional = {
     "subtitlesWarning1": "您必須使用具有音訊／影片輸入的模型才能使用此功能。",
     "subtitlesWarning2": "您必須使用具有串流回應功能的模型才能使用此功能。",
     "reset": "重置",
+
+    "clearInputConfirm": "清除此欄位的所有文字？",
     "assetMaxDifference": "資源最大差異",
     "sourceLanguage": "原文語言",
     "destinationLanguage": "目標語言",
@@ -1146,6 +1162,8 @@ export const languageChineseTraditional = {
         "extraSummarizationRatioLabel": "額外總結比例",
         "maxChatsPerSummaryLabel": "每個總結的最大訊息數",
         "queryChatCountLabel": "查詢對話訊息數量",
+
+        "summaryChunkSeparatorLabel": "區塊分割正規表達式",
         "recentMemoryRatioLabel": "最近記憶比例",
         "similarMemoryRatioLabel": "相似記憶比例",
         "randomMemoryRatioLabel": "隨機記憶比例",
@@ -1468,6 +1486,8 @@ export const languageChineseTraditional = {
     "togglePresetImported": (name: string) => `已匯入預設「${name}」。`,
     "togglePresetImportError": "切換預設檔案無效。",
     "longPressToPopupEditor": "長按以開啟彈出編輯器",
+
+    "showInputActionBar": "顯示輸入動作列",
     "importSaveFolderHeader": "將存檔載入至 PocketRisu",
     "importSaveZip": "從存檔資料夾載入（Zip 上傳）",
     "importSaveZipDesc": "將現有 PocketRisu 專案的存檔資料夾壓縮為 zip 檔案，並在此上傳以匯入資料。zip 檔案過大可能導致上傳失敗 —— 此時請將存檔資料夾直接複製到伺服器的存檔目錄中，然後重新啟動以自動完成遷移。",
@@ -1602,6 +1622,57 @@ export const languageChineseTraditional = {
     "httpInsecureOpenRemoteAccess": "開啟設定",
 
     "selectBotHint": "選擇一個機器人開始聊天",
+
+
+    "recentChatsTitle": "最近對話",
+
+
+
+    "noRecentChatsDesc": "尚無對話",
+
+
+
+
+    "hideRecentChats": "隱藏對話清單",
+
+
+
+
+
+    "moveInsteadOfCopyOnCMPConvert": "在 CMP 轉換時移動而非複製",
+
+
+
+
+
+
+    "showRequestStatus": "顯示請求狀態",
+
+
+
+
+
+
+
+    "requestStatus": {
+        connecting: "連線中…",
+        thinking: "思考中…",
+        responding: "回應中…",
+        retrying: "重試中…",
+        stalled: "停滯…",
+        done: "完成",
+        failed: "失敗",
+        aborted: "已取消",
+        kindMain: "主要",
+        kindTranslate: "翻譯",
+        kindMemory: "記憶",
+        kindEmotion: "情緒",
+        kindSub: "輔助",
+        outputTokens: "輸出",
+        thinkingTokensLabel: "思考",
+        tokensPerSec: "Token/秒",
+        cacheHit: "快取命中 · {n} Token",
+    },
     sectionInterface: "介面",
     sectionHomeList: "首頁與對話清單",
     sectionChatView: "對話檢視",
@@ -1634,6 +1705,8 @@ export const languageChineseTraditional = {
     chatInputExpandTitle: "訊息輸入",
     resendLastMessage: "重新發送最後一則訊息",
     enterMessagePlaceholder: "輸入訊息...",
+
+    "enterMessageToPersona": (name: string) => `傳送訊息給 ${name}...`,
     sendKeyEnter: "Enter (Shift+Enter 換行)",
     sendKeyCtrlEnter: "Ctrl+Enter (Enter 換行)",
     sendKeyShiftEnter: "Shift+Enter (Enter 換行)",
@@ -1645,6 +1718,11 @@ export const languageChineseTraditional = {
     tokenizerOverrideHelp: "用於 Token 計算。保留為「自動」以使用設定檔的建議。",
     tokenizerAuto: "自動",
     promptBindingLabel: "提示詞綁定",
+
+    "promptPresetParamsUse": "使用提示詞參數",
+
+
+    "promptPresetParamScopeDesc": "這些參數儲存於此提示詞預設中。在經典模型模式中它們一律套用。在使用模型預設時，採樣參數僅會套用於側邊欄提示詞綁定中啟用「使用提示詞參數」的對話。容量設定（最大上下文/回應）是模型的屬性，因此一律由模型預設決定。",
     promptBindedSuccess: "提示詞預設綁定成功",
     promptUnbindedSuccess: "提示詞預設解綁成功",
     promptBindChange: "變更提示詞預設",
@@ -1734,9 +1812,58 @@ export const languageChineseTraditional = {
     modelPresetBindedSuccess: "模型預設綁定成功",
     streamingOverride: "串流回應",
     streamingOverrideHelp: "此預設是否使用串流回應。",
+
+    "decoupledStreaming": "分離串流（一次性顯示）",
+
+
+    "decoupledStreamingHelp": "透過串流發送請求，但在回應生成完畢後一次顯示完整內容。這能繞過部分供應商的非串流輸出限制與逾時問題，並避免逐 Token 渲染的效能消耗。",
     maxContextHelp: "此預設的輸入 (提示詞) Token 預算。留空以使用預設值 (65000)，最高不超過模型的上下文視窗。這不是回應長度限制 (那是最大生成 Token 數)。",
     modelPresetTabPresets: "預設",
     modelPresetTabOptions: "設定",
+
+    "modelPresetTabTest": "測試",
+
+
+    "modelPresetTestTitle": "測試請求",
+
+
+
+    "modelPresetTestHelp": "向此預設發送單一訊息，以檢查其憑證與端點是否有回應。此訊息不會儲存至任何對話中。",
+
+
+
+
+    "modelPresetTestSend": "發送測試",
+
+
+
+
+
+    "modelPresetTestSending": "發送中…",
+
+
+
+
+
+
+    "modelPresetTestSuccess": "成功",
+
+
+
+
+
+
+
+    "modelPresetTestFail": "失敗",
+
+
+
+
+
+
+
+
+    "modelPresetTestDefault": "我想去洗車。洗車場在 50 公尺外。我應該走路還是開車去？",
     profileVisibilityLevel: "設定檔可見度",
     profileVisibilityAll: "顯示全部",
     profileVisibilityHideDeprecated: "隱藏已棄用",
@@ -1789,6 +1916,26 @@ export const languageChineseTraditional = {
     pluginStorageJsonError: (msg: string) => `JSON 解析失敗: ${msg}`,
     pluginStorageSaved: (key: string) => `已儲存「${key}」`,
     pluginStorageDeleteConfirm: (key: string) => `確定要刪除「${key}」嗎？`,
+
+    "pluginStorageBulkDeleteShown": (n: number) => `刪除已顯示的項目 (${n})`,
+
+
+    "pluginStorageBulkDeleteAll": (n: number) => `清除全部 (${n})`,
+
+
+
+    "pluginStorageBulkDeleteConfirm": (backend: string, n: number) => `確定要從 ${backend} 後端刪除 ${n} 個項目嗎？此操作無法復原。`,
+
+
+
+
+    "pluginStorageBulkDeleteAllConfirm": (backend: string, n: number) => `確定要從 ${backend} 後端刪除所有 ${n} 個外掛儲存項目嗎？此操作無法復原。`,
+
+
+
+
+
+    "pluginStorageBulkDeleted": (n: number) => `已刪除 ${n} 個項目`,
     systemDashboard: "主控面板",
     storageDashboardDesc: "檢查儲存使用量、尋找大型項目並回收空間。",
     storageRefresh: "重新整理",
@@ -1874,6 +2021,8 @@ export const languageChineseTraditional = {
     storageCharactersImage: "媒體",
     storageCharactersChat: "對話",
     storageCharactersTrashed: "已刪除",
+
+    "storageCharactersGoTo": "前往此角色",
     storageCharactersOrphan: (count: number, size: number) => `孤立資料: ${count} 筆 (${(size / 1024 / 1024).toFixed(1)} MB)`,
     storageCharactersEmpty: "沒有角色",
     storageLoadMore: (remaining: number) => `顯示更多 (剩餘 ${remaining.toLocaleString()} 個)`,
@@ -1955,6 +2104,12 @@ export const languageChineseTraditional = {
     relatedArcaLiveDesc: "與 AI 對話頻道中的其他使用者討論。",
 
     "modelPresetAbilities": "模型功能",
+
+
+    "modelPresetPickSuggestion": "從建議中選擇…",
+
+
+    "modelPresetSnapshotEmpty": "此預設的設定檔資料為空。請重新下載或替換設定檔以復原其設定。",
     "modelPresetImageInput": "圖片輸入",
     "modelPresetImageInputHelp": "將圖片一併傳送給模型。預設為關閉。僅在使用支援圖片輸入的模型（如：Ollama gemma3、llava）時才開啟。",
     "modelPresetFoldSystem": "摺疊系統提示詞",
@@ -1965,6 +2120,19 @@ export const languageChineseTraditional = {
     "modelPresetAlternateRoleHelp": "將連續且相同角色的訊息合併為一筆。預設為關閉。當使用的模型嚴格要求 user 與 assistant 必須輪流交替時（如：gemma），請開啟此功能。",
     "modelPresetStartWithUser": "強制以 User 訊息開頭",
     "modelPresetStartWithUserHelp": "當對話不是由 user 訊息開始時，在最前面加入一筆空白的 user 訊息。預設為關閉。適用於拒絕非 user 訊息作為第一筆對話的模型。",
+    "modelPresetCacheSection": "上下文快取",
+    "modelPresetCacheEnable": "使用上下文快取",
+    "modelPresetCacheEnableHelp": "將重複的提示詞前綴快取在 Google 的伺服器上，以降低輸入 Token 成本。快取界限由提示詞模板中的快取卡片（或自動快取點）決定。",
+    "modelPresetCachePluginWarning": "將此選項與外部快取外掛一併使用會導致衝突，且快取將無法正常運作。請僅使用其中之一。",
+    "modelPresetCacheTtl": "快取存活時間（秒）",
+    "modelPresetCacheTtlHelp": "伺服器保留快取的時間。時間越長能涵蓋對話輪次之間的思考時間，但存活期間會產生儲存成本。",
+    "modelPresetCacheExtend": "命中快取時延長存活時間",
+    "modelPresetCacheExtendHelp": "每當請求命中快取時，即更新該快取的存活時間。",
+    "modelPresetCacheAdvanced": "進階",
+    "modelPresetCacheMinTokens": "最小提示詞 Token",
+    "modelPresetCacheMinTokensHelp": "當提示詞低於此大小時，不建立快取。",
+    "modelPresetCacheGrowth": "增長後重新建立（Token）",
+    "modelPresetCacheGrowthHelp": "自建立快取以來，當提示詞增長了此數量的 Token 後，即重新建立快取。",
     "modelPresetSaveAsDefaultButton": "儲存為預設值",
     "modelModeLabel": "模型模式",
     "modelModeLegacy": "傳統模型模式",

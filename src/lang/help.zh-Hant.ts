@@ -65,6 +65,11 @@ export const helpZhHant = {
         "gptVisionQuality": "此選項用於設定圖片檢測模型的品質。品質越高，檢測越準確，但會使用更多的 Token。",
         "genTimes": "設定單次請求的重新生成回應數量。除第一則外，其餘回應將作為快取以降低成本。但若未實際使用重新生成功能，反而可能增加成本。",
         "requestretrys": "設定請求失敗時的重試次數。",
+
+        "chatLoadInitialPages": "開啟對話畫面時要渲染的最近對話訊息數量。較高的數值能立即顯示更多歷史記錄，但可能會使載入長對話時變得較為沉重。",
+
+
+        "chatLoadAdditionalPages": "每次捲動到頂部時要渲染的較早對話訊息數量。較高的數值能減少重複載入的次數，但會使每次載入變得較為沉重。",
         "emotionPrompt": "此選項用於設定情緒檢測的提示詞。留空將使用預設提示詞。",
         "additionalParams": "此選項允許將附加的參數加入至請求主體（Request body）中。若要排除某些參數，可以將值設為 `{{none}}`。若要加入標頭（Request header）而非主體，可以在鍵前加上 `header::`，如 `header::Authorization`。若要將值作為 JSON，可以在值前加上 `json::`，如 `json::{\"key\":\"value\"}`。其他情況下，系統將自動判定值的類型。",
         "antiClaudeOverload": "當 Claude 發生過載時，PocketRisu 會嘗試繼續發送相同的提示詞以防止請求中斷，藉此減少過載機率。此功能僅適用於串流回應 (Streamed Responses)，對非官方 API 端點可能無效。",
@@ -138,10 +143,14 @@ export const helpZhHant = {
         "hypaV3ProcessRegexScript": "如果啟用，在 HypaV3 視窗中重新生成總結時，將對輸入的對話訊息套用正規表達式 (Regex) 腳本。",
         "hypaV3DoNotSummarizeUserMessage": "如果啟用，總結的最大訊息數將不計入使用者訊息。",
         "hypaV3EnableSimilarityCorrection": "如果啟用，最近對話的總結將額外作為查詢使用。不適用於實驗性的 HypaMemory V3。",
+
+        "hypaV3SummaryChunkSeparator": "用於將摘要分割成區塊以進行相似度搜尋的分割符號。",
         "hypaV3UseExperimentalImpl": "切換至實驗性的 HypaMemory V3 實作。這將啟用速率限制 (Rate limit) 設定並變更查詢方式。",
         "hypaV3AlwaysToggleOn": "如果啟用，選擇角色時將自動開啟 HypaMemory 開關。",
         "toggleHypaMemory": "是否在此對話中啟用 HypaMemory（長期記憶）。\n\n- 開啟時：當上下文填滿後，過去的訊息會自動被總結並儲存至長期記憶中，且相關的總結內容會在後續的回應中被重新提取。\n- 關閉時：超出上下文視窗的舊訊息將直接被截斷，模型將無法讀取。\n\n此設定會儲存於個別對話中（與角色的預設值獨立），因此同一角色的其他對話不會受到影響。若要調整總結的行為，請至設定集中的 HypaV3 進行調整。",
         "useModelPresetBinding": "在此對話中綁定特定模型預設。\n\n開啟：使用特定的模型預設，為每個對話單獨綁定一個模型。\n關閉：使用現有的聊天機器人設定。（預設）",
+
+        "promptPresetParams": "當此對話透過模型預設發送其主要請求時，目前套用的提示詞預設的採樣參數（溫度、Top P、懲罰等）將會覆寫該模型預設的參數。\n\n- 僅套用於此對話，且僅適用於主要模型請求（不包含子/輔助模型）。\n- 僅會覆寫模型預設實際支援的參數。輸出 Token 上限（最大 Token）與思考（Thinking）設定為模型的屬性，因此一律由模型預設決定。\n- 您在模型預設的自訂主體 / 額外參數中明確設定的值仍具有最高優先權。\n- 在經典模型模式中，提示詞預設參數本就已套用，因此此選項在該模式下無效果。",
         "hypaV3SummarizationRequestsPerMinute": "每分鐘最大總結模型請求數。僅在總結模型設為「輔助模型」時適用。",
         "hypaV3SummarizationMaxConcurrent": "最大同時發送的總結模型請求數。僅在總結模型設為「輔助模型」時適用。",
         "hypaV3EmbeddingRequestsPerMinute": "用於相似性搜尋的每分鐘最大嵌入模型請求數。",
@@ -165,6 +174,8 @@ export const helpZhHant = {
         "clickToEdit": "點擊對話訊息時立即進入編輯模式。",
         "enableBlockPartialEdit": "將滑鼠懸停在訊息中的段落/區塊時顯示區塊編輯控制項。",
         "longPressToPopupEditor": "長按訊息時開啟彈出式編輯器。",
+
+        "showInputActionBar": "在多行文字欄位下方顯示包含複製、重設及展開至編輯器按鈕的底部工具列。",
         "enableDragPartialEdit": "允許僅編輯在訊息中拖曳選取的文字。",
         "botSettingAtStart": "應用程式啟動時自動開啟對話角色設定頁面。",
         "showMenuChatList": "直接在側邊欄選單中顯示目前角色的對話清單。",
@@ -235,6 +246,8 @@ export const helpZhHant = {
         "showMemoryLimit": "在對話區域中顯示一條視覺線來表示目前的最大上下文限制。這條線以上的訊息可能不會發送給模型，這有助於了解模型還能記住什麼。",
         "hideRealm": "讓首頁上的「最近上傳」區塊預設為折疊狀態。折疊時會跳過 RisuRealm 抓取，加快初始載入速度。您隨時可以從首頁展開它。",
         "showFolderNameInIcon": "在角色網格的資料夾圖示上顯示資料夾名稱。讓龐大的資料夾集合更容易瀏覽。",
+
+        "showRequestStatus": "在模型預設請求期間顯示懸浮提示框，呈現即時狀態（連線中 / 思考中 / 回應中 / 停滯中）、思考與回應的 Token 數量以及每秒 Token 速度。僅保留於記憶體中；關閉此選項將完全停止顯示。",
         "customBackground": "用作對話背景的自訂圖片。",
         "playMessageOnTranslateEnd": "在翻譯完成時播放獨立的通知音效。當啟用自動翻譯，且您需要聽覺上的完成提示時非常實用。",
         "roundIcons": "將角色與人設圖示顯示為圓形而非正方形。",
