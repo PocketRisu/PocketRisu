@@ -5,6 +5,8 @@ vi.mock("src/ts/util", () => ({
         data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
     decryptBuffer: async (data: Uint8Array) =>
         data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+    // modules.ts (pulled in via the stores $effect) imports this from util
+    checkPersonaBinded: () => null,
 }));
 
 vi.mock("src/ts/rpack/rpack_js.js", () => ({

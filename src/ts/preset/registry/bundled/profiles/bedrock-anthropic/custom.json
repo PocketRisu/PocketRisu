@@ -1,0 +1,51 @@
+{
+  "id": "bedrock-anthropic:custom",
+  "version": 1,
+  "updatedAt": 1781025739404,
+  "displayName": "AWS Bedrock (Anthropic Messages)",
+  "displayNameI18n": {
+    "ko": "AWS Bedrock (Anthropic Messages)"
+  },
+  "providerBaseId": "bedrock-anthropic",
+  "description": "Claude on Amazon Bedrock via the native Anthropic Messages endpoint (bedrock-mantle, bearer token). Pick a model (e.g. Claude Fable 5) and provide your region URL and bearer token.",
+  "descriptionI18n": {
+    "ko": "Amazon Bedrock의 네이티브 Anthropic Messages 엔드포인트 (bedrock-mantle, bearer 토큰)로 Claude 사용. 모델(예: Claude Fable 5)을 고르고 리전 URL과 bearer 토큰을 입력하세요."
+  },
+  "tags": [
+    "aws",
+    "bedrock",
+    "anthropic",
+    "claude",
+    "custom"
+  ],
+  "sortOrder": 801,
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": ""
+  },
+  "auth": {
+    "kind": "x-api-key",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock"
+  ],
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

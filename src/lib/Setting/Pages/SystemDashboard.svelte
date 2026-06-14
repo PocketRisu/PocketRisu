@@ -20,7 +20,9 @@
     } from '@lucide/svelte'
     import { alertConfirm, alertMd, notifyError, notifySuccess } from 'src/ts/alert'
     import { forageStorage } from 'src/ts/globalApi.svelte'
-    import { SystemSubmenuIndex } from 'src/ts/stores.svelte'
+    import { SystemSubmenuIndex, settingsOpen } from 'src/ts/stores.svelte'
+    import { getDatabase } from 'src/ts/storage/database.svelte'
+    import { changeChar } from 'src/ts/characters'
     import { SystemTab } from 'src/ts/routing'
     import { language, getCurrentLocale } from 'src/lang'
 
@@ -34,7 +36,7 @@
             pageSize: number; pageCount: number; freelistCount: number;
             reclaimable: number; journalMode: string; autoVacuum: number | string;
         }
-        blob: { dbSize: number; intMax: number }
+        chunks?: { count: number; bytes: number; orphanBytes: number; liveChunked: boolean }
         prefixes: Record<string, PrefixInfo>
         kvRows: number
         kvTotalBytes: number
@@ -247,25 +249,35 @@
         const inlayKvTotal = get('inlay/') + get('inlay_thumb/') + get('inlay_meta/') + get('inlay_info/')
         const inlayFsBytes = stats.inlayFsBytes ?? 0
         const inlayTotal = inlayKvTotal + inlayFsBytes
+        // The DB blob is chunked: its bytes (and those of every snapshot, which
+        // share chunks) live in the `chunks` table, not in kv. kv holds only a
+        // tiny marker, so the chart counts the chunk table's physical size here
+        // and excludes database.bin / dbbackup from kv accounting.
+        const chunkedDbBytes = stats.chunks?.bytes ?? 0
+        // A small DB (≤ chunk threshold) stays a raw kv value rather than chunks,
+        // so count it here — otherwise the database row reads 0 and its bytes get
+        // mislabeled as "uncategorized". Keyed on whether the *live* blob is
+        // chunked (not whether any chunks exist — snapshots may be chunked while a
+        // shrunken live DB is raw).
+        const rawDbBlob = stats.chunks?.liveChunked ? 0 : get('database/database.bin')
+        const dbRowSize = chunkedDbBytes + rawDbBlob
         // Known kv prefixes I track explicitly — kv-side only. If anything
         // else lives in kv (test keys, migration leftovers), it shows up
         // under "uncategorized" so the bar always sums correctly.
         const knownKv =
-            get('database/database.bin') + get('database/dbbackup-') +
-            get('assets/') + inlayKvTotal + get('remotes/') + get('coldstorage/')
+            get('assets/') + inlayKvTotal + get('remotes/') + get('coldstorage/') + rawDbBlob
         const uncategorizedKv = Math.max(0, stats.kvTotalBytes - knownKv)
         // SQLite overhead splits into "structural" (always present — indexes,
         // page headers, alignment) and "reclaimable" (the freelist, removable
-        // by VACUUM). Surfacing both keeps the cleanup section's bar aligned
-        // with what users see here.
+        // by VACUUM). Subtract the chunk table too — it lives in the file but
+        // not in kvTotalBytes, otherwise it would inflate "overhead".
         const reclaimable = stats.sqlite.reclaimable
-        const structuralOverhead = Math.max(0, stats.files.db - stats.kvTotalBytes - reclaimable)
+        const structuralOverhead = Math.max(0, stats.files.db - stats.kvTotalBytes - chunkedDbBytes - reclaimable)
         const rows: DiskRow[] = [
-            { id: 'kv-database',     label: language.storageRowKvDatabase,     desc: language.storageRowKvDatabaseDesc,     size: get('database/database.bin'), color: 'bg-rose-500' },
+            { id: 'kv-database',     label: language.storageRowKvDatabase,     desc: language.storageRowKvDatabaseDesc,     size: dbRowSize,                     color: 'bg-rose-500' },
             { id: 'kv-assets',       label: language.storageRowKvAssets,       desc: language.storageRowKvAssetsDesc,       size: get('assets/'),                color: 'bg-amber-500' },
             { id: 'kv-inlay',        label: language.storageRowKvInlay,        desc: language.storageRowKvInlayDesc,        size: inlayTotal,                    color: 'bg-emerald-500' },
             { id: 'kv-remotes',      label: language.storageRowKvRemotes,      desc: language.storageRowKvRemotesDesc,      size: get('remotes/'),               color: 'bg-cyan-500' },
-            { id: 'kv-dbbackup',     label: language.storageRowKvDbBackups,    desc: language.storageRowKvDbBackupsDesc,    size: get('database/dbbackup-'),     color: 'bg-violet-500' },
             { id: 'kv-cold',         label: language.storageRowKvColdStorage,  desc: language.storageRowKvColdStorageDesc,  size: get('coldstorage/'),           color: 'bg-stone-500' },
             { id: 'kv-uncat',        label: language.storageRowKvUncategorized, desc: language.storageRowKvUncategorizedDesc, size: uncategorizedKv,             color: 'bg-stone-600' },
             { id: 'overhead',        label: language.storageRowSqliteOverhead, desc: language.storageRowSqliteOverheadDesc, size: structuralOverhead,            color: 'bg-zinc-500' },
@@ -319,14 +331,20 @@
         return (size / barDenominator) * 100
     }
 
-    // ── BLOB threshold ──────────────────────────────────────────────────────
-    const blobPct = $derived(stats ? (stats.blob.dbSize / stats.blob.intMax) * 100 : 0)
-    const blobLevel = $derived(blobPct >= 90 ? 'crit' : blobPct >= 70 ? 'warn' : 'ok')
-
     // ── Per-row helpers ─────────────────────────────────────────────────────
     function pctOf(part: number, whole: number): number {
         if (whole <= 0) return 0
         return Math.max(0, Math.min(100, (part / whole) * 100))
+    }
+
+    // Close the dashboard and select the character this row represents.
+    // Trashed rows aren't in the live characters array, so there's nothing to jump to.
+    function jumpToCharacter(c: CharBreakdown) {
+        if (c.trashed) return
+        const index = getDatabase().characters.findIndex((ch) => ch.chaId === c.chaId)
+        if (index === -1) return
+        changeChar(index)
+        settingsOpen.set(false)
     }
 
     const charSlice = $derived(characters?.characters.slice(0, charShown) ?? [])
@@ -576,45 +594,11 @@
         <p class="text-textcolor2 text-sm leading-relaxed mb-2">{language.storageOptimizeWhat}</p>
         <p class="text-textcolor2 text-sm leading-relaxed mb-3">{language.storageOptimizeWhen}</p>
         <div class="flex justify-end">
-            <ShButton variant="primary" onclick={runOptimize} disabled={stats.sqlite.reclaimable < 50 * 1024 * 1024}>
+            <ShButton variant="primary" onclick={runOptimize} disabled={(stats.sqlite.reclaimable + (stats.chunks?.orphanBytes ?? 0)) < 50 * 1024 * 1024}>
                 <SparklesIcon size={16} />
                 {language.storageOptimize}
             </ShButton>
         </div>
-    </div>
-
-    <!-- ④ 2 GB BLOB limit ─────────────────────────────────────────────────── -->
-    <div class="border border-darkborderc bg-darkbg/40 rounded-md p-4 mb-4">
-        <div class="flex items-baseline justify-between gap-2 mb-2 flex-wrap">
-            <div class="flex items-center gap-2 text-textcolor">
-                <TriangleAlertIcon size={16} class={blobLevel === 'crit' ? 'text-draculared' : blobLevel === 'warn' ? 'text-yellow-400' : ''} />
-                <span class="font-medium">{language.storageBlobLimit}</span>
-            </div>
-            <span class="text-textcolor2 text-sm tabular-nums">
-                {language.storageBlobThreshold(stats.blob.dbSize, stats.blob.intMax, blobPct)}
-            </span>
-        </div>
-        <p class="text-textcolor2 text-sm leading-relaxed mb-3">{language.storageBlobLimitDesc}</p>
-        <div class="flex items-center gap-3">
-            <div class="flex-1 h-2 bg-bgcolor border border-darkborderc rounded-md overflow-hidden">
-                <div
-                    class="h-full transition-[width] {blobLevel === 'crit' ? 'bg-draculared' : blobLevel === 'warn' ? 'bg-yellow-500' : 'bg-primary'}"
-                    style:width={Math.min(100, blobPct).toFixed(2) + '%'}
-                ></div>
-            </div>
-            <span class="text-textcolor2 text-xs tabular-nums shrink-0 w-12 text-right">{blobPct.toFixed(1)}%</span>
-        </div>
-        {#if blobLevel === 'warn'}
-            <ShAlert variant="warning" className="mt-3">
-                {#snippet icon()}<TriangleAlertIcon />{/snippet}
-                {language.storageBlobThresholdWarn}
-            </ShAlert>
-        {:else if blobLevel === 'crit'}
-            <ShAlert variant="destructive" className="mt-3">
-                {#snippet icon()}<TriangleAlertIcon />{/snippet}
-                {language.storageBlobThresholdCrit}
-            </ShAlert>
-        {/if}
     </div>
 
     <!-- ⑤ Per-character ─────────────────────────────────────────────────── -->
@@ -649,13 +633,19 @@
             {:else}
                 <div class="flex flex-col gap-2 mb-3">
                     {#each charSlice as c (c.chaId || c.name)}
-                        <div class="border border-darkborderc/50 rounded-md p-2">
+                        <button
+                            type="button"
+                            disabled={c.trashed}
+                            onclick={() => jumpToCharacter(c)}
+                            aria-label={c.trashed ? undefined : language.storageCharactersGoTo}
+                            class="block w-full text-left border border-darkborderc/50 rounded-md p-2 transition-colors enabled:cursor-pointer enabled:hover:border-borderc enabled:hover:bg-selected/10 disabled:cursor-default"
+                        >
                             <div class="flex items-baseline justify-between gap-2 mb-1">
                                 <div class="flex items-center gap-2 min-w-0">
-                                    <span class="text-textcolor text-sm truncate">{c.name || '(unnamed)'}</span>
                                     {#if c.trashed}
                                         <ShBadge variant="secondary">{language.storageCharactersTrashed}</ShBadge>
                                     {/if}
+                                    <span class="text-textcolor text-sm truncate">{c.name || '(unnamed)'}</span>
                                 </div>
                                 <span class="text-textcolor text-sm tabular-nums shrink-0">{fmtBytes(c.totalBytes)}</span>
                             </div>
@@ -669,7 +659,7 @@
                                 <span><span class="inline-block size-2 bg-amber-500 rounded-sm align-middle mr-1"></span>{language.storageCharactersImage} {fmtBytes(c.imgBytes)}</span>
                                 <span><span class="inline-block size-2 bg-cyan-500 rounded-sm align-middle mr-1"></span>{language.storageCharactersChat} {fmtBytes(c.chatBytes)}</span>
                             </div>
-                        </div>
+                        </button>
                     {/each}
                 </div>
                 {#if charRemaining > 0}

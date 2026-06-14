@@ -1,7 +1,8 @@
 {
   "name": "pocketrisu",
   "private": true,
-  "version": "1.7.3",
+  "version": "1.8.0",
+  "packageManager": "pnpm@10.34.1",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -14,6 +15,7 @@
     "check:help": "node scripts/check-help-keys.mjs",
     "test": "vitest run",
     "test:compat": "vitest run --config vitest.config.compat.ts",
+    "test:server": "vitest run --config vitest.config.server.ts",
     "runserver": "node server/node/server.cjs",
     "hono:build": "vite build --sourcemap && node server/hono/src/utils/postbuild.js"
   },

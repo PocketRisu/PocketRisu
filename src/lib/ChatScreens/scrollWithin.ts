@@ -9,8 +9,15 @@ export function scrollWithinContainer(
 ) {
     const elRect = el.getBoundingClientRect()
     const containerRect = container.getBoundingClientRect()
+    // getBoundingClientRect is the border box, so its bottom sits below any
+    // bottom-padding. When the floating composer reserves space via padding-bottom,
+    // align 'end' to the content-box bottom instead, so the target message lands
+    // above the composer rather than behind it. (padding-bottom is 0 otherwise.)
+    const padBottom = options.block === 'end'
+        ? parseFloat(getComputedStyle(container).paddingBottom) || 0
+        : 0
     const offset = options.block === 'start'
         ? elRect.top - containerRect.top
-        : elRect.bottom - containerRect.bottom
+        : elRect.bottom - (containerRect.bottom - padBottom)
     container.scrollTo({ top: container.scrollTop + offset, behavior: options.behavior })
 }

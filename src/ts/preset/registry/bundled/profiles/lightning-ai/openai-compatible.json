@@ -1,0 +1,46 @@
+{
+  "id": "lightning-ai:openai-compatible",
+  "version": 1,
+  "displayName": "Lightning AI",
+  "providerBaseId": "lightning-ai",
+  "description": "Lightning AI gateway via OpenAI-compatible API. Enter any model ID; for gpt-5 family models use the dedicated profiles (they require max_completion_tokens).",
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "tags": [
+    "lightning-ai",
+    "aggregator",
+    "openai-compatible"
+  ],
+  "sortOrder": 700,
+  "displayNameI18n": {
+    "ko": "Lightning AI"
+  },
+  "descriptionI18n": {
+    "ko": "Lightning AI 게이트웨이 (OpenAI 호환 API). 임의 모델 ID 입력 가능. gpt-5 계열은 max_completion_tokens가 필요하므로 전용 프로파일을 사용하세요."
+  },
+  "profileStatus": "current",
+  "updatedAt": 1781104476429
+}

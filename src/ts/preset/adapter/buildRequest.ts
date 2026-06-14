@@ -3,14 +3,18 @@ import { appendQuery, applyAuth } from './auth'
 import { ModelPresetAdapterError } from './error'
 import type { AdapterPreparedRequest, AdapterRequestContext } from './types'
 import {
+    buildVertexGeminiEndpointUrl,
     buildVertexOpenAIEndpointUrl,
+    resolveVertexProject,
     VERTEX_CUSTOM_PATH_LOCATION,
     VERTEX_CUSTOM_PATH_PROJECT,
+    VERTEX_SERVICE_ACCOUNT_JSON_KEY,
+    type VertexEndpointInput,
 } from './vertexEndpoint'
 
 export function buildPreparedRequest(ctx: AdapterRequestContext): AdapterPreparedRequest {
     const snapshot = ctx.preset.profileSnapshot
-    const baseUrl = resolveEndpointUrl(snapshot, ctx.preset.userValues)
+    const baseUrl = resolveEndpointUrl(snapshot, ctx.preset.userValues, ctx.serviceAccountJson)
 
     const body: Record<string, unknown> = structuredClone({
         ...(snapshot.defaults ?? {}),
@@ -23,7 +27,10 @@ export function buildPreparedRequest(ctx: AdapterRequestContext): AdapterPrepare
     for (const field of snapshot.schema) {
         if (!field.mapsTo) continue
         const effective = pickEffective(userValues, field.key, field.default)
-        if (effective === undefined) continue
+        // Treat an empty string as "unset": a combobox/text field cleared back
+        // to blank leaves '' in userValues, and sending e.g. reasoning_effort:''
+        // is rejected by providers (no enum match). Skip it like undefined.
+        if (effective === undefined || effective === '') continue
         switch (field.mapsTo.target) {
             case 'body':
                 setNested(body, field.mapsTo.path, effective)
@@ -73,14 +80,21 @@ export function buildPreparedRequest(ctx: AdapterRequestContext): AdapterPrepare
 function resolveEndpointUrl(
     snapshot: ResolvedModelProfileSnapshot,
     userValues: Record<string, unknown>,
+    serviceAccountJson?: string,
 ): string {
     // Endpoint override primitive: a schema field with
     // `mapsTo: { target: 'custom', path: 'endpointUrl' }` lets users plug in
     // a base URL on profiles that ship with an empty endpoint.url
     // (e.g. openai-compatible:custom). Migration analyzer writes this value
     // into `userValues.endpointUrl` for custom OpenAI-compatible providers.
+    // Vertex kinds assemble their URL from project/location, so an absent or
+    // blank `endpointUrl` field there means "no override → assemble", not an
+    // error. For other kinds (e.g. openai-compatible:custom whose only URL
+    // source IS this field) a present-but-empty override stays a hard error.
+    const overrideOptional =
+        snapshot.endpoint.kind === 'vertex-openai' || snapshot.endpoint.kind === 'vertex-gemini'
     const override = pickEndpointOverride(snapshot, userValues)
-    if (override !== undefined) {
+    if (override !== undefined && !(overrideOptional && override.trim().length === 0)) {
         if (override.length === 0) {
             throw new ModelPresetAdapterError(
                 'invalid-request',
@@ -101,29 +115,50 @@ function resolveEndpointUrl(
         return snapshot.endpoint.url
     }
     if (snapshot.endpoint.kind === 'vertex-openai') {
-        const project = pickCustomString(snapshot, userValues, VERTEX_CUSTOM_PATH_PROJECT)
-        const location = pickCustomString(snapshot, userValues, VERTEX_CUSTOM_PATH_LOCATION)
-        if (project === undefined) {
-            throw new ModelPresetAdapterError(
-                'invalid-request',
-                `Vertex endpoint requires a project value (schema field with mapsTo custom.${VERTEX_CUSTOM_PATH_PROJECT})`,
-                { retryable: false, fallbackEligible: false },
-            )
-        }
-        if (location === undefined) {
-            throw new ModelPresetAdapterError(
-                'invalid-request',
-                `Vertex endpoint requires a location value (schema field with mapsTo custom.${VERTEX_CUSTOM_PATH_LOCATION})`,
-                { retryable: false, fallbackEligible: false },
-            )
-        }
-        return buildVertexOpenAIEndpointUrl({ project, location })
+        return buildVertexOpenAIEndpointUrl(
+            resolveVertexEndpointInput(snapshot, userValues, serviceAccountJson),
+        )
+    }
+    if (snapshot.endpoint.kind === 'vertex-gemini') {
+        return buildVertexGeminiEndpointUrl(
+            resolveVertexEndpointInput(snapshot, userValues, serviceAccountJson),
+        )
     }
     throw new ModelPresetAdapterError(
         'unsupported',
         `Endpoint kind '${snapshot.endpoint.kind}' is not supported by the shared request builder yet`,
         { retryable: false },
     )
+}
+
+// Resolve the { project, location } pair for either Vertex endpoint kind.
+// project: explicit custom.project wins; when blank it is recovered from the
+// Service Account JSON's `project_id` (resolveVertexProject throws a clear
+// invalid-request if neither is available). location: custom.location, or
+// 'global' when the schema default is absent / the field was cleared to blank.
+//
+// SA JSON source: the direct-mode userValues field is preferred, falling back to
+// `credentialServiceAccountJson` (threaded from the credential chain by
+// prepareAdapterRequest). The fallback is what covers pooled / inline SA keys,
+// where the JSON is stored in db.apiKeyPool / preset.inlineCredential and never
+// written to userValues.serviceAccountJson. Both sources carry the same
+// project_id, so preferring userValues keeps the direct-mode path unchanged.
+function resolveVertexEndpointInput(
+    snapshot: ResolvedModelProfileSnapshot,
+    userValues: Record<string, unknown>,
+    credentialServiceAccountJson?: string,
+): VertexEndpointInput {
+    const explicitProject = pickCustomString(snapshot, userValues, VERTEX_CUSTOM_PATH_PROJECT)
+    const rawLocation = pickCustomString(snapshot, userValues, VERTEX_CUSTOM_PATH_LOCATION)
+    const location =
+        typeof rawLocation === 'string' && rawLocation.trim().length > 0 ? rawLocation : 'global'
+    const userValuesSaJson = userValues[VERTEX_SERVICE_ACCOUNT_JSON_KEY]
+    const serviceAccountJson =
+        typeof userValuesSaJson === 'string' && userValuesSaJson.trim().length > 0
+            ? userValuesSaJson
+            : credentialServiceAccountJson
+    const project = resolveVertexProject(explicitProject, serviceAccountJson)
+    return { project, location }
 }
 
 function pickEndpointOverride(

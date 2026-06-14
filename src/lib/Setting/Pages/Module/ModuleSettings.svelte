@@ -13,6 +13,8 @@
     import TextInput from "src/lib/UI/GUI/TextInput.svelte";
     import { onDestroy } from "svelte";
     import { importMCPModule } from "src/ts/process/mcp/mcp";
+    import { convertModuleToCharacter } from "src/ts/interchangeability";
+    import { checkCharOrder } from "src/ts/globalApi.svelte";
     let tempModule:RisuModule = $state({
         name: '',
         description: '',
@@ -165,6 +167,12 @@
             notifySuccess(language.moduleUpdated)
             mode = 0
         }}>{language.editModule}</Button>
+        <Button className="mt-2" onclick={() => {
+            const char = convertModuleToCharacter(tempModule)
+            DBState.db.characters.push(char)
+            checkCharOrder()
+            notifySuccess(language.successfullyConverted)
+        }}>{language.convertToCharacter}</Button>
     {/if}
     </SettingPage>
 {/if}

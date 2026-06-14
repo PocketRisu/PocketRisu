@@ -19,8 +19,14 @@ export interface SettingContext {
     /** Render mode for row-capable wrappers (select/text/slider). 'row' puts the
      * label + inline help on the left and the control right-aligned & vertically
      * centered; 'stacked' (default) keeps the label above the control. Multiline
-     * textareas always stay stacked regardless. */
-    layout?: 'stacked' | 'row';
+     * textareas always stay stacked regardless.
+     * 'block' is 'row' (label + inline help stacked left, control vertically
+     * centered right, border-t divider rhythm) plus a full-width control line
+     * below when width is needed: sliders put their enable switch in the row
+     * slot and the ShSlider (real units) underneath; numbers need no extra
+     * width, so their block rendering IS the row rendering. Currently
+     * implemented by SettingSlider / SettingNumber; others fall back to stacked. */
+    layout?: 'stacked' | 'row' | 'block';
 }
 
 /**
@@ -81,7 +87,7 @@ export interface SettingOptions {
     max?: number;
     step?: number;
     fixed?: number;         // Decimal places for slider
-    disableable?: boolean;  // Allow -1 to disable
+    disableable?: boolean;  // Allow -1000 to disable
     customText?: string | ((value: number) => string); // Custom display text for slider
     multiple?: number;      // Multiplier for display value
     nullable?: boolean;     // Allow null for color inputs

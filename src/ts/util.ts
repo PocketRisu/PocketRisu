@@ -62,7 +62,7 @@ export const replacePlaceholders = (msg:string, name:string) => {
                 .replace(/(\{\{((set)|(get))var::.+?\}\})/gu,'')
 }
 
-function checkPersonaBinded(){
+export function checkPersonaBinded(){
     try {
         let db = getDatabase()
         const selectedChar = get(selectedCharID)
@@ -1246,4 +1246,31 @@ export function base64url(source: Uint8Array | ArrayBuffer): string {
         .replace(/\+/g, "-")
         .replace(/\//g, "_");
     return encodedSource;
+}
+
+let agoFormatter: Intl.RelativeTimeFormat | null = null;
+
+/** Format a past timestamp (ms) as a localized "n minutes ago" string. */
+export function makeAgoText(time: number): string {
+    if (time === 0) {
+        return "Unknown";
+    }
+    agoFormatter ??= new Intl.RelativeTimeFormat(navigator.languages as string[], { style: 'short' });
+    const diff = Date.now() - time;
+    if (diff < 3600000) {
+        return agoFormatter.format(-Math.floor(diff / 60000), 'minute');
+    }
+    if (diff < 86400000) {
+        return agoFormatter.format(-Math.floor(diff / 3600000), 'hour');
+    }
+    if (diff < 604800000) {
+        return agoFormatter.format(-Math.floor(diff / 86400000), 'day');
+    }
+    if (diff < 2592000000) {
+        return agoFormatter.format(-Math.floor(diff / 604800000), 'week');
+    }
+    if (diff < 31536000000) {
+        return agoFormatter.format(-Math.floor(diff / 2592000000), 'month');
+    }
+    return agoFormatter.format(-Math.floor(diff / 31536000000), 'year');
 }

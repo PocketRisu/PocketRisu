@@ -18,7 +18,7 @@ vi.mock('src/ts/globalApi.svelte', () => ({
 
 vi.mock('src/ts/stores.svelte', () => ({ DBState: mockDb }))
 
-import { getOfficialRegistry, isRefetchGuarded, syncRemoteRegistry } from './remote'
+import { getOfficialRegistry, isEntryCorrupted, isRefetchGuarded, syncRemoteRegistry } from './remote'
 import { getBundledRegistryId, loadBundledRegistry } from './loader'
 
 const BASE = 'https://raw.githubusercontent.com/PocketRisu/pocketrisu-model-registry/main/'
@@ -110,6 +110,31 @@ describe('syncRemoteRegistry', () => {
         expect(officialEntry()?.source).toBe(CUSTOM)
         expect(officialEntry()?.profiles?.['openai:gpt']).toBeTruthy()
         expect(mockDb.db.modelRegistrySeen).toBeUndefined()
+    })
+
+    it('re-downloads a null-corrupted cache even when hash + source are unchanged', async () => {
+        // Old normalizeJSON bug: a base provider's requestSchema holds [null].
+        // Hash still matches the published catalog, so the gate would normally
+        // skip — but corruption must force a re-fetch of the clean data.
+        mockDb.db.modelProfileRegistryCache = {
+            schemaVersion: 4,
+            registries: {
+                [getBundledRegistryId()]: {
+                    fetchedAt: 1, source: BASE, contentHash: 'h1',
+                    profiles: { 'sentinel': { id: 'sentinel' } },
+                    baseProviders: { openai: { id: 'openai', requestSchema: [null] } },
+                },
+            },
+        }
+        setup(BASE, 'h1') // same hash + same source as the cache
+        const res = await syncRemoteRegistry()
+        expect(res.ok).toBe(true)
+        expect(res.downloaded).toBe(true)
+        expect(state.fetchCount).toBe(2) // index.json + catalog.json
+        // Replaced by the freshly fetched (clean) catalog.
+        expect(officialEntry()?.profiles?.['openai:gpt']).toBeTruthy()
+        expect(officialEntry()?.profiles?.['sentinel']).toBeUndefined()
+        expect(isEntryCorrupted(officialEntry())).toBe(false)
     })
 
     it('keeps the old cache on an index/catalog hash mismatch (CDN race)', async () => {
@@ -264,6 +289,51 @@ describe('isRefetchGuarded', () => {
     it('is true within the guard window, false outside', () => {
         expect(isRefetchGuarded(Date.now() - 1000)).toBe(true)
         expect(isRefetchGuarded(Date.now() - 60_000)).toBe(false)
+    })
+})
+
+describe('isEntryCorrupted', () => {
+    const entry = (baseProviders: Record<string, any>) => ({ fetchedAt: 1, baseProviders } as any)
+
+    it('flags a base provider whose requestSchema contains a null element', () => {
+        expect(isEntryCorrupted(entry({ openai: { id: 'openai', requestSchema: [{ key: 'apiKey' }, null] } }))).toBe(true)
+    })
+
+    it('returns false for all-clean base providers', () => {
+        expect(isEntryCorrupted(entry({
+            openai: { id: 'openai', requestSchema: [{ key: 'apiKey' }], uiSchema: { fields: [{ key: 'apiKey' }], groups: [] } },
+            claude: { id: 'claude', requestSchema: [], uiSchema: { fields: [], groups: [] } },
+        }))).toBe(false)
+    })
+
+    it('flags a null element inside uiSchema.fields', () => {
+        expect(isEntryCorrupted(entry({
+            openai: { id: 'openai', requestSchema: [{ key: 'apiKey' }], uiSchema: { fields: [null], groups: [] } },
+        }))).toBe(true)
+    })
+
+    it('ignores a missing/non-array requestSchema (no false positive)', () => {
+        expect(isEntryCorrupted(entry({ openai: { id: 'openai' } }))).toBe(false)
+        expect(isEntryCorrupted(undefined)).toBe(false)
+        expect(isEntryCorrupted({ fetchedAt: 1 } as any)).toBe(false)
+    })
+
+    it('flags a null element inside a PROFILE schema (the common shared-ref case)', () => {
+        // A field object shared between a base provider and a profile is nulled in
+        // whichever serializes second (profiles) — so base may look clean while the
+        // profile is corrupt. The detector must scan profiles too.
+        expect(isEntryCorrupted({
+            fetchedAt: 1,
+            baseProviders: { openai: { id: 'openai', requestSchema: [{ key: 'apiKey' }] } },
+            profiles: { 'openai:gpt': { id: 'openai:gpt', schema: [{ key: 'modelId' }, null] } },
+        } as any)).toBe(true)
+    })
+
+    it('flags a null element inside a profile uiSchema.fields', () => {
+        expect(isEntryCorrupted({
+            fetchedAt: 1,
+            profiles: { 'openai:gpt': { id: 'openai:gpt', schema: [{ key: 'modelId' }], uiSchema: { fields: [null], groups: [] } } },
+        } as any)).toBe(true)
     })
 })
 

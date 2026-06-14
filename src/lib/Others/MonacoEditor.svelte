@@ -56,6 +56,8 @@
             language,
             theme,
             readOnly: readonly,
+            // Avoid Chrome EditContext modifier-state and global hotkey conflicts.
+            editContext: false,
             automaticLayout: true,
             minimap: { enabled: false },
             wordWrap: 'on',

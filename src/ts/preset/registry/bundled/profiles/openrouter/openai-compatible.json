@@ -1,7 +1,7 @@
 {
   "id": "openrouter:openai-compatible",
   "version": 1,
-  "updatedAt": 1780842571073,
+  "updatedAt": 1781103554581,
   "displayName": "OpenRouter",
   "providerBaseId": "openrouter",
   "description": "OpenRouter multi-vendor router via OpenAI-compatible API.",

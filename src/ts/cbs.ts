@@ -831,7 +831,8 @@ export function registerCBS(arg:CBSRegisterArg) {
                 return ''
             }
             if(matcherArg.runVar){
-                if(!getChatVar(args[0])){
+                const currentValue = getChatVar(args[0])
+                if(!currentValue || currentValue === 'null'){
                     setChatVar(args[0], args[1])
                 }
                 return ''
@@ -2105,7 +2106,7 @@ export function registerCBS(arg:CBSRegisterArg) {
     registerFunction({
         name: 'reverse',
         callback: (str, matcherArg, args, vars) => {
-            return [...str].reverse().join('')
+            return [...(args[0] ?? '')].reverse().join('')
         },
         alias: [],
         description: 'Reverses the input string.\n\nUsage:: {{reverse::some_value}}',

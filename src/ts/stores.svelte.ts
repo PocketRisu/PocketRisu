@@ -3,6 +3,7 @@ import type { character, Database } from "./storage/database.svelte";
 import { type simpleCharacterArgument } from "./parser/parser.svelte";
 import type { alertData } from "./alert";
 import { moduleUpdate } from "./process/modules";
+import { deepTouch } from "./gui/deepTouch.svelte";
 import { resetScriptCache } from "./process/scripts";
 import type { hubType } from "./characterCards";
 import type { PluginSafetyErrors } from "./plugins/pluginSafety";
@@ -178,10 +179,18 @@ export type MenuDef = {
     id: string,
 }
 
+export type ChatPanelDef = {
+    id: string,
+    pluginName: string,
+    html: string,
+    className?: string,
+}
+
 export const additionalSettingsMenu = $state([] as MenuDef[])
 export const additionalFloatingActionButtons = $state([] as MenuDef[])
 export const additionalHamburgerMenu = $state([] as MenuDef[])
 export const additionalChatMenu = $state([] as MenuDef[])
+export const chatPanelStore = $state([] as ChatPanelDef[])
 export const bodyIntercepterStore = $state([] as {
     id: string,
     callback: (body: any, type: string) => Promise<any>
@@ -222,8 +231,8 @@ $effect.root(() => {
         }
     })
     $effect(() => {
-        try { $state.snapshot(DBState.db.modules) } catch (e) {
-            console.warn('[ModuleUpdate] $state.snapshot(modules) failed:', e)
+        try { deepTouch(DBState.db.modules) } catch (e) {
+            console.warn('[ModuleUpdate] deepTouch(modules) failed:', e)
             return
         }
         DBState?.db?.enabledModules

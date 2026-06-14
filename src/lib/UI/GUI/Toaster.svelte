@@ -12,7 +12,7 @@
     {position}
     richColors
     duration={3500}
-    visibleToasts={5}
+    visibleToasts={8}
     toastOptions={{
         classes: {
             toast: 'risu-toast',

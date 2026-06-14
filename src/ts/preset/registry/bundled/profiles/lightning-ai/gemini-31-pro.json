@@ -1,0 +1,57 @@
+{
+  "id": "lightning-ai:gemini-31-pro",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "Gemini 3.1 Pro",
+  "displayNameI18n": {
+    "ko": "Gemini 3.1 Pro"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Gemini 3.1 Pro via Lightning AI (google/gemini-3.1-pro-preview).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.1 Pro (Lightning AI, google/gemini-3.1-pro-preview)."
+  },
+  "tags": [
+    "lightning-ai",
+    "google",
+    "gemini"
+  ],
+  "sortOrder": 721,
+  "modelId": "google/gemini-3.1-pro-preview",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

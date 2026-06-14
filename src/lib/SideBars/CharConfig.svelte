@@ -1,9 +1,10 @@
 <script lang="ts">
     import { language } from "../../lang";
     import { tokenizeAccurate } from "../../ts/tokenizer";
-    import { saveImage as saveAsset, type character } from "../../ts/storage/database.svelte";
+    import { saveImage as saveAsset, type character, getCurrentCharacter } from "../../ts/storage/database.svelte";
+    import { convertCharacterToModule } from "src/ts/interchangeability";
+    import { notifySuccess } from "src/ts/alert";
     import { DBState } from 'src/ts/stores.svelte';
-    import { untrack } from 'svelte';
     import { CharConfigSubMenu, MobileGUI, selectedCharID, hypaV3ModalOpen } from "../../ts/stores.svelte";
     import { PlusIcon, SmileIcon, TrashIcon, UserIcon, ActivityIcon, BookIcon, Braces, Volume2Icon, DownloadIcon, HardDriveUploadIcon, Share2Icon, ImageIcon, ImageOffIcon, ArrowUp, ArrowDown, TriangleAlertIcon } from '@lucide/svelte'
     import Check from "../UI/GUI/CheckInput.svelte";
@@ -47,31 +48,37 @@
         charaNote: 0
     })
 
-    let lasttokens = {
-        desc: '',
-        firstMsg: '',
-        localNote: '',
-        charaNote: ''
+    // Per-field debounced token counts. Each field is its own effect so a change
+    // to one can't disturb another, and the generation is bumped in the effect
+    // (on input change) — not in the timer — so an in-flight tokenize is
+    // invalidated the moment the input changes, not 400ms later when the timer
+    // fires. Tokenizing is heavy (full CBS parse + encode), so it stays debounced
+    // off the keystroke path.
+    const tokenizeField = (
+        getValue: () => string,
+        apply: (n: number) => void,
+        timerRef: { t: ReturnType<typeof setTimeout> | null, seq: number }
+    ) => {
+        const value = getValue()
+        const seq = ++timerRef.seq
+        if (timerRef.t) clearTimeout(timerRef.t)
+        timerRef.t = setTimeout(() => {
+            tokenizeAccurate(value).then(n => { if (seq === timerRef.seq) apply(n) })
+        }, 400)
     }
-
-    async function loadTokenize(
-        desc: string | null,
-        firstMsg: string | null,
-        localNote: string
-    ) {
-        if (desc !== null && lasttokens.desc !== desc) {
-            lasttokens.desc = desc
-            tokens.desc = await tokenizeAccurate(desc)
-        }
-        if (firstMsg !== null && lasttokens.firstMsg !== firstMsg) {
-            lasttokens.firstMsg = firstMsg
-            tokens.firstMsg = await tokenizeAccurate(firstMsg)
-        }
-        if (lasttokens.localNote !== localNote) {
-            lasttokens.localNote = localNote
-            tokens.localNote = await tokenizeAccurate(localNote)
-        }
-    }
+    const descTok = { t: null as ReturnType<typeof setTimeout> | null, seq: 0 }
+    const firstMsgTok = { t: null as ReturnType<typeof setTimeout> | null, seq: 0 }
+    const localNoteTok = { t: null as ReturnType<typeof setTimeout> | null, seq: 0 }
+    $effect.pre(() => {
+        tokenizeField(() => (DBState.db.characters[$selectedCharID] as character).desc ?? '', n => tokens.desc = n, descTok)
+    });
+    $effect.pre(() => {
+        tokenizeField(() => DBState.db.characters[$selectedCharID].firstMessage ?? '', n => tokens.firstMsg = n, firstMsgTok)
+    });
+    $effect.pre(() => {
+        const chara = DBState.db.characters[$selectedCharID]
+        tokenizeField(() => chara.chats[chara.chatPage].note ?? '', n => tokens.localNote = n, localNoteTok)
+    });
 
 
     let assetFileExtensions:string[] = $state([])
@@ -82,17 +89,6 @@
         emos = DBState.db.characters[$selectedCharID].emotionImages
     });
 
-
-    $effect.pre(() => {
-        const chara = DBState.db.characters[$selectedCharID]
-        const desc = (chara as character).desc
-        const firstMsg = chara.firstMessage
-        const localNote = chara.chats[chara.chatPage].note
-
-        untrack(() => {
-            loadTokenize(desc, firstMsg, localNote)
-        })
-    });
 
     $effect.pre(() => {
         if(DBState.db.characters[$selectedCharID].type ==='character' && DBState.db.useAdditionalAssetsPreview){
@@ -152,6 +148,15 @@
         title:string,
         description:string
     }[] = $state([])
+
+    $effect.pre(() => {
+        if (DBState.db.characters[$selectedCharID].ttsMode === 'openai' && (DBState.db.characters[$selectedCharID] as character).oaiTTSConfig === undefined) {
+            (DBState.db.characters[$selectedCharID] as character).oaiTTSConfig = {
+                enabled: false,
+                format: 'mp3',
+            };
+        }
+    });
 
     $effect.pre(() => {
         if (DBState.db.characters[$selectedCharID].ttsMode === 'fishspeech' && (DBState.db.characters[$selectedCharID] as character).fishSpeechConfig === undefined) {
@@ -642,6 +647,13 @@
         }} className="mt-2">{language.exportCharacter}</Button>
     {/if}
 
+    <Button size="md" className="mt-2" onclick={async () => {
+        const char = getCurrentCharacter()
+        const m = convertCharacterToModule(char)
+        DBState.db.modules.push(m)
+        notifySuccess(language.successfullyConverted)
+    }}>{language.convertToModule}</Button>
+
     <Button onclick={async () => {
         removeChar($selectedCharID, DBState.db.characters[$selectedCharID].name)
     }} className="mt-2" size="md">{language.removeCharacter}</Button>
@@ -787,12 +799,50 @@
                 <OptionInput value="v2">v2</OptionInput>
             </SelectInput>
         {:else if DBState.db.characters[$selectedCharID].ttsMode === 'openai'}
-            <SelectInput className="mb-4 mt-2" bind:value={DBState.db.characters[$selectedCharID].oaiVoice}>
-                <OptionInput value="">Unset</OptionInput>
-                {#each oaiVoices as voice}
-                    <OptionInput value={voice}>{voice}</OptionInput>
-                {/each}
-            </SelectInput>
+            <span class="text-textcolor">Voice</span>
+            {#if !DBState.db.characters[$selectedCharID].oaiTTSConfig?.enabled}
+                <SelectInput className="mb-4 mt-2" bind:value={DBState.db.characters[$selectedCharID].oaiVoice}>
+                    <OptionInput value="">Unset</OptionInput>
+                    {#each oaiVoices as voice}
+                        <OptionInput value={voice}>{voice}</OptionInput>
+                    {/each}
+                </SelectInput>
+            {:else}
+                <TextInput className="mb-4 mt-2"
+                    bind:value={DBState.db.characters[$selectedCharID].oaiTTSConfig.voice}
+                    placeholder={DBState.db.characters[$selectedCharID].oaiVoice || 'alloy'} />
+            {/if}
+
+            <span class="text-textcolor">Advanced (OpenAI-compatible endpoint)</span>
+            <Check bind:check={DBState.db.characters[$selectedCharID].oaiTTSConfig.enabled} />
+
+            {#if DBState.db.characters[$selectedCharID].oaiTTSConfig?.enabled}
+                <span class="text-textcolor">Base URL</span>
+                <TextInput className="mb-4 mt-2"
+                    bind:value={DBState.db.characters[$selectedCharID].oaiTTSConfig.baseURL}
+                    placeholder="https://api.openai.com/v1" />
+
+                <span class="text-textcolor">API Key (overrides global)</span>
+                <TextInput className="mb-4 mt-2" hideText={DBState.db.hideApiKey}
+                    bind:value={DBState.db.characters[$selectedCharID].oaiTTSConfig.apiKey}
+                    placeholder="Leave empty to use global OpenAI API key" />
+
+                <span class="text-textcolor">Model</span>
+                <TextInput className="mb-4 mt-2"
+                    bind:value={DBState.db.characters[$selectedCharID].oaiTTSConfig.model}
+                    placeholder="tts-1" />
+
+                <span class="text-textcolor">Response Format</span>
+                <SelectInput className="mb-4 mt-2"
+                    bind:value={DBState.db.characters[$selectedCharID].oaiTTSConfig.format}>
+                    <OptionInput value="mp3">mp3</OptionInput>
+                    <OptionInput value="opus">opus</OptionInput>
+                    <OptionInput value="aac">aac</OptionInput>
+                    <OptionInput value="flac">flac</OptionInput>
+                    <OptionInput value="wav">wav</OptionInput>
+                    <OptionInput value="pcm">pcm</OptionInput>
+                </SelectInput>
+            {/if}
         {:else if DBState.db.characters[$selectedCharID].ttsMode === 'huggingface'}
             <span class="text-textcolor">Model</span>
             <ShInput className="mb-4 mt-2" autocomplete="off" bind:value={DBState.db.characters[$selectedCharID].hfTTS.model} />
@@ -1025,6 +1075,9 @@
 
         <span class="text-textcolor mt-2">{language.translatorNote} <Help key="translatorNote" /></span>
         <TextAreaInput margin="both" autocomplete="off" bind:value={DBState.db.characters[$selectedCharID].translatorNote}></TextAreaInput>
+
+        <span class="text-textcolor mt-2">{language.customPromptTemplateToggle} <Help key="customPromptTemplateToggle" /></span>
+        <TextAreaInput margin="both" autocomplete="off" bind:value={DBState.db.characters[$selectedCharID].customModuleToggle}></TextAreaInput>
 
         <span class="text-textcolor">{language.creator}</span>
         <ShInput autocomplete="off" bind:value={DBState.db.characters[$selectedCharID].additionalData.creator} />

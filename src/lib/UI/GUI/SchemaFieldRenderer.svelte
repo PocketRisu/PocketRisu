@@ -10,6 +10,7 @@
     import NumberInput from "./NumberInput.svelte";
     import ShSlider from "./ShSlider.svelte";
     import SelectInput from "./SelectInput.svelte";
+    import ShSelect from "./ShSelect.svelte";
     import OptionInput from "./OptionInput.svelte";
     import CheckInput from "./CheckInput.svelte";
 
@@ -64,6 +65,34 @@
         const lines = stringArrayText.split('\n').map(s => s.trim()).filter(Boolean);
         userValues[fieldKey] = lines.length === 0 ? undefined : lines;
     });
+
+    // combobox widget: a free-text input (the source of truth) plus a
+    // suggestions dropdown that writes the picked value into it. Replaces the
+    // native <datalist>, whose rendering is delegated to the browser and
+    // misbehaves on mobile (suggestion taps not committing, crashes on Samsung
+    // Internet). The dropdown reuses ShSelect, so touch devices fall back to
+    // the OS-native picker. Suggestions display the raw value (the model id),
+    // not a prettified label, so what you pick is exactly what's sent — and the
+    // pretty label never hides a "-preview"/date suffix.
+    const comboOptions = $derived(
+        uiField.widget === 'combobox'
+            ? (schemaField.enum ?? []).filter(Boolean).map(o => String(o.value))
+            : []
+    );
+    // The dropdown mirrors the text value only when it matches a suggestion;
+    // otherwise it rests on the placeholder. userValues stays the single source
+    // of truth — the dropdown never carries independent state that could desync.
+    let comboPick = $state('');
+    $effect(() => {
+        if (uiField.widget !== 'combobox') return;
+        const current = String(userValues[fieldKey] ?? '');
+        comboPick = comboOptions.includes(current) ? current : '';
+    });
+    function comboSelect(picked: string) {
+        // Ignore the placeholder ("") — clearing is done via the text field /
+        // reset button, never by re-selecting the "choose a suggestion" row.
+        if (picked) userValues[fieldKey] = picked;
+    }
 
     // JSON widget: stringify on read, parse on write. Errors surface inline.
     // We seed jsonText from userValues once on mount, then user edits jsonText
@@ -181,13 +210,15 @@
             class="bg-darkbg border border-darkborderc rounded-md px-3 py-2 text-textcolor focus:outline-hidden focus:ring-2 focus:ring-borderc"
             bind:value={userValues[fieldKey] as string}
             placeholder={uiField.placeholder ?? ''}
-            list={`combobox-${fieldKey}`}
         />
-        <datalist id={`combobox-${fieldKey}`}>
-            {#each (schemaField.enum ?? []).filter(Boolean) as opt}
-                <option value={String(opt.value)}>{opt.label}</option>
-            {/each}
-        </datalist>
+        {#if comboOptions.length > 0}
+            <ShSelect bind:value={comboPick} onchange={(e) => comboSelect(e.currentTarget.value)}>
+                <OptionInput value="">{language.modelPresetPickSuggestion}</OptionInput>
+                {#each comboOptions as opt}
+                    <OptionInput value={opt}>{opt}</OptionInput>
+                {/each}
+            </ShSelect>
+        {/if}
     {:else if uiField.widget === 'string-array'}
         <TextAreaInput
             bind:value={stringArrayText}

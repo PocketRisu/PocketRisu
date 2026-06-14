@@ -66,7 +66,7 @@
         }"
         style:width={size + "px"}
         style:height={size + "px"}
-        style:minWidth={size + "px"}
+        style:min-width={size + "px"}
         class:rounded-md={!rounded} class:rounded-full={rounded}
       ></div>
       {:then resolvedBgImg}
@@ -83,7 +83,7 @@
         }"
         style:width={size + "px"}
         style:height={size + "px"}
-        style:minWidth={size + "px"}
+        style:min-width={size + "px"}
         style:background-image={resolvedBgImg ? `url('${resolvedBgImg}')` : undefined}
         style:background-size={resolvedBgImg ? "cover" : undefined}
         style:background-position={resolvedBgImg ? "center" : undefined}
@@ -100,7 +100,7 @@
           class="bg-skin-border sidebar-avatar rounded-md bg-top"
           style:width={size + "px"}
           style:height={size + "px"}
-          style:minWidth={size + "px"}
+          style:min-width={size + "px"}
           class:rounded-md={!rounded} class:rounded-full={rounded} 
 ></div>
       {:then img}
@@ -109,7 +109,7 @@
           class="bg-skin-border sidebar-avatar sidebar-touch-target rounded-md object-cover object-top"
           style:width={size + "px"}
           style:height={size + "px"}
-          style:minWidth={size + "px"}
+          style:min-width={size + "px"}
           class:rounded-md={!rounded} class:rounded-full={rounded} 
           alt="avatar"
         />
@@ -120,7 +120,7 @@
       class="bg-skin-border sidebar-avatar sidebar-touch-target rounded-md bg-top"
       style:width={size + "px"}
       style:height={size + "px"}
-      style:minWidth={size + "px"}
+      style:min-width={size + "px"}
       class:rounded-md={!rounded} class:rounded-full={rounded} 
 ></div>
   {/if}

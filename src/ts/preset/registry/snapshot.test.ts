@@ -51,7 +51,7 @@ describe('resolveSnapshot', () => {
         expect(snapshot.auth.kind).toBe('google-service-account')
         // location default lives on the base-provider schema field, not in body defaults.
         const locationField = snapshot.schema.find((f) => f.key === 'location')
-        expect(locationField?.default).toBe('us-central1')
+        expect(locationField?.default).toBe('global')
         expect(locationField?.mapsTo).toEqual({ target: 'custom', path: 'location' })
         const projectField = snapshot.schema.find((f) => f.key === 'projectId')
         expect(projectField?.mapsTo).toEqual({ target: 'custom', path: 'project' })

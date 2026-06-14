@@ -1,6 +1,6 @@
 {
   "id": "anthropic-compatible",
-  "version": 1,
+  "version": 2,
   "displayName": "Anthropic Compatible (Custom)",
   "adapterKind": "anthropic-messages",
   "authKinds": [
@@ -50,14 +50,32 @@
       "key": "modelId",
       "type": "string",
       "label": "Model ID",
-      "description": "Model identifier accepted by the upstream endpoint (e.g. claude-sonnet-4-5).",
+      "description": "Model identifier accepted by the upstream endpoint (e.g. claude-fable-5). Suggestions are first-party Claude IDs; any value the upstream accepts can be typed.",
       "required": true,
+      "enum": [
+        {
+          "value": "claude-fable-5",
+          "label": "Claude Fable 5"
+        },
+        {
+          "value": "claude-opus-4-8",
+          "label": "Claude Opus 4.8"
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "label": "Claude Sonnet 4.6"
+        },
+        {
+          "value": "claude-haiku-4-5",
+          "label": "Claude Haiku 4.5"
+        }
+      ],
       "mapsTo": {
         "target": "body",
         "path": "model"
       },
       "descriptionI18n": {
-        "ko": "상위 엔드포인트가 허용하는 모델 ID (예: claude-sonnet-4-5)."
+        "ko": "상위 엔드포인트가 허용하는 모델 ID (예: claude-fable-5). 제안 목록은 first-party Claude ID이며, 상위 엔드포인트가 허용하는 값이면 자유 입력 가능합니다."
       }
     },
     {
@@ -173,7 +191,7 @@
       },
       {
         "key": "modelId",
-        "widget": "text",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "model",
         "order": 1

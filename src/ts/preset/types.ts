@@ -1,3 +1,5 @@
+import type { GeminiPromptCachingConfig } from './cache/geminiContextCache'
+
 export type AdapterKind =
     | 'openai-compatible'
     | 'anthropic-messages'
@@ -35,6 +37,7 @@ export type AuthKind =
 export type EndpointKind =
     | 'static'
     | 'vertex-openai'
+    | 'vertex-gemini'
 
 export type RegistryFieldType =
     | 'string'
@@ -134,6 +137,7 @@ export type RegistryCapability =
     | 'tools'
     | 'json'
     | 'reasoning'
+    | 'cache'
 
 export interface ModelLimits {
     known?: boolean
@@ -277,6 +281,12 @@ export interface ModelPreset {
     // Default off (undefined/false). Forced off when the profile does not
     // declare the 'streaming' capability.
     useStreaming?: boolean
+    // Decoupled streaming: send the request over the streaming wire (so the
+    // provider/proxy applies its more lenient streaming limits — output cap,
+    // timeout) but buffer the whole SSE response and surface the final text at
+    // once instead of token-by-token. Only meaningful when useStreaming is on.
+    // Default off (undefined/false) → ordinary token-by-token streaming.
+    decoupledStreaming?: boolean
     // Per-ModelPreset tool use (capabilities Stage 1). Default off
     // (undefined/false): while off, the request stays text-only so existing
     // bound chats are never routed through the tool loop. Only meaningful when
@@ -313,6 +323,13 @@ export interface ModelPreset {
     // clamped to the profile's contextWindowTokens when known. NOT the output
     // limit (that is the profile's max_tokens param).
     maxContext?: number
+    // Gemini explicit context caching (google-gemini adapter + AI Studio key
+    // auth, main chat only). The cache boundary comes from the native
+    // message.cachePoint infra (cache prompt card / automaticCachePoint), not
+    // from this config. Additive optional — absent/disabled => no cache calls,
+    // requests byte-identical to before. Runtime cache state lives in
+    // localStorage, never in the db.
+    promptCaching?: GeminiPromptCachingConfig
     apiKeyRef?: string
     inlineCredential?: unknown
     fallbackModelPresetIds?: string[]

@@ -1,0 +1,58 @@
+{
+  "id": "lightning-ai:claude-haiku-45",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "Claude Haiku 4.5",
+  "displayNameI18n": {
+    "ko": "Claude Haiku 4.5"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Claude Haiku 4.5 via Lightning AI (anthropic/claude-haiku-4-5-20251001).",
+  "descriptionI18n": {
+    "ko": "Claude Haiku 4.5 (Lightning AI, anthropic/claude-haiku-4-5-20251001)."
+  },
+  "tags": [
+    "lightning-ai",
+    "anthropic",
+    "claude"
+  ],
+  "sortOrder": 713,
+  "modelId": "anthropic/claude-haiku-4-5-20251001",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 200000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 64000
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

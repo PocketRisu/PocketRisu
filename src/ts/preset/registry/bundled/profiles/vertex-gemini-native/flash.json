@@ -1,0 +1,52 @@
+{
+  "id": "vertex-gemini-native:flash",
+  "version": 5,
+  "updatedAt": 1781399379992,
+  "displayName": "Vertex AI - Gemini 3 Flash",
+  "providerBaseId": "vertex-gemini-native",
+  "description": "Vertex AI native Gemini 3 Flash via streamGenerateContent.",
+  "modelId": "gemini-3-flash-preview",
+  "endpoint": {
+    "kind": "static",
+    "url": ""
+  },
+  "auth": {
+    "kind": "google-service-account",
+    "fields": [
+      "serviceAccountJson"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json",
+    "cache"
+  ],
+  "sourceUrls": [
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent"
+  ],
+  "tags": [
+    "google",
+    "vertex",
+    "gemini"
+  ],
+  "sortOrder": 830,
+  "displayNameI18n": {
+    "ko": "Vertex AI - Gemini 3 Flash"
+  },
+  "descriptionI18n": {
+    "ko": "streamGenerateContent를 쓰는 Vertex AI 네이티브 Gemini 3 Flash."
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "outdated",
+  "statusReason": "Superseded by the vertex-gemini-native:gemini-3-flash profile, which carries the same model under the shared Gemini naming."
+}

@@ -115,6 +115,8 @@ export const helpEn = {
         genTimes:
             "This option is used to set the number of responses to generate on support models. other then first response will be act as cached reroll. this can reduce the cost of the model, but it can also increase the cost if you use it without reroll.",
         requestretrys: "This option is used to set the number of request retrys when request fails.",
+        chatLoadInitialPages: "Number of recent chat messages to render when a chat screen opens. Higher values show more history immediately but can make long chats heavier to open.",
+        chatLoadAdditionalPages: "Number of older chat messages to render each time you scroll to the top. Higher values reduce repeated loading but can make each load heavier.",
         emotionPrompt: "This option is used to set the prompt that is used to detect emotion. if it is blank, it will use the default prompt.",
         additionalParams:
             'Additional parameters that would be added to the request body. if you want to exclude some parameters, you can put `{{none}}` to the value. if you want to add a header instead of body, you can put `header::` in front of the key like `header::Authorization`. if you want value as json, you can put `json::` in front of the value like `json::{"key":"value"}`. otherwise, type of the value would be determined automatically.',
@@ -250,6 +252,8 @@ export const helpEn = {
             "If enabled, user messages are excluded from the max messages per summary count.",
         hypaV3EnableSimilarityCorrection:
             "If enabled, a summary of recent chats is additionally used as a query. Does not work with the experimental HypaMemory V3.",
+        hypaV3SummaryChunkSeparator:
+            "Separator used to split summaries into chunks for similarity search.",
         hypaV3UseExperimentalImpl:
             "Switches to the experimental HypaMemory V3 implementation. Enables rate limit settings and changes the query method.",
         hypaV3AlwaysToggleOn:
@@ -263,6 +267,8 @@ export const helpEn = {
             "Bind a model preset to this chat.\n\n" +
             "On : Use a model preset, binding a model per chat.\n" +
             "Off : Use the existing chatbot settings. (default)",
+        promptPresetParams:
+            "When this chat sends its main request through a model preset, the sampling parameters of the currently applied prompt preset (Temperature, Top P, penalties, etc.) override the model preset's parameters.\n\n- Applies to this chat only, and only to the main model request (not sub/auxiliary models).\n- Only parameters the model preset actually supports are overridden. Output token caps (max tokens) and thinking settings are properties of the model, so the model preset always decides them.\n- Values you set explicitly in the model preset's custom body / additional parameters still take priority.\n- In classic model mode, prompt preset parameters already apply, so this option has no effect there.",
         hypaV3SummarizationRequestsPerMinute:
             "Maximum summarization model requests per minute. Only applies when the summarization model is set to Auxiliary Model.",
         hypaV3SummarizationMaxConcurrent:
@@ -283,6 +289,7 @@ export const helpEn = {
         clickToEdit: "Enter edit mode immediately when clicking a chat message.",
         enableBlockPartialEdit: "Show per-block edit controls when hovering over a paragraph/block in a message.",
         longPressToPopupEditor: "Open the popup editor when long-pressing a message.",
+        showInputActionBar: "Show a bottom toolbar on multiline text fields with copy, reset, and expand-to-editor buttons.",
         enableDragPartialEdit: "Allow editing only the text selected by dragging inside a message.",
         botSettingAtStart: "Open the bot settings page automatically whenever the app starts.",
         showMenuChatList: "Show the current character's chat list directly in the sidebar menu.",
@@ -391,6 +398,8 @@ export const helpEn = {
             "Start the Recently Uploaded section on the home screen collapsed. While collapsed it skips the RisuRealm fetch, speeding up initial load. You can expand it any time from the home screen.",
         showFolderNameInIcon:
             "Show folder names on folder icons in the character grid. Makes large folder collections easier to scan.",
+        showRequestStatus:
+            "Show a floating toast during model-preset requests with the live phase (connecting / thinking / responding / stalled), thinking and response token counts, and tokens-per-second. Memory-only; turning it off stops the display entirely.",
         customBackground: "A custom image used as the chat background.",
         playMessageOnTranslateEnd:
             "Play a separate notification sound when translation finishes. Useful when automatic translation is enabled and you want an audible completion cue.",

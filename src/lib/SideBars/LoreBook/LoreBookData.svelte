@@ -41,11 +41,26 @@
     
     let open = $derived(isOpen)
 
-    async function getTokens(data:string){
-        tokens = await tokenizeAccurate(data)
-        return tokens
-    }
     let tokens = $state(0)
+    let tokenTimer: ReturnType<typeof setTimeout> | null = null
+    let tokenSeq = 0
+    // Re-count tokens on a debounce instead of on every content change — the
+    // tokenizer runs a full CBS parse + encode, which is too heavy to do live.
+    // Only when this entry is open: the token count UI renders only while open,
+    // so closed entries (a big lorebook can have hundreds) must not tokenize.
+    // The generation is bumped here (on content change), not in the timer, so an
+    // in-flight tokenize is invalidated the moment the input changes — not only
+    // once the next debounce fires 400ms later.
+    $effect(() => {
+        if (!open) return
+        const content = value.content
+        const seq = ++tokenSeq
+        if (tokenTimer) clearTimeout(tokenTimer)
+        tokenTimer = setTimeout(() => {
+            tokenizeAccurate(content).then(result => { if (seq === tokenSeq) tokens = result })
+        }, 400)
+        return () => { if (tokenTimer) clearTimeout(tokenTimer) }
+    })
 
     function isLocallyActivated(book: loreBook){
         return book.id ? getCurrentChat()?.localLore.some(e => e.id === book.id) : false
@@ -248,11 +263,7 @@
             <NumberInput bind:value={value.insertorder} min={0} max={1000}/>
             <span class="text-textcolor mt-4 mb-2">{language.prompt}</span>
             <TextAreaInput highlight autocomplete="off" bind:value={value.content} />
-            {#await getTokens(value.content)}
-                <span class="text-textcolor2 mt-2 mb-2 text-sm">{tokens} {language.tokens}</span>
-            {:then e}
-                <span class="text-textcolor2 mt-2 mb-2 text-sm">{e} {language.tokens}</span>
-            {/await}
+            <span class="text-textcolor2 mt-2 mb-2 text-sm">{tokens} {language.tokens}</span>
             <div class="flex items-center mt-4">
                 <Check bind:check={value.alwaysActive} name={language.alwaysActive}/>
             </div>

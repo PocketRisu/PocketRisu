@@ -129,6 +129,25 @@ describe('vision (Stage 3) image extraction', () => {
     })
 })
 
+describe('cachePoint preservation', () => {
+    test('toAdapterMessage keeps the flag and omits it when unset', () => {
+        expect(toAdapterMessage({ role: 'user', content: 'hi', cachePoint: true }))
+            .toEqual({ role: 'user', content: 'hi', cachePoint: true })
+        expect(toAdapterMessage({ role: 'user', content: 'hi' }))
+            .toEqual({ role: 'user', content: 'hi' })
+    })
+
+    test('tool-call expansion lands the cachePoint on the LAST expanded message', async () => {
+        const decode = makeDecoder({ 'call-1': { name: 'search', arg: { q: 'x' }, text: 'found it' } })
+        const formated: OpenAIChat[] = [
+            { role: 'user', content: 'find x', cachePoint: true },
+            { role: 'assistant', content: 'sure<tool_call>call-1</tool_call>done', cachePoint: true },
+        ]
+        const out = await expandAdapterMessages(formated, decode)
+        expect(out.map((m) => m.cachePoint)).toEqual([true, undefined, undefined, true])
+    })
+})
+
 describe('toAdapterMessage / toolResponseText', () => {
     test('maps the function role to tool', () => {
         expect(toAdapterMessage({ role: 'function', content: 'r', name: 'x' } as OpenAIChat))

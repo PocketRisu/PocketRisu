@@ -1,7 +1,7 @@
 {
   "id": "deepseek:v4-pro-thinking",
   "version": 1,
-  "updatedAt": 1780594300728,
+  "updatedAt": 1781103554581,
   "displayName": "DeepSeek V4 Pro (Thinking)",
   "displayNameI18n": {
     "ko": "DeepSeek V4 Pro (Thinking)"
@@ -289,7 +289,7 @@
       },
       {
         "key": "reasoning_effort",
-        "widget": "select",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "reasoning",
         "order": 1

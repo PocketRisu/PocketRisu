@@ -35,6 +35,7 @@
     import PopupList from './lib/UI/PopupList.svelte';
     import LoadingOverlay from './lib/Others/LoadingOverlay.svelte';
     import Toaster from './lib/UI/GUI/Toaster.svelte';
+    import RequestStatusToaster from './lib/UI/GUI/RequestStatusToaster.svelte';
     import sendSound from './etc/send.mp3'
 
     let gridOpen = $state(false)
@@ -248,4 +249,5 @@
         <PopupEditor />
     {/if}
     <Toaster />
+    <RequestStatusToaster />
 </main>

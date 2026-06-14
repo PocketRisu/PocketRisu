@@ -3,6 +3,7 @@
     import { DBState } from 'src/ts/stores.svelte';
     import BarIcon from "../SideBars/BarIcon.svelte";
     import { addCharacter, changeChar, getCharImage } from "src/ts/characters";
+    import { makeAgoText } from "src/ts/util";
     import { MessageSquareIcon, PlusIcon } from "@lucide/svelte";
 
     interface Props {
@@ -11,38 +12,7 @@
         endGrid?: () => void;
     }
 
-    const agoFormatter = new Intl.RelativeTimeFormat(navigator.languages, { style: 'short' });
-
     let {search, gridMode = false, endGrid = () => {}}: Props = $props();
-
-    function makeAgoText(time:number){
-        if(time === 0){
-            return "Unknown";
-        }
-        const diff = Date.now() - time;
-        if(diff < 3600000){
-            const min = Math.floor(diff / 60000);
-            return agoFormatter.format(-min, 'minute');
-        }
-        if(diff < 86400000){
-            const hour = Math.floor(diff / 3600000);
-            return agoFormatter.format(-hour, 'hour');
-        }
-        if(diff < 604800000){
-            const day = Math.floor(diff / 86400000);
-            return agoFormatter.format(-day, 'day');
-        }
-        if(diff < 2592000000){
-            const week = Math.floor(diff / 604800000);
-            return agoFormatter.format(-week, 'week');
-        }
-        if(diff < 31536000000){
-            const month = Math.floor(diff / 2592000000);
-            return agoFormatter.format(-month, 'month');
-        }
-        const year = Math.floor(diff / 31536000000);
-        return agoFormatter.format(-year, 'year');
-    }
 
     function sortChar(char: (character)[]) {
         return char.map((c, i) => ({
@@ -63,7 +33,7 @@
 </script>
 <div class="flex flex-col items-center w-full overflow-y-auto h-full">
     {#each sortChar(DBState.db.characters) as char, i}
-        {#if char.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())}
+        {#if char.name.replace(/ /g,"").toLocaleLowerCase().includes(search.replace(/ /g,"").toLocaleLowerCase())}
             <button class="flex p-2 border-t-darkborderc gap-2 w-full" class:border-t={i !== 0} onclick={() => {
                 changeChar(char.i)
                 endGrid()

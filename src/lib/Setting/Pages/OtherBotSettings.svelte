@@ -1148,6 +1148,8 @@
                 <NumberInput className="mt-2" marginBottom min={1} bind:value={settings.maxChatsPerSummary} />
                 <span class="text-textcolor">{language.hypaV3Settings.queryChatCountLabel} <Help key="hypaV3QueryChatCount"/></span>
                 <NumberInput className="mt-2" marginBottom min={1} max={20} bind:value={settings.queryChatCount} />
+                <span class="text-textcolor">{language.hypaV3Settings.summaryChunkSeparatorLabel} <Help key="hypaV3SummaryChunkSeparator"/></span>
+                <TextInput className="mt-2" marginBottom bind:value={settings.summaryChunkSeparator} />
                 <span class="text-textcolor">{language.hypaV3Settings.recentMemoryRatioLabel} <Help key="hypaV3RecentMemoryRatio"/></span>
                 <SliderInput className="mt-2" marginBottom min={0} max={1} step={0.01} fixed={2} bind:value={settings.recentMemoryRatio} />
                 <span class="text-textcolor">{language.hypaV3Settings.similarMemoryRatioLabel} <Help key="hypaV3SimilarMemoryRatio"/></span>
@@ -1176,14 +1178,22 @@
                         <Help key="hypaV3AlwaysToggleOn"/>
                     </div>
                     {#if settings.useExperimentalImpl}
-                        <span class="text-textcolor">Summarization Requests Per Minute <Help key="hypaV3SummarizationRequestsPerMinute"/></span>
-                        <NumberInput className="mt-2" marginBottom min={1} bind:value={settings.summarizationRequestsPerMinute} />
-                        <span class="text-textcolor">Summarization Max Concurrent <Help key="hypaV3SummarizationMaxConcurrent"/></span>
-                        <NumberInput className="mt-2" marginBottom min={1} max={10} bind:value={settings.summarizationMaxConcurrent} />
-                        <span class="text-textcolor">Embedding Requests Per Minute <Help key="hypaV3EmbeddingRequestsPerMinute"/></span>
-                        <NumberInput className="mt-2" marginBottom min={1} bind:value={settings.embeddingRequestsPerMinute} />
-                        <span class="text-textcolor">Embedding Max Concurrent <Help key="hypaV3EmbeddingMaxConcurrent"/></span>
-                        <NumberInput className="mt-2" marginBottom min={1} max={10} bind:value={settings.embeddingMaxConcurrent} />
+                        <div>
+                            <span class="text-textcolor">Summarization Requests Per Minute <Help key="hypaV3SummarizationRequestsPerMinute"/></span>
+                            <NumberInput className="mt-2" marginBottom min={1} bind:value={settings.summarizationRequestsPerMinute} />
+                        </div>
+                        <div>
+                            <span class="text-textcolor">Summarization Max Concurrent <Help key="hypaV3SummarizationMaxConcurrent"/></span>
+                            <NumberInput className="mt-2" marginBottom min={1} max={10} bind:value={settings.summarizationMaxConcurrent} />
+                        </div>
+                        <div>
+                            <span class="text-textcolor">Embedding Requests Per Minute <Help key="hypaV3EmbeddingRequestsPerMinute"/></span>
+                            <NumberInput className="mt-2" marginBottom min={1} bind:value={settings.embeddingRequestsPerMinute} />
+                        </div>
+                        <div>
+                            <span class="text-textcolor">Embedding Max Concurrent <Help key="hypaV3EmbeddingMaxConcurrent"/></span>
+                            <NumberInput className="mt-2" marginBottom min={1} max={10} bind:value={settings.embeddingMaxConcurrent} />
+                        </div>
                     {:else}
                         <div class="mb-2 flex items-center">
                             <Check name={language.hypaV3Settings.enableSimilarityCorrectionLabel} bind:check={settings.enableSimilarityCorrection} />

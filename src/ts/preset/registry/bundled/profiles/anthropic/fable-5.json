@@ -1,0 +1,267 @@
+{
+  "id": "anthropic:fable-5",
+  "version": 1,
+  "updatedAt": 1781025739404,
+  "displayName": "Claude Fable 5",
+  "displayNameI18n": {
+    "ko": "Claude Fable 5"
+  },
+  "providerBaseId": "anthropic",
+  "description": "Claude Fable 5 via the Anthropic Messages API. Adaptive thinking is always on (thinking cannot be disabled); control depth with effort.",
+  "descriptionI18n": {
+    "ko": "Claude Fable 5 (Anthropic Messages API). 적응형 thinking 상시 활성(비활성화 불가), effort로 추론 강도 조절."
+  },
+  "tags": [
+    "anthropic",
+    "claude",
+    "fable",
+    "flagship",
+    "reasoning",
+    "long-context"
+  ],
+  "sortOrder": 199,
+  "modelId": "claude-fable-5",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.anthropic.com/v1/messages"
+  },
+  "auth": {
+    "kind": "x-api-key",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {
+    "max_tokens": 4096
+  },
+  "schema": [
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Claude model identifier.",
+      "required": true,
+      "enum": [
+        {
+          "value": "claude-fable-5",
+          "label": "Claude Fable 5"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Claude 모델 ID."
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "min": 1,
+      "max": 128000,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 4096
+    },
+    {
+      "key": "thinking_type",
+      "type": "string",
+      "label": "Thinking Mode",
+      "description": "Adaptive thinking is always on for Claude Fable 5; it cannot be disabled.",
+      "enum": [
+        {
+          "value": "adaptive",
+          "label": "Adaptive"
+        }
+      ],
+      "default": "adaptive",
+      "mapsTo": {
+        "target": "body",
+        "path": "thinking.type"
+      },
+      "descriptionI18n": {
+        "ko": "Claude Fable 5는 적응형 thinking이 상시 활성이며 비활성화할 수 없습니다."
+      }
+    },
+    {
+      "key": "effort",
+      "type": "string",
+      "label": "Thinking Effort",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        },
+        {
+          "value": "max",
+          "label": "Max"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "output_config.effort"
+      }
+    },
+    {
+      "key": "service_tier",
+      "type": "string",
+      "label": "Service Tier",
+      "enum": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "standard_only",
+          "label": "Standard only"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "service_tier"
+      }
+    },
+    {
+      "key": "user_id",
+      "type": "string",
+      "label": "User ID (metadata)",
+      "mapsTo": {
+        "target": "body",
+        "path": "metadata.user_id"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      },
+      {
+        "id": "control",
+        "label": "Control",
+        "order": 5,
+        "labelI18n": {
+          "ko": "요청 제어"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "thinking_type",
+        "widget": "select",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "effort",
+        "widget": "select",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 2
+      },
+      {
+        "key": "service_tier",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "control",
+        "order": 1
+      },
+      {
+        "key": "user_id",
+        "widget": "text",
+        "visibility": "advanced",
+        "group": "control",
+        "order": 2
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/about-claude/models/introducing-claude-fable-5-and-claude-mythos-5",
+    "https://platform.claude.com/docs/en/about-claude/models/overview",
+    "https://platform.claude.com/docs/en/build-with-claude/effort"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "sourceUrls": [
+      "https://platform.claude.com/docs/en/about-claude/models/overview"
+    ]
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

@@ -90,6 +90,18 @@ export interface PumpPresetStreamOptions {
     formatReasoning: (reasoningText: string) => string
     // Side-channel for logging the error; controller.error is always called too.
     onError?: (err: unknown) => void
+    // Observes each raw delta for status reporting (request-status channel),
+    // BEFORE throttling — so token counts and phase reflect every chunk even
+    // though the renderer flush is throttled. Injected (not a store import) so
+    // the pump stays decoupled; the caller wraps it harmlessly. Never affects
+    // what is enqueued to the controller.
+    onDelta?: (delta: AdapterChatStreamDelta) => void
+    // Fires exactly once when the stream ends, with the terminal outcome — the
+    // symmetric end signal for status reporting. `lastUsage` carries the final
+    // delta's usage (most providers only attach it to the last chunk) so the
+    // caller can reconcile token counts. Like the others, the caller wraps it
+    // harmlessly; it never affects stream output.
+    onFinish?: (outcome: 'done' | 'failed', lastUsage?: AdapterChatStreamDelta['usage']) => void
 }
 
 // Drains an adapter stream into a chunk controller, accumulating text/reasoning
@@ -99,7 +111,8 @@ export async function pumpPresetStream(
     controller: StreamChunkController,
     options: PumpPresetStreamOptions,
 ): Promise<void> {
-    const { intervalMs, formatReasoning, onError } = options
+    const { intervalMs, formatReasoning, onError, onDelta, onFinish } = options
+    let lastUsage: AdapterChatStreamDelta['usage'] | undefined
     let fullText = ''
     let reasoningText = ''
     // Prepend accumulated reasoning (mirrors the non-streaming path) so thinking
@@ -139,6 +152,8 @@ export async function pumpPresetStream(
 
     try {
         for await (const delta of gen) {
+            onDelta?.(delta)
+            if (delta.usage) lastUsage = delta.usage
             if (delta.reasoningDelta) {
                 reasoningText += delta.reasoningDelta
             }
@@ -152,9 +167,11 @@ export async function pumpPresetStream(
         clearTrailing()
         throttle.onEnd(Date.now())
         controller.close()
+        onFinish?.('done', lastUsage)
     } catch (err) {
         clearTrailing()
         onError?.(err)
         controller.error(err)
+        onFinish?.('failed', lastUsage)
     }
 }

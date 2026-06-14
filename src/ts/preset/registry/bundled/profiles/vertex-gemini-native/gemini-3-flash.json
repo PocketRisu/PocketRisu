@@ -1,0 +1,50 @@
+{
+  "id": "vertex-gemini-native:gemini-3-flash",
+  "version": 1,
+  "updatedAt": 1781399379992,
+  "displayName": "Vertex AI - Gemini 3 Flash",
+  "providerBaseId": "vertex-gemini-native",
+  "description": "Vertex AI native Gemini 3 Flash via streamGenerateContent. Requires PocketRisu 1.8.0+.",
+  "modelId": "gemini-3-flash-preview",
+  "endpoint": {
+    "kind": "vertex-gemini"
+  },
+  "auth": {
+    "kind": "google-service-account",
+    "fields": [
+      "serviceAccountJson"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json",
+    "cache"
+  ],
+  "sourceUrls": [
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent"
+  ],
+  "tags": [
+    "google",
+    "vertex",
+    "gemini"
+  ],
+  "sortOrder": 835,
+  "displayNameI18n": {
+    "ko": "Vertex AI - Gemini 3 Flash"
+  },
+  "descriptionI18n": {
+    "ko": "streamGenerateContent를 쓰는 Vertex AI 네이티브 Gemini 3 Flash. PocketRisu 1.8.0 이상 필요."
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

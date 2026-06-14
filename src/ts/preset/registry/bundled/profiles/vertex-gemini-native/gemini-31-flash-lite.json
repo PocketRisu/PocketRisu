@@ -1,0 +1,50 @@
+{
+  "id": "vertex-gemini-native:gemini-31-flash-lite",
+  "version": 1,
+  "updatedAt": 1781399379992,
+  "displayName": "Vertex AI - Gemini 3.1 Flash-Lite",
+  "providerBaseId": "vertex-gemini-native",
+  "description": "Vertex AI native Gemini 3.1 Flash-Lite via streamGenerateContent. Requires PocketRisu 1.8.0+.",
+  "modelId": "gemini-3.1-flash-lite",
+  "endpoint": {
+    "kind": "vertex-gemini"
+  },
+  "auth": {
+    "kind": "google-service-account",
+    "fields": [
+      "serviceAccountJson"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json",
+    "cache"
+  ],
+  "sourceUrls": [
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent"
+  ],
+  "tags": [
+    "google",
+    "vertex",
+    "gemini"
+  ],
+  "sortOrder": 834,
+  "displayNameI18n": {
+    "ko": "Vertex AI - Gemini 3.1 Flash-Lite"
+  },
+  "descriptionI18n": {
+    "ko": "streamGenerateContent를 쓰는 Vertex AI 네이티브 Gemini 3.1 Flash-Lite. PocketRisu 1.8.0 이상 필요."
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

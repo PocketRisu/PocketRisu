@@ -1,0 +1,59 @@
+{
+  "id": "wellspring:glm-51-code",
+  "version": 1,
+  "updatedAt": 1781103554581,
+  "displayName": "GLM 5.1 Code",
+  "displayNameI18n": {
+    "ko": "GLM 5.1 Code"
+  },
+  "providerBaseId": "wellspring",
+  "description": "GLM 5.1 Code via Wellspring (glm-5.1-code).",
+  "descriptionI18n": {
+    "ko": "GLM 5.1 Code (챈섭, glm-5.1-code)."
+  },
+  "tags": [
+    "wellspring",
+    "glm"
+  ],
+  "sortOrder": 603,
+  "modelId": "glm-5.1-code",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://wellspring.encrypt.gay/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://wellspring.encrypt.gay/v1/models"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 61440,
+    "maxOutputTokens": 16384,
+    "notes": "Wellspring host-enforced per-request caps (max_input_tokens / max_output_tokens), not native model context window. Per-user rate limit 30 RPM.",
+    "notesI18n": {
+      "ko": "Wellspring(챈섭) 호스트가 거는 요청당 캡(입력/출력)이며 네이티브 모델 윈도우가 아닙니다. 유저별 분당 한도 30 RPM."
+    },
+    "sourceUrls": [
+      "https://wellspring.encrypt.gay/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

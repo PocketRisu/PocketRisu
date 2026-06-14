@@ -35,6 +35,7 @@
         maxBytes: number
         currentCount: number
         currentBytes: number
+        logicalBytes: number
         bounds: { minCount: number; maxCount: number; minBytes: number; maxBytes: number }
         defaults: { count: number; bytes: number }
     }
@@ -426,14 +427,20 @@
 
     <!-- Retention limits row -->
     {#if limits}
-        <div class="flex items-center gap-2 mb-3 p-2 border border-darkborderc/50 rounded-md bg-bgcolor/50 flex-wrap">
-            <span class="text-textcolor2 text-xs shrink-0">{language.backupSnapshotLimits(limits.maxCount, limits.maxBytes)}</span>
-            <span class="text-textcolor2 text-xs opacity-70 truncate flex-1 min-w-0">
-                {language.backupSnapshotLimitsCurrent(limits.currentCount, limits.currentBytes)}
-            </span>
-            <ShButton variant="outline" size="xs" onclick={openLimitsDialog}>
-                {language.backupSnapshotLimitsChange}
-            </ShButton>
+        <div class="flex items-start gap-2 mb-3 p-2 border border-darkborderc/50 rounded-md bg-bgcolor/50">
+            <!-- Stacked so the (now longer) "current/savings" line wraps to as many
+                 lines as it needs on a narrow phone instead of being truncated. -->
+            <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+                <span class="text-textcolor2 text-xs">{language.backupSnapshotLimits(limits.maxCount, limits.maxBytes)}</span>
+                <span class="text-textcolor2 text-xs opacity-70 wrap-break-word">
+                    {language.backupSnapshotLimitsCurrent(limits.currentCount, limits.currentBytes, limits.logicalBytes)}
+                </span>
+            </div>
+            <div class="shrink-0">
+                <ShButton variant="outline" size="xs" onclick={openLimitsDialog}>
+                    {language.backupSnapshotLimitsChange}
+                </ShButton>
+            </div>
         </div>
     {/if}
 

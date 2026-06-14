@@ -1,0 +1,57 @@
+{
+  "id": "lightning-ai:claude-opus-47",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "Claude Opus 4.7",
+  "displayNameI18n": {
+    "ko": "Claude Opus 4.7"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Claude Opus 4.7 via Lightning AI (anthropic/claude-opus-4-7).",
+  "descriptionI18n": {
+    "ko": "Claude Opus 4.7 (Lightning AI, anthropic/claude-opus-4-7)."
+  },
+  "tags": [
+    "lightning-ai",
+    "anthropic",
+    "claude"
+  ],
+  "sortOrder": 711,
+  "modelId": "anthropic/claude-opus-4-7",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

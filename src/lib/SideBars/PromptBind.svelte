@@ -3,11 +3,16 @@
     import { language } from "src/lang";
     import { changeToPreset, getCurrentChat } from "src/ts/storage/database.svelte";
     import { alertConfirmMulti, alertSelect, notifySuccess } from "src/ts/alert";
-    import { PinIcon, PinOffIcon } from "@lucide/svelte";
+    import { ChevronDownIcon, PinIcon, PinOffIcon, SlidersHorizontalIcon } from "@lucide/svelte";
     import { v4 } from "uuid";
     import ShButton from "../UI/GUI/ShButton.svelte";
+    import ShSwitch from "../UI/GUI/ShSwitch.svelte";
+    import Help from "../Others/Help.svelte";
 
     let currentChat = $derived(DBState.db.characters[$selectedCharID]?.chats?.[DBState.db.characters[$selectedCharID]?.chatPage])
+
+    let paramsExpanded = $state(false);
+    let promptParamsOn = $derived(currentChat?.usePromptPresetParams === true);
 
     let boundPresetIndex = $derived.by(() => {
         const id = currentChat?.bindedBotPreset
@@ -94,4 +99,29 @@
         {/if}
         <span class="truncate">{displayPreset?.name ?? language.none}</span>
     </ShButton>
+    <ShButton
+        size="icon"
+        variant={promptParamsOn ? 'primary' : 'default'}
+        className="shrink-0"
+        onclick={() => { paramsExpanded = !paramsExpanded }}
+        title={language.promptPresetParamsUse}
+    >
+        {#if promptParamsOn}
+            <SlidersHorizontalIcon size={16} />
+        {:else}
+            <ChevronDownIcon size={16} class={`transition-transform${paramsExpanded ? ' rotate-180' : ''}`} />
+        {/if}
+    </ShButton>
 </div>
+{#if paramsExpanded && currentChat}
+    <div class="flex flex-col gap-1 mt-1 pl-2 border-l border-selected">
+        <div class="w-full flex items-center justify-between gap-2 min-h-10 rounded-md px-1">
+            <span class="min-w-0">{language.promptPresetParamsUse} <Help key="promptPresetParams" name={language.promptPresetParamsUse}/></span>
+            <ShSwitch
+                className="shrink-0"
+                checked={promptParamsOn}
+                onCheckedChange={(v) => { if (currentChat) currentChat.usePromptPresetParams = v }}
+            />
+        </div>
+    </div>
+{/if}

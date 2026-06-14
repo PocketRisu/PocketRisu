@@ -34,11 +34,7 @@
     User2Icon,
     ChevronsLeft,
     ArrowRight,
-    MailIcon,
-    SendIcon,
-    UsersIcon,
   } from "@lucide/svelte";
-  import GithubIcon from "../UI/GithubIcon.svelte";
     import {
   addCharacter,
     changeChar,
@@ -48,10 +44,11 @@
     import { language } from "../../lang";
     import isEqual from "lodash/isEqual";
     import SidebarAvatar from "./SidebarAvatar.svelte";
+    import ShSwitch from "../UI/GUI/ShSwitch.svelte";
     import BaseRoundedButton from "../UI/BaseRoundedButton.svelte";
-    import { getCharacterIndexObject, selectSingleFile } from "src/ts/util";
+    import { getCharacterIndexObject, makeAgoText, selectSingleFile } from "src/ts/util";
     import { v4 } from "uuid";
-    import { checkCharOrder, getFileSrc, openURL, saveAsset } from "src/ts/globalApi.svelte";
+    import { checkCharOrder, getFileSrc, saveAsset } from "src/ts/globalApi.svelte";
     import { alertInput, alertSelect } from "src/ts/alert";
     import SideChatList from "./SideChatList.svelte";
 
@@ -78,6 +75,18 @@
   type sortTypeNormal = { type:'normal',img: string, index: number, name:string }
   type sortType =  sortTypeNormal|{type:'folder',folder:sortTypeNormal[],id:string, name:string, color:string, img?:string}
   let charImages: sortType[] = $state([]);
+  // Recently interacted characters for the home sidebar. Character-level
+  // `lastInteraction` is already in memory (no chat hydration needed), so this
+  // sort is cheap; the $derived is only read while on the home screen.
+  let recentChars = $derived(
+    DBState.db.characters
+      .map((c, index) => ({ index, name: c.name, image: c.image, lastInteraction: c.lastInteraction ?? 0 }))
+      .filter((c) => c.lastInteraction > 0)
+      .sort((a, b) => b.lastInteraction - a.lastInteraction)
+  );
+  // Progressive reveal: render `recentVisible` items, "Load more" adds 10.
+  // Avoids mounting hundreds of avatar components at once (no list virtualization).
+  let recentVisible = $state(10);
   let IconRounded = $state(false)
   let openFolders:string[] = $state([])
   let currentDrag: DragData = $state(null)
@@ -650,7 +659,7 @@
     {/if}
   </div>
   {/if}
-  <div class="flex grow w-full flex-col items-center overflow-x-hidden overflow-y-auto pr-0" class:max-xs:hidden={$leftBarCollapsed} use:touchDragContainer>
+  <div class="character-list flex grow w-full flex-col items-center overflow-x-hidden overflow-y-auto pr-0" class:max-xs:hidden={$leftBarCollapsed} use:touchDragContainer>
     <div class="h-4 min-h-4 w-14" role="listitem" data-spacer-index="0" ondragover={(e) => {
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
@@ -1039,61 +1048,52 @@
   {/if}
   {#if sideBarMode === 0}
     {#if $selectedCharID < 0 || $settingsOpen}
-      <span class="block text-sm text-textcolor2 mt-2">{language.selectBotHint}</span>
-      <div class="flex flex-col gap-1.5 mt-2">
-        <button
-          type="button"
-          class="group flex items-center gap-2.5 rounded-md border border-borderc/10 bg-darkbg p-2 text-left transition-colors hover:border-borderc/30 hover:bg-selected/50"
-          onclick={() => openURL("https://github.com/PocketRisu/PocketRisu")}
-        >
-          <div class="shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-selected/40 text-textcolor">
-            <GithubIcon size={18} />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-textcolor leading-tight truncate">{language.relatedGithub}</div>
-            <div class="text-xs text-textcolor2 leading-tight truncate">{language.relatedGithubDesc}</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          class="group flex items-center gap-2.5 rounded-md border border-borderc/10 bg-darkbg p-2 text-left transition-colors hover:border-borderc/30 hover:bg-selected/50"
-          onclick={() => openURL("https://forms.gle/5ms5XntMrfaxmHTSA")}
-        >
-          <div class="shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-selected/40 text-textcolor">
-            <SendIcon size={16} strokeWidth={1.5} />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-textcolor leading-tight truncate">{language.relatedFeedbackForm}</div>
-            <div class="text-xs text-textcolor2 leading-tight truncate">{language.relatedFeedbackFormDesc}</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          class="group flex items-center gap-2.5 rounded-md border border-borderc/10 bg-darkbg p-2 text-left transition-colors hover:border-borderc/30 hover:bg-selected/50"
-          onclick={() => openURL("mailto:contact@pocketrisu.com")}
-        >
-          <div class="shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-selected/40 text-textcolor">
-            <MailIcon size={16} strokeWidth={1.5} />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-textcolor leading-tight truncate">{language.relatedContactEmail}</div>
-            <div class="text-xs text-textcolor2 leading-tight truncate">{language.relatedContactEmailDesc}</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          class="group flex items-center gap-2.5 rounded-md border border-borderc/10 bg-darkbg p-2 text-left transition-colors hover:border-borderc/30 hover:bg-selected/50"
-          onclick={() => openURL("https://arca.live/b/characterai")}
-        >
-          <div class="shrink-0 flex items-center justify-center w-8 h-8 rounded-md bg-selected/40 text-textcolor">
-            <UsersIcon size={16} strokeWidth={1.5} />
-          </div>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold text-textcolor leading-tight truncate">{language.relatedArcaLive}</div>
-            <div class="text-xs text-textcolor2 leading-tight truncate">{language.relatedArcaLiveDesc}</div>
-          </div>
-        </button>
+      <span class="block text-base font-semibold text-textcolor mt-2">{language.recentChatsTitle}</span>
+      <div class="flex items-center justify-between gap-2 mt-2">
+        <span class="text-sm text-textcolor2">{language.hideRecentChats}</span>
+        <ShSwitch
+          checked={!!DBState.db.nodeOnlyHideRecentChats}
+          onCheckedChange={(v) => (DBState.db.nodeOnlyHideRecentChats = v)}
+        />
       </div>
+      {#if DBState.db.nodeOnlyHideRecentChats}
+        <!-- list hidden by user preference -->
+      {:else if recentChars.length === 0}
+        <span class="block text-sm text-textcolor2 mt-2">{language.noRecentChatsDesc}</span>
+      {:else}
+        <div class="flex flex-col gap-1.5 mt-2">
+          {#each recentChars.slice(0, recentVisible) as rc (rc.index)}
+            <button
+              type="button"
+              class="group flex items-center gap-2.5 rounded-md border border-borderc/10 bg-darkbg p-2 text-left transition-colors hover:border-borderc/30 hover:bg-selected/50"
+              onclick={() => changeChar(rc.index, {reseter})}
+            >
+              <div class="shrink-0">
+                <SidebarAvatar
+                  src={rc.image ? getCharImage(rc.image, "plain") : "/none.webp"}
+                  size="36"
+                  rounded={IconRounded}
+                  name={rc.name}
+                  chaId={DBState.db.characters[rc.index]?.chaId}
+                />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-semibold text-textcolor leading-tight truncate">{rc.name || "Unnamed"}</div>
+                <div class="text-xs text-textcolor2 leading-tight truncate">{makeAgoText(rc.lastInteraction)}</div>
+              </div>
+            </button>
+          {/each}
+          {#if recentVisible < recentChars.length}
+            <button
+              type="button"
+              class="w-full rounded-md border border-borderc/10 bg-darkbg p-2 text-center text-sm text-textcolor2 transition-colors hover:border-borderc/30 hover:bg-selected/50 hover:text-textcolor"
+              onclick={() => recentVisible += 10}
+            >
+              {language.loadMore}
+            </button>
+          {/if}
+        </div>
+      {/if}
     {:else if DBState.db.characters[$selectedCharID]?.chaId === '§playground'}
       <SideChatList bind:chara={ DBState.db.characters[$selectedCharID]} />
     {:else}
@@ -1280,6 +1280,12 @@
     overscroll-behavior: none;
   }
   .hamburger-menu::-webkit-scrollbar {
+    display: none;
+  }
+  .character-list {
+    scrollbar-width: none;
+  }
+  .character-list::-webkit-scrollbar {
     display: none;
   }
 </style>

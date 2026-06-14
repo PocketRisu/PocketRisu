@@ -1,6 +1,6 @@
 {
   "id": "vertex-openai",
-  "version": 2,
+  "version": 5,
   "displayName": "Vertex AI (OpenAI-compatible)",
   "adapterKind": "openai-compatible",
   "authKinds": [
@@ -30,32 +30,32 @@
       }
     },
     {
-      "key": "projectId",
-      "type": "string",
-      "label": "Project ID",
-      "description": "Google Cloud project id.",
-      "required": true,
-      "mapsTo": {
-        "target": "custom",
-        "path": "project"
-      },
-      "descriptionI18n": {
-        "ko": "Google Cloud 프로젝트 ID."
-      }
-    },
-    {
       "key": "location",
       "type": "string",
       "label": "Location",
-      "description": "Vertex AI region (e.g. us-central1, global).",
-      "required": true,
-      "default": "us-central1",
+      "description": "Vertex AI region (e.g. us-central1, global). Defaults to global when left blank.",
+      "required": false,
+      "default": "global",
       "mapsTo": {
         "target": "custom",
         "path": "location"
       },
       "descriptionI18n": {
-        "ko": "Vertex AI 리전 (예: us-central1, global)."
+        "ko": "Vertex AI 리전 (예: us-central1, global). 비워두면 global이 됩니다."
+      }
+    },
+    {
+      "key": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "Google Cloud project id. Leave blank to use the project_id from the Service Account JSON.",
+      "required": false,
+      "mapsTo": {
+        "target": "custom",
+        "path": "project"
+      },
+      "descriptionI18n": {
+        "ko": "Google Cloud 프로젝트 ID. 비워두면 Service Account JSON의 project_id를 사용합니다."
       }
     },
     {
@@ -209,6 +209,24 @@
       "descriptionI18n": {
         "ko": "추론(사고) 강도. Gemini thinking_budget(2.5)/thinking_level(3.x)로 매핑."
       }
+    },
+    {
+      "key": "sharedRequestType",
+      "type": "string",
+      "label": "Shared Request Type",
+      "description": "Vertex shared-quota processing tier. Flex is ~50% cheaper but higher-latency; Priority is premium pricing with consistent low latency. Only works on the global endpoint and select Gemini models. Provider default sends no header (Vertex standard).",
+      "enum": [
+        { "value": "", "label": "Provider default" },
+        { "value": "flex", "label": "Flex" },
+        { "value": "priority", "label": "Priority" }
+      ],
+      "mapsTo": {
+        "target": "header",
+        "path": "X-Vertex-AI-LLM-Shared-Request-Type"
+      },
+      "descriptionI18n": {
+        "ko": "Vertex 공유 할당량 처리 등급. Flex는 약 50% 저렴하지만 지연이 높고, Priority는 프리미엄 과금에 일관된 저지연이에요. 글로벌 엔드포인트와 일부 Gemini 모델에서만 동작해요. 제공자 기본값은 헤더를 보내지 않아요(Vertex 표준)."
+      }
     }
   ],
   "uiSchema": {
@@ -252,6 +270,14 @@
         "labelI18n": {
           "ko": "추론"
         }
+      },
+      {
+        "id": "quota",
+        "label": "Quota",
+        "order": 6,
+        "labelI18n": {
+          "ko": "할당량"
+        }
       }
     ],
     "fields": [
@@ -263,16 +289,16 @@
         "order": 1
       },
       {
-        "key": "projectId",
+        "key": "location",
         "widget": "text",
         "visibility": "basic",
         "group": "project",
         "order": 1
       },
       {
-        "key": "location",
+        "key": "projectId",
         "widget": "text",
-        "visibility": "basic",
+        "visibility": "advanced",
         "group": "project",
         "order": 2
       },
@@ -335,9 +361,16 @@
       },
       {
         "key": "reasoning_effort",
-        "widget": "select",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "sharedRequestType",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "quota",
         "order": 1
       }
     ]
