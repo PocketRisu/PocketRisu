@@ -38,6 +38,20 @@ describe('resolveSnapshot', () => {
         expect(snapshot.auth.kind).toBe('x-goog-api-key')
     })
 
+    test('returns the evolink:gpt-52 snapshot with OpenAI-compatible bearer auth', () => {
+        const snapshot = resolveSnapshot(registry, 'evolink:gpt-52')
+        expect(snapshot).toMatchObject({
+            profileId: 'evolink:gpt-52',
+            providerBaseId: 'evolink',
+            adapterKind: 'openai-compatible',
+            auth: { kind: 'bearer', fields: ['apiKey'] },
+            endpoint: { kind: 'static', url: 'https://direct.evolink.ai/v1/chat/completions' },
+            modelId: 'gpt-5.2',
+        })
+        expect(snapshot.schema.map((f) => f.key)).toEqual(expect.arrayContaining(['apiKey', 'modelId']))
+        expect(snapshot.capabilities).toEqual(expect.arrayContaining(['streaming', 'reasoning']))
+    })
+
     test('returns the ollama:openai-compatible-local snapshot with none auth', () => {
         const snapshot = resolveSnapshot(registry, 'ollama:openai-compatible-local')
         expect(snapshot.auth.kind).toBe('none')

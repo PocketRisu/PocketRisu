@@ -1,0 +1,47 @@
+{
+  "id": "evolink:gpt-52",
+  "version": 1,
+  "displayName": "GPT 5.2",
+  "providerBaseId": "evolink",
+  "description": "GPT 5.2 via EvoLink.",
+  "tags": [
+    "evolink",
+    "openai-compatible",
+    "reasoning"
+  ],
+  "sortOrder": 560,
+  "modelId": "gpt-5.2",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://direct.evolink.ai/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools",
+    "json",
+    "reasoning"
+  ],
+  "limits": {
+    "known": false,
+    "sourceUrls": [
+      "https://direct.evolink.ai/v1/models"
+    ]
+  },
+  "sourceUrls": [
+    "https://direct.evolink.ai/v1/models"
+  ],
+  "profileStatus": "current"
+}
