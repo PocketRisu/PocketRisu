@@ -27,6 +27,7 @@ let bergamotTranslate: (text: string, from: string, to: string, html?: boolean) 
 
 const llmTranslateCache = new Map<string, string>()
 const llmTranslateCachePrefix = 'cache/llm-translate/'
+const llmTranslateInflight = new Map<string, Promise<{result: string, cacheState: boolean | null}>>()
 
 async function getPersistentLLMCache(text: string): Promise<string | null> {
     const storageKey = await makeHashedStorageKey(llmTranslateCachePrefix, text)
@@ -518,25 +519,19 @@ function needSuperChunkedTranslate(){
 }
 
 async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string, onCacheState?:(cached:boolean) => void}):Promise<string>{
+    const cacheText = text
     if(!arg.regenerate){
-        const cacheMatch = llmTranslateCache.get(text)
+        const cacheMatch = llmTranslateCache.get(cacheText)
         if(cacheMatch){
             arg.onCacheState?.(true)
             return cacheMatch
         }
-        const persistedCacheMatch = await getPersistentLLMCache(text)
+        const persistedCacheMatch = await getPersistentLLMCache(cacheText)
         if (persistedCacheMatch !== null) {
             arg.onCacheState?.(true)
             return persistedCacheMatch
         }
     }
-    const styleDecodeRegex = /\<risu-style\>(.+?)\<\/risu-style\>/gms
-    let styleDecodes:string[] = []
-    text = text.replace(styleDecodeRegex, (match, p1) => {
-        styleDecodes.push(p1)
-        return `<style-data style-index="${styleDecodes.length-1}"></style-data>`
-    })
-
     const db = getDatabase()
     const charIndex = get(selectedCharID)
     const currentChar = db.characters[charIndex]
@@ -552,61 +547,97 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
     }
     console.log(translatorNote)
 
-    let formated:OpenAIChat[] = []
     const preset = getCurrentTranslatorPreset()
-    let prompt = preset.prompt || defaultTranslatorPrompt
-    let parsedPrompt = parseChatML(prompt.replaceAll('{{slot::from}}', arg.from).replaceAll('{{slot}}', arg.to).replaceAll('{{solt::content}}', text).replaceAll('{{slot::content}}', text).replaceAll('{{slot::tnote}}', translatorNote))
-    if(parsedPrompt){
-        formated = parsedPrompt
-    }
-    else{
-        prompt = prompt.replaceAll('{{slot}}', arg.to).replaceAll('{{slot::tnote}}', translatorNote).replaceAll('{{slot::from}}', arg.from)
-        formated = [
-            {
-                'role': 'system',
-                'content': prompt
-            },
-            {
-                'role': 'user',
-                'content': text
-            }
-        ]
-    }
-    const rq = await requestChatData({
-        formated,
-        bias: {},
-        useStreaming: false,
-        noMultiGen: true,
-        maxTokens: preset.maxResponse,
-    }, 'translate')
-
-    if(rq.type === 'fail'){
-        notifyError(rq.result)
-        return text
-    }
-    if(rq.type === 'job'){
-        const jobResult = await rq.job.wait()
-        if(jobResult.type !== 'success'){
-            notifyError(jobResult.result ?? 'Provider job canceled')
-            return text
+    const dedupeKey = JSON.stringify({
+        text: cacheText,
+        to: arg.to,
+        from: arg.from,
+        translatorNote,
+        presetName: preset.name,
+        prompt: preset.prompt || defaultTranslatorPrompt,
+        maxResponse: preset.maxResponse,
+        regenerate: arg.regenerate ?? false,
+    })
+    const inflight = llmTranslateInflight.get(dedupeKey)
+    if(inflight){
+        const { result, cacheState } = await inflight
+        if(cacheState !== null){
+            arg.onCacheState?.(cacheState)
         }
-        const result = jobResult.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
-            return styleDecodes[parseInt(p1)] ?? ''
-        }).replace(/<\/style-data>/g, '')
-        llmTranslateCache.set(text, result)
-        void setPersistentLLMCache(text, result)
         return result
     }
-    if(rq.type === 'streaming' || rq.type === 'multiline'){
-        notifyError('Unexpected response type')
-        return text
+
+    const requestPromise = Promise.resolve().then(async () => {
+        const styleDecodeRegex = /\<risu-style\>(.+?)\<\/risu-style\>/gms
+        let styleDecodes:string[] = []
+        text = text.replace(styleDecodeRegex, (match, p1) => {
+            styleDecodes.push(p1)
+            return `<style-data style-index="${styleDecodes.length-1}"></style-data>`
+        })
+
+        let formated:OpenAIChat[] = []
+        let prompt = preset.prompt || defaultTranslatorPrompt
+        let parsedPrompt = parseChatML(prompt.replaceAll('{{slot::from}}', arg.from).replaceAll('{{slot}}', arg.to).replaceAll('{{solt::content}}', text).replaceAll('{{slot::content}}', text).replaceAll('{{slot::tnote}}', translatorNote))
+        if(parsedPrompt){
+            formated = parsedPrompt
+        }
+        else{
+            prompt = prompt.replaceAll('{{slot}}', arg.to).replaceAll('{{slot::tnote}}', translatorNote).replaceAll('{{slot::from}}', arg.from)
+            formated = [
+                {
+                    'role': 'system',
+                    'content': prompt
+                },
+                {
+                    'role': 'user',
+                    'content': text
+                }
+            ]
+        }
+        const rq = await requestChatData({
+            formated,
+            bias: {},
+            useStreaming: false,
+            noMultiGen: true,
+            maxTokens: preset.maxResponse,
+        }, 'translate')
+
+        if(rq.type === 'fail'){
+            notifyError(rq.result)
+            return { result: cacheText, cacheState: null }
+        }
+        if(rq.type === 'job'){
+            const jobResult = await rq.job.wait()
+            if(jobResult.type !== 'success'){
+                notifyError(jobResult.result ?? 'Provider job canceled')
+                return { result: cacheText, cacheState: null }
+            }
+            const result = jobResult.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
+                return styleDecodes[parseInt(p1)] ?? ''
+            }).replace(/<\/style-data>/g, '')
+            llmTranslateCache.set(cacheText, result)
+            void setPersistentLLMCache(cacheText, result)
+            return { result, cacheState: false }
+        }
+        if(rq.type === 'streaming' || rq.type === 'multiline'){
+            notifyError('Unexpected response type')
+            return { result: cacheText, cacheState: null }
+        }
+        const result = rq.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
+            return styleDecodes[parseInt(p1)] ?? ''
+        }).replace(/<\/style-data>/g, '')
+        llmTranslateCache.set(cacheText, result)
+        void setPersistentLLMCache(cacheText, result)
+        return { result, cacheState: false }
+    }).finally(() => {
+        llmTranslateInflight.delete(dedupeKey)
+    })
+
+    llmTranslateInflight.set(dedupeKey, requestPromise)
+    const { result, cacheState } = await requestPromise
+    if(cacheState !== null){
+        arg.onCacheState?.(cacheState)
     }
-    const result = rq.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
-        return styleDecodes[parseInt(p1)] ?? ''
-    }).replace(/<\/style-data>/g, '')
-    llmTranslateCache.set(text, result)
-    void setPersistentLLMCache(text, result)
-    arg.onCacheState?.(false)
     return result
 }
 
