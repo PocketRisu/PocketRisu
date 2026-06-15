@@ -2297,6 +2297,7 @@ export const languageKorean = {
   showRequestStatus: "요청 상태 표시",
   requestStatus: {
     connecting: "요청 중…",
+    waiting: "대기 중…",
     thinking: "사고 중…",
     responding: "응답 중…",
     retrying: "재시도 중…",
@@ -2313,5 +2314,11 @@ export const languageKorean = {
     thinkingTokensLabel: "사고",
     tokensPerSec: "tok/s",
     cacheHit: "캐시 적중 · {n} 토큰",
+    batchSubmitted: "Anthropic 배치 제출됨",
+    batchRunning: "Anthropic 배치 실행 중",
+    batchCancelRequested: "Anthropic 배치 취소 요청됨",
+    batchSucceeded: "Anthropic 배치 완료",
+    batchFailed: "Anthropic 배치 실패",
+    batchCanceled: "Anthropic 배치 취소됨",
   },
 } satisfies DeepPartial<typeof import("./en").languageEnglish>;

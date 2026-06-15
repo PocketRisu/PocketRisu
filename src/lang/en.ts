@@ -2102,6 +2102,7 @@ export const languageEnglish = {
     showRequestStatus: "Show request status",
     requestStatus: {
         connecting: "Connecting…",
+        waiting: "Waiting…",
         thinking: "Thinking…",
         responding: "Responding…",
         retrying: "Retrying…",
@@ -2118,6 +2119,12 @@ export const languageEnglish = {
         thinkingTokensLabel: "think",
         tokensPerSec: "tok/s",
         cacheHit: "Cache hit · {n} tokens",
+        batchSubmitted: "Anthropic batch submitted",
+        batchRunning: "Anthropic batch running",
+        batchCancelRequested: "Anthropic batch cancel requested",
+        batchSucceeded: "Anthropic batch completed",
+        batchFailed: "Anthropic batch failed",
+        batchCanceled: "Anthropic batch canceled",
     },
 
 } satisfies I18nTranslation;

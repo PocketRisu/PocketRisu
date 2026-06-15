@@ -484,23 +484,7 @@ import { isMobile } from 'src/ts/platform'
 
         // If generation failed, restore original messages
         if (!generated) {
-            const disabledCanceledMessages = currentMsgs.slice(generationStartMessageCount).filter((msg) => (
-                msg.role === 'char' &&
-                msg.disabled === true &&
-                msg.chatId
-            ))
-            if (disabledCanceledMessages.length > 0) {
-                const trailingCount = trailingComments.length
-                const insertIndex = originalMessages.length - trailingCount
-                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = [
-                    ...originalMessages.slice(0, insertIndex),
-                    ...disabledCanceledMessages,
-                    ...originalMessages.slice(insertIndex),
-                ]
-            }
-            else {
-                DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
-            }
+            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
             return
         }
 

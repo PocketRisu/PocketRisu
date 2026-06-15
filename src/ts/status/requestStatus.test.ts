@@ -116,6 +116,12 @@ describe('recomputeEntry', () => {
         expect(re.phase).toBe('connecting')
     })
 
+    it('does not flip waiting to stalled while provider polling is expected', () => {
+        const e = makeEntry({ phase: 'waiting', lastChunkAt: 0 })
+        const re = recomputeEntry(e, STALL_THRESHOLD_MS + 1)
+        expect(re.phase).toBe('waiting')
+    })
+
     it('leaves terminal entries frozen', () => {
         const e = makeEntry({ phase: 'done', lastChunkAt: 0, tokPerSec: 42 })
         const re = recomputeEntry(e, STALL_THRESHOLD_MS + 9999)
@@ -141,6 +147,12 @@ describe('publish API', () => {
         expect(e.label).toBe('gpt')
         expect(e.chatId).toBe('c1')
         expect(e.startedAt).toBe(100)
+    })
+
+    it('startStatus stores a per-entry abandon timeout', () => {
+        startStatus('g1', { kind: 'main', label: 'gpt', now: 100, abandonAfterMs: 1234 })
+        const e = get(requestStatuses).get('g1')!
+        expect(e.abandonAfterMs).toBe(1234)
     })
 
     it('markPhase increments retryAttempt only on retrying', () => {
@@ -332,5 +344,15 @@ describe('render timer', () => {
         vi.advanceTimersByTime(STATUS_ABANDON_MS + 1000)
         expect(get(requestStatuses).has('g1')).toBe(false) // entry dropped
         expect(clearSpy).toHaveBeenCalled()                // timer self-stopped
+    })
+
+    it('uses a per-entry abandon cap for long-running entries', () => {
+        vi.useFakeTimers()
+        const start = Date.now()
+        startStatus('g1', { kind: 'main', label: 'x', now: start, phase: 'waiting', abandonAfterMs: STATUS_ABANDON_MS + 5000 })
+        vi.advanceTimersByTime(STATUS_ABANDON_MS + 1000)
+        expect(get(requestStatuses).has('g1')).toBe(true)
+        vi.advanceTimersByTime(5000)
+        expect(get(requestStatuses).has('g1')).toBe(false)
     })
 })

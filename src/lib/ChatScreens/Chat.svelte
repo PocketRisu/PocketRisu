@@ -367,12 +367,6 @@
 {/snippet}
 
 {#snippet textBox()}
-    {#if disabled === true}
-        <span class="mb-3 block rounded-md border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-xs leading-relaxed text-textcolor2">
-            <span class="block font-semibold text-blue-300">Disabled message</span>
-            <span class="block">This message is kept for request metadata and logs, but is not sent to the model. You can edit or delete it from this message's controls.</span>
-        </span>
-    {/if}
     {#if editTranslationMode}
         <AutoresizeArea bind:value={editTranslationText} handleLongPress={() => {
             saveTranslationEdit()

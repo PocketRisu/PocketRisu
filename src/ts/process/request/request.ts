@@ -38,11 +38,11 @@ import { resolveChatModelBinding, buildModelPresetCredential, applyPromptPresetP
 import { expandAdapterMessages, toAdapterMessage, toolResponseText } from "./modelPresetMessages";
 import { isLocalNetworkUrl } from "src/ts/network/localNetwork";
 import {
-    startStatus, appendText, endStatus, setStatusTokenCounter, addBadge,
+    startStatus, appendText, endStatus, setStatusTokenCounter, addBadge, markPhase,
     type RequestKind,
 } from "src/ts/status/requestStatus";
-import type { ProviderRequestJob } from './providerJob';
-import { submitAnthropicBatchJob } from './anthropicBatchJob';
+import type { ProviderJobStatus, ProviderRequestJob } from './providerJob';
+import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, submitAnthropicBatchJob } from './anthropicBatchJob';
 
 export type ToolCall = {
     name: string;
@@ -177,7 +177,7 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
 
         while(true){
             
-            if(abortSignal?.aborted && da.type !== 'job'){
+            if(abortSignal?.aborted){
                 return {
                     type: 'fail',
                     result: 'Aborted'
@@ -220,7 +220,7 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
             }, model, abortSignal)
 
             if(da.type === 'job'){
-                da = {
+                return {
                     ...da,
                     job: mapProviderJobResult(da.job, async (text) => {
                         if(arg.escape) text = risuEscape(text)
@@ -228,7 +228,8 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
                             text = await replacer(text, model)
                         }
                         return text
-                    })
+                    }),
+                    model: fallBackModels[fallbackIndex] || da.model
                 }
             }
 
@@ -671,6 +672,113 @@ function toRequestKind(mode: ModelModeExtended): RequestKind {
     }
 }
 
+const ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS = 5 * 60 * 1000
+
+function requestStatusText(key: keyof typeof language.requestStatus, fallback: string): string {
+    const text = language.requestStatus[key]
+    return typeof text === 'string' ? text : fallback
+}
+
+function anthropicBatchBadgeText(status: ProviderJobStatus): string {
+    switch (status.state) {
+        case 'submitted':
+        case 'queued':
+            return requestStatusText('batchSubmitted', 'Anthropic batch submitted')
+        case 'running':
+            return status.message ?? requestStatusText('batchRunning', 'Anthropic batch running')
+        case 'cancel-requested':
+            return requestStatusText('batchCancelRequested', 'Anthropic batch cancel requested')
+        case 'succeeded':
+            return requestStatusText('batchSucceeded', 'Anthropic batch completed')
+        case 'failed':
+        case 'expired':
+            return status.message ?? requestStatusText('batchFailed', 'Anthropic batch failed')
+        case 'canceled':
+            return status.message ?? requestStatusText('batchCanceled', 'Anthropic batch canceled')
+    }
+}
+
+function publishAnthropicBatchStatus(genId: string, status: ProviderJobStatus): void {
+    const now = Date.now()
+    const text = anthropicBatchBadgeText(status)
+    switch (status.state) {
+        case 'submitted':
+        case 'queued':
+        case 'running':
+            markPhase(genId, 'waiting', now)
+            addBadge(genId, { key: 'batch', text, tone: 'info' })
+            return
+        case 'cancel-requested':
+            markPhase(genId, 'waiting', now)
+            addBadge(genId, { key: 'batch', text, tone: 'warn' })
+            return
+        case 'succeeded':
+            addBadge(genId, { key: 'batch', text, tone: 'success' })
+            return
+        case 'failed':
+        case 'expired':
+            addBadge(genId, { key: 'batch', text, tone: 'warn' })
+            endStatus(genId, 'failed', { now, error: text })
+            return
+        case 'canceled':
+            addBadge(genId, { key: 'batch', text, tone: 'warn' })
+            endStatus(genId, 'aborted', { now })
+            return
+    }
+}
+
+function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: string): ProviderRequestJob {
+    return {
+        id: job.id,
+        provider: job.provider,
+        kind: job.kind,
+        createdAt: job.createdAt,
+        getStatus: () => job.getStatus(),
+        cancel: async () => {
+            safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'cancel-requested' }))
+            await job.cancel()
+            safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
+        },
+        wait: async (options) => {
+            const forwardStatus = (status: ProviderJobStatus) => {
+                safeStatus(() => publishAnthropicBatchStatus(genId, status))
+                options?.onStatus?.(status)
+            }
+            safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
+            try {
+                const result = await job.wait({ ...options, onStatus: forwardStatus })
+                if (options?.signal?.aborted) {
+                    safeStatus(() => {
+                        addBadge(genId, { key: 'batch', text: requestStatusText('batchCanceled', 'Anthropic batch canceled'), tone: 'warn' })
+                        endStatus(genId, 'aborted', { now: Date.now() })
+                    })
+                    return { type: 'canceled', result: 'Aborted' }
+                }
+                if (result.type === 'success') {
+                    safeStatus(() => {
+                        publishAnthropicBatchStatus(genId, { state: 'succeeded' })
+                        endStatus(genId, 'done', { now: Date.now() })
+                    })
+                }
+                else if (result.type === 'canceled') {
+                    safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'canceled', message: result.result }))
+                }
+                else {
+                    safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'failed', message: result.result }))
+                }
+                return result
+            } catch (err) {
+                const outcome = options?.signal?.aborted ? 'aborted' : 'failed'
+                safeStatus(() => endStatus(genId, outcome, {
+                    now: Date.now(),
+                    error: outcome === 'failed' ? (err instanceof Error ? err.message : String(err)) : undefined,
+                }))
+                throw err
+            }
+        },
+    }
+}
+
 // Per-preset streaming resolution. Independent of the global db.useStreaming:
 // the preset's own on/off decides (default off). Forced off when the profile
 // does not declare the 'streaming' capability, or when the caller opted out
@@ -750,7 +858,25 @@ async function createAnthropicPresetBatchJob(
     credential: AdapterCredential | undefined,
     fetchImpl: typeof fetch,
     chatId?: string,
+    status?: { report: boolean, genId: string, kind: RequestKind },
 ): Promise<requestDataResponse> {
+    if (status?.report) {
+        safeStatus(() => {
+            startStatus(status.genId, {
+                kind: status.kind,
+                label: preset.name,
+                chatId,
+                phase: 'waiting',
+                abandonAfterMs: DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS + ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS,
+                now: Date.now(),
+            })
+            addBadge(status.genId, {
+                key: 'batch',
+                text: requestStatusText('batchSubmitted', 'Anthropic batch submitted'),
+                tone: 'info',
+            })
+        })
+    }
     const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
     delete prepared.body.stream
     const submission = await submitAnthropicBatchJob({
@@ -761,10 +887,29 @@ async function createAnthropicPresetBatchJob(
         logFetch: addFetchLog,
         chatId,
     })
-    if (submission.ok === false) return { type: 'fail', result: submission.error, model: preset.name }
+    if (submission.ok === false) {
+        if (status?.report) {
+            const outcome = options.abortSignal?.aborted ? 'aborted' : 'failed'
+            safeStatus(() => {
+                addBadge(status.genId, {
+                    key: 'batch',
+                    text: outcome === 'failed'
+                        ? requestStatusText('batchFailed', 'Anthropic batch failed')
+                        : requestStatusText('batchCanceled', 'Anthropic batch canceled'),
+                    tone: 'warn',
+                })
+                endStatus(status.genId, outcome, {
+                    now: Date.now(),
+                    error: outcome === 'failed' ? submission.error : undefined,
+                })
+            })
+        }
+        return { type: 'fail', result: submission.error, model: preset.name }
+    }
+    const job = status?.report ? wrapAnthropicBatchStatusJob(submission.job, status.genId) : submission.job
     return {
         type: 'job',
-        job: submission.job,
+        job,
         model: preset.name,
     }
 }
@@ -918,7 +1063,14 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         }
 
         if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
-            return await createAnthropicPresetBatchJob(preset, { messages, abortSignal: abortSignal ?? undefined, fetchImpl }, credential, fetchImpl, arg.chatId)
+            return await createAnthropicPresetBatchJob(
+                preset,
+                { messages, abortSignal: abortSignal ?? undefined, fetchImpl },
+                credential,
+                fetchImpl,
+                arg.chatId,
+                { report: reportStatus, genId, kind: statusKind },
+            )
         }
 
         const useStreaming = resolvePresetStreaming(preset, arg)

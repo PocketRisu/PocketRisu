@@ -28,6 +28,7 @@
 
     const PHASE_LABEL: Record<RequestPhase, string> = {
         connecting: rs?.connecting ?? 'Connecting…',
+        waiting:    rs?.waiting ?? 'Waiting…',
         thinking:   rs?.thinking ?? 'Thinking…',
         responding: rs?.responding ?? 'Responding…',
         retrying:   rs?.retrying ?? 'Retrying…',
