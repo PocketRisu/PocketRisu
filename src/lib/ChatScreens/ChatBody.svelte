@@ -108,33 +108,34 @@
 
                 let transResult
 
-                translating = true
-                try {
-                    if(DBState.db.translatorType === 'llm' && DBState.db.translateBeforeHTMLFormatting){
-                        await sleep(100)
-                        data = await translateHTML(data, false, charArg, chatID, retranslate)
-                        const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
-                        lastParsedQueue = marked
-                        lastCharArg = charArg
-                        transResult = marked
-                    }
-                    else if(!DBState.db.legacyTranslation){
-                        const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
-                        const translated = await postTranslationParse(await translateHTML(marked, false, charArg, chatID, retranslate))
-                        lastParsedQueue = translated
-                        lastCharArg = charArg
-                        transResult = translated
-                    }
-                    else{
-                        const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
-                        const translated = await translateHTML(marked, false, charArg, chatID, retranslate)
-                        lastParsedQueue = translated
-                        lastCharArg = charArg
-                        transResult = translated
-                    }
-                }
-                finally {
+                if(DBState.db.translatorType === 'llm' && DBState.db.translateBeforeHTMLFormatting){
+                    await sleep(100)
+                    translating = true
+                    data = await translateHTML(data, false, charArg, chatID, retranslate)
                     translating = false
+                    const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
+                    lastParsedQueue = marked
+                    lastCharArg = charArg
+                    transResult = marked
+                }
+                else if(!DBState.db.legacyTranslation){
+                    const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
+                    translating = true
+                    const translatedHtml = await translateHTML(marked, false, charArg, chatID, retranslate)
+                    translating = false
+                    const translated = await postTranslationParse(translatedHtml)
+                    lastParsedQueue = translated
+                    lastCharArg = charArg
+                    transResult = translated
+                }
+                else{
+                    const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
+                    translating = true
+                    const translated = await translateHTML(marked, false, charArg, chatID, retranslate)
+                    translating = false
+                    lastParsedQueue = translated
+                    lastCharArg = charArg
+                    transResult = translated
                 }
 
                 setTimeout(() => {
