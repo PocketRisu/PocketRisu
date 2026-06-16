@@ -1456,11 +1456,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             return false
         }
         if(jobResult.type === 'fail'){
+            if(abortSignal.aborted){
+                return false
+            }
             throwError(jobResult.result)
-            return false
-        }
-
-        if(abortSignal.aborted){
             return false
         }
 

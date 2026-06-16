@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama/dist/browser.mjs';
 import { language } from "../../../lang";
-import { globalFetch, fetchNative, addFetchLog } from "../../globalApi.svelte";
+import { globalFetch, fetchNative } from "../../globalApi.svelte";
 import { getModelInfo, LLMFlags, LLMFormat, type LLMModel } from "../../model/modellist";
 import { risuChatParser, risuEscape, risuUnescape } from "../../parser/parser.svelte";
 import { pluginProcess, pluginV2 } from "../../plugins/plugins.svelte";
@@ -740,25 +740,34 @@ function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: string): Pr
             safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
         },
         wait: async (options) => {
+            const shouldDeferAbortedTerminalStatus = (status: ProviderJobStatus) => (
+                options?.signal?.aborted === true
+                && (status.state === 'failed' || status.state === 'expired' || status.state === 'canceled')
+            )
             const forwardStatus = (status: ProviderJobStatus) => {
-                safeStatus(() => publishAnthropicBatchStatus(genId, status))
+                if (!shouldDeferAbortedTerminalStatus(status)) {
+                    safeStatus(() => publishAnthropicBatchStatus(genId, status))
+                }
                 options?.onStatus?.(status)
             }
-            safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
+            const currentStatus = job.getStatus()
+            if (!shouldDeferAbortedTerminalStatus(currentStatus)) {
+                safeStatus(() => publishAnthropicBatchStatus(genId, currentStatus))
+            }
             try {
                 const result = await job.wait({ ...options, onStatus: forwardStatus })
-                if (options?.signal?.aborted) {
-                    safeStatus(() => {
-                        addBadge(genId, { key: 'batch', text: requestStatusText('batchCanceled', 'Anthropic batch canceled'), tone: 'warn' })
-                        endStatus(genId, 'aborted', { now: Date.now() })
-                    })
-                    return { type: 'canceled', result: 'Aborted' }
-                }
                 if (result.type === 'success') {
                     safeStatus(() => {
                         publishAnthropicBatchStatus(genId, { state: 'succeeded' })
                         endStatus(genId, 'done', { now: Date.now() })
                     })
+                }
+                else if (options?.signal?.aborted) {
+                    safeStatus(() => {
+                        addBadge(genId, { key: 'batch', text: requestStatusText('batchCanceled', 'Anthropic batch canceled'), tone: 'warn' })
+                        endStatus(genId, 'aborted', { now: Date.now() })
+                    })
+                    return { type: 'canceled', result: 'Aborted' }
                 }
                 else if (result.type === 'canceled') {
                     safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'canceled', message: result.result }))
@@ -773,6 +782,9 @@ function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: string): Pr
                     now: Date.now(),
                     error: outcome === 'failed' ? (err instanceof Error ? err.message : String(err)) : undefined,
                 }))
+                if (outcome === 'aborted') {
+                    return { type: 'canceled', result: 'Aborted' }
+                }
                 throw err
             }
         },
@@ -884,7 +896,6 @@ async function createAnthropicPresetBatchJob(
         fetchImpl,
         signal: options.abortSignal,
         customId: uuidv4(),
-        logFetch: addFetchLog,
         chatId,
     })
     if (submission.ok === false) {
