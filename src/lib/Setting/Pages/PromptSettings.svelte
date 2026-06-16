@@ -266,8 +266,10 @@
             <Help unrecommended key='customChainOfThought' />
         </Check>
     {/if}
-    <span class="text-textcolor mt-4">{language.maxThoughtTagDepth} <Help key="maxThoughtTagDepth"/></span>
-    <NumberInput className="mt-2" bind:value={DBState.db.promptSettings.maxThoughtTagDepth}/>
+    <div>
+        <span class="text-textcolor mt-4">{language.maxThoughtTagDepth} <Help key="maxThoughtTagDepth"/></span>
+        <NumberInput className="mt-2" bind:value={DBState.db.promptSettings.maxThoughtTagDepth}/>
+    </div>
     <span class="text-textcolor mt-4">{language.customPromptTemplateToggle} <Help key='customPromptTemplateToggle' /></span>
     <TextAreaInput className="mt-2 mb-4" bind:value={DBState.db.customPromptTemplateToggle}/>
     <span class="text-textcolor mt-4">{language.defaultVariables} <Help key='defaultVariables' /></span>
@@ -301,7 +303,7 @@
             <ModelList bind:value={DBState.db.fallbackModels[arg][i]} blankable />
         {/each}
         <div class="flex gap-2">
-            <button class="bg-selected text-white p-2 rounded-md" onclick={() => {
+            <button class="bg-selected text-textcolor p-2 rounded-md" onclick={() => {
                 let value = DBState.db.fallbackModels[arg] ?? []
                 value.push('')
                 DBState.db.fallbackModels[arg] = value

@@ -235,4 +235,70 @@ describe('pumpPresetStream', () => {
             vi.useRealTimers()
         }
     })
+
+    test('onDelta observes every raw delta, before throttling', async () => {
+        vi.useFakeTimers()
+        try {
+            const controller = makeController()
+            const seen: Array<Partial<AdapterChatStreamDelta>> = []
+            await pumpPresetStream(
+                genOf({ reasoningDelta: 'why' }, { textDelta: 'a' }, { textDelta: 'b' }),
+                controller,
+                {
+                    intervalMs: 50,
+                    formatReasoning: passthroughReasoning,
+                    onDelta: (d) => seen.push({ reasoningDelta: d.reasoningDelta, textDelta: d.textDelta }),
+                },
+            )
+            // onDelta fires once per delta even though 'a'/'b' coalesce into one flush.
+            expect(seen).toEqual([
+                { reasoningDelta: 'why', textDelta: '' },
+                { reasoningDelta: undefined, textDelta: 'a' },
+                { reasoningDelta: undefined, textDelta: 'b' },
+            ])
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    test('onFinish reports done with the last usage seen', async () => {
+        vi.useFakeTimers()
+        try {
+            const controller = makeController()
+            const onFinish = vi.fn()
+            await pumpPresetStream(
+                genOf(
+                    { textDelta: 'a' },
+                    { textDelta: 'b', usage: { completionTokens: 7 } },
+                ),
+                controller,
+                { intervalMs: 50, formatReasoning: passthroughReasoning, onFinish },
+            )
+            expect(onFinish).toHaveBeenCalledTimes(1)
+            expect(onFinish).toHaveBeenCalledWith('done', { completionTokens: 7 })
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    test('onFinish reports failed when the stream throws', async () => {
+        vi.useFakeTimers()
+        try {
+            const controller = makeController()
+            const onFinish = vi.fn()
+            async function* exploding(): AsyncGenerator<AdapterChatStreamDelta, void, void> {
+                yield { textDelta: 'a', raw: null }
+                throw new Error('boom')
+            }
+            await pumpPresetStream(exploding(), controller, {
+                intervalMs: 50,
+                formatReasoning: passthroughReasoning,
+                onFinish,
+            })
+            expect(onFinish).toHaveBeenCalledTimes(1)
+            expect(onFinish.mock.calls[0][0]).toBe('failed')
+        } finally {
+            vi.useRealTimers()
+        }
+    })
 })

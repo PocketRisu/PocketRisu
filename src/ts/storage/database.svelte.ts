@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { checkNullish, decryptBuffer, encryptBuffer, selectSingleFile } from '../util';
 import { changeLanguage, language } from '../../lang';
+import { DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES, DEFAULT_CHAT_LOAD_INITIAL_PAGES, normalizeChatLoadPages } from '../chatLoadPages';
 import type { RisuPlugin } from '../plugins/plugins.svelte';
 import type {triggerscript as triggerscriptMain} from '../process/triggers';
 import { downloadFile, saveAsset as saveImageGlobal } from '../globalApi.svelte';
@@ -386,7 +387,7 @@ export function setDatabase(data:Database){
     data.globalscript ??= []
     data.sendWithEnter ??= true
     data.sendKeyPC ??= 'enter'
-    data.sendKeyMobile ??= 'button'
+    data.sendKeyMobile ??= 'ctrl-enter'
     data.autoSuggestPrompt ??= defaultAutoSuggestPrompt
     data.autoSuggestPrefix ??= ""
     data.OAIPrediction ??= ''
@@ -396,6 +397,9 @@ export function setDatabase(data:Database){
     data.inlayImagePriority ??= true
     data.enableBlockPartialEdit ??= false
     data.enableDragPartialEdit ??= false
+    // Concrete default so the settings toggle (reads !!value) and the runtime
+    // gate (statusEnabled) agree. Default on — see request-status-toast-infra.md.
+    data.showRequestStatus ??= true
     if(!data.formatingOrder.includes('personaPrompt')){
         data.formatingOrder.splice(data.formatingOrder.indexOf('main'),0,'personaPrompt')
     }
@@ -714,6 +718,7 @@ export function setDatabase(data:Database){
     data.dynamicModelRegistry ??= true
     data.saveSignatures ??= false
     data.nodeOnlyScrollButtonType ??= 'four'
+    data.nodeOnlyHideRecentChats ??= false
     data.keepSessionAlive ??= 'off'
     data.localNetworkMode ??= false
     if (typeof data.localNetworkMode !== 'boolean') data.localNetworkMode = false
@@ -721,6 +726,10 @@ export function setDatabase(data:Database){
     if (typeof data.localNetworkTimeoutSec !== 'number' || Number.isNaN(data.localNetworkTimeoutSec)) data.localNetworkTimeoutSec = 600
     data.pluginCustomStorage ??= {}
     data.longPressToPopupEditor ??= false
+    data.showInputActionBar ??= true
+    data.moveInsteadOfCopyOnCMPConvert ??= false
+    data.chatLoadInitialPages = normalizeChatLoadPages(data.chatLoadInitialPages, DEFAULT_CHAT_LOAD_INITIAL_PAGES)
+    data.chatLoadAdditionalPages = normalizeChatLoadPages(data.chatLoadAdditionalPages, DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES)
     data.fixedChatTextarea ??= true
     applyModelPresetDefaults(data)
     changeLanguage(data.language)
@@ -937,6 +946,16 @@ export interface DynamicOutput {
     dynamicRequest: boolean
 }
 
+export interface RisuPersona {
+    personaPrompt:string
+    name:string
+    icon:string
+    largePortrait?:boolean
+    id?:string
+    note?:string
+    embeddedModule?:RisuModule
+}
+
 export interface Database{
     characters: character[],
     apiType: string
@@ -1067,9 +1086,11 @@ export interface Database{
      * 'ctrl-enter'/'shift-enter': that combo sends (Enter newline);
      * 'button': only the send button (Enter newline). Replaces sendWithEnter. */
     sendKeyPC: 'enter' | 'ctrl-enter' | 'shift-enter' | 'button'
-    /** Mobile send-key mode. 'button': only the send button (Enter newline);
-     * 'enter': Enter sends (Shift+Enter newline). */
-    sendKeyMobile: 'button' | 'enter'
+    /** Mobile send-key mode. Same options as sendKeyPC for users with a
+     * Bluetooth/external keyboard. 'enter': Enter sends (Shift+Enter newline);
+     * 'ctrl-enter'/'shift-enter': that combo sends (Enter newline);
+     * 'button': only the send button (Enter newline). */
+    sendKeyMobile: 'enter' | 'ctrl-enter' | 'shift-enter' | 'button'
     fixedChatTextarea:boolean
     clickToEdit: boolean
     enableBlockPartialEdit: boolean
@@ -1118,14 +1139,7 @@ export interface Database{
     nanogptUseSubscriptionEndpoint:boolean
     openrouterFallback:boolean
     selectedPersona:number
-    personas:{
-        personaPrompt:string
-        name:string
-        icon:string
-        largePortrait?:boolean
-        id?:string
-        note?:string
-    }[]
+    personas:RisuPersona[]
     personaNote:boolean
     assetWidth:number
     animationSpeed:number
@@ -1322,6 +1336,9 @@ export interface Database{
     localActivationInGlobalLorebook: boolean
     showFolderName: boolean
     automaticCachePoint: boolean
+    // Show the floating request-status toast (phase / thinking+response tokens /
+    // tok/s / stall) for model-preset requests. Memory-only UI feature; default on.
+    showRequestStatus: boolean
     chatCompression: boolean
     claudeRetrivalCaching: boolean
     outputImageModal: boolean
@@ -1413,6 +1430,10 @@ export interface Database{
     // legacy/V2 keys stay unrecorded. See pluginStorageMeta.ts.
     pluginStorageMeta?:{[key:string]:{plugin:string,updatedAt:number}}
     longPressToPopupEditor?: boolean
+    showInputActionBar?: boolean
+    moveInsteadOfCopyOnCMPConvert?:boolean
+    chatLoadInitialPages?: number
+    chatLoadAdditionalPages?: number
     ImagenModel:string
     ImagenImageSize:string
     ImagenAspectRatio:string
@@ -1451,6 +1472,7 @@ export interface Database{
     blockquoteStyling?:boolean
     dynamicModelRegistry?:boolean
     nodeOnlyScrollButtonType?:'four'|'two'|'off'
+    nodeOnlyHideRecentChats?:boolean
     seperateParametersByModel?:boolean
     disableSeperateParameterChangeOnPresetChange?:boolean
     saveSignatures?:boolean
@@ -1611,6 +1633,21 @@ export interface character{
     private?:boolean
     additionalText:string
     oaiVoice?:string
+    oaiTTSConfig?:{
+        /** User opted into advanced OpenAI-compatible settings. When false/absent,
+         *  tts.ts ignores the other fields and uses the legacy oaiVoice + db.openAIKey path. */
+        enabled?: boolean
+        /** Base URL, trailing slash trimmed at runtime. Falls back to 'https://api.openai.com/v1'. */
+        baseURL?: string
+        /** Per-character API key. Falls back to db.openAIKey; the Authorization header is omitted entirely when both are empty. */
+        apiKey?: string
+        /** Model ID. Falls back to 'tts-1'. */
+        model?: string
+        /** Freeform voice ID for custom endpoints. Falls back to character.oaiVoice, then to 'alloy'. */
+        voice?: string
+        /** Response format. Falls back to 'mp3'. */
+        format?: 'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm'
+    }
     virtualscript?:string
     scriptstate?:{[key:string]:string|number|boolean}
     depth_prompt?: { depth: number, prompt: string }
@@ -1649,6 +1686,7 @@ export interface character{
     modules?:string[]
     coldstorage?:string
     coldStoragedChats?:string[]
+    customModuleToggle?:string
 }
 
 
@@ -2024,6 +2062,11 @@ export interface Chat{
     // it is restored on re-enable. Off (or absent) => classic global model path.
     useModelPreset?: boolean
     modelBinding?: ModelBindingSet
+    /** Per-chat opt-in: when this chat's MAIN request goes through a ModelPreset,
+     * override the preset's sampling parameters with the active prompt preset's
+     * (temperature, top_p, penalties, ...). Off (or absent) => preset params only.
+     * No effect in classic mode, where prompt-preset params already apply. */
+    usePromptPresetParams?: boolean
     /** Runtime-only: true while awaiting hydration from server. Never persisted. */
     _placeholder?: boolean
 }

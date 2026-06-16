@@ -25,7 +25,7 @@ const getVips = () => {
 }
 const { kvGet, kvSet, kvDel, kvList,
         kvDelPrefix, kvListWithSizes, kvSize, kvGetUpdatedAt, kvCopyValue, clearEntities, checkpointWal,
-        db: sqliteDb } = require('./db.cjs');
+        gcChunks, reclaimableChunkBytes, isDbBlobChunked, snapshotFootprint, db: sqliteDb } = require('./db.cjs');
 const {
     addLogBatch, queryLogs, clearLogs, countLogs,
     logger, installProcessHandlers, expressErrorMiddleware,
@@ -124,7 +124,9 @@ const SNAPSHOT_LIMIT_MIN_COUNT = 1;
 const SNAPSHOT_LIMIT_MAX_COUNT = 100;
 const SNAPSHOT_LIMIT_MIN_BYTES = 10 * 1024 * 1024;        // 10 MB
 const SNAPSHOT_LIMIT_MAX_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
-const BACKUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const BACKUP_INTERVAL_MS = process.env.POCKETRISU_BACKUP_INTERVAL_MS
+    ? Number(process.env.POCKETRISU_BACKUP_INTERVAL_MS)
+    : 5 * 60 * 1000; // 5 minutes (override for tests to force snapshot creation)
 let lastBackupTime = null;
 
 function readSnapshotConfigInt(key, fallback, min, max) {
@@ -155,10 +157,13 @@ function getSnapshotLimits() {
 // we never end up with zero backups after a config change.
 function trimSnapshotsToLimits() {
     const { maxCount, maxBytes } = getSnapshotLimits();
-    const entries = kvListWithSizes(DB_BACKUP_PREFIX)
-        .map((it) => {
-            const tsRaw = parseInt(it.key.slice(DB_BACKUP_PREFIX.length, -4), 10);
-            return { key: it.key, size: it.size, ts: Number.isFinite(tsRaw) ? tsRaw : 0 };
+    // Size each snapshot by its marginal disk cost (chunks not shared with the
+    // live blob), not its logical size — chunked snapshots share chunks, so a
+    // logical measure would over-trim ones that cost almost nothing on disk.
+    const entries = kvList(DB_BACKUP_PREFIX)
+        .map((key) => {
+            const tsRaw = parseInt(key.slice(DB_BACKUP_PREFIX.length, -4), 10);
+            return { key, size: snapshotFootprint(key), ts: Number.isFinite(tsRaw) ? tsRaw : 0 };
         })
         .sort((a, b) => b.ts - a.ts);
 
@@ -177,6 +182,23 @@ function trimSnapshotsToLimits() {
     }
     for (const key of toDelete) kvDel(key);
     return { kept: entries.length - toDelete.length, removed: toDelete.length };
+}
+
+// Current snapshot count + two totals:
+//   bytes        — marginal disk cost (snapshotFootprint), the SAME measure the
+//                  byte limit/trim uses, so the limit gauge matches what trimming
+//                  sees. kvListWithSizes would report a chunked snapshot's marker.
+//   logicalBytes — sum of each snapshot's full logical size (kvSize), i.e. what
+//                  the snapshots would cost WITHOUT dedup. Drives the "saved by
+//                  deduplication" figure; never used for trimming.
+function snapshotUsage() {
+    const keys = kvList(DB_BACKUP_PREFIX);
+    let bytes = 0, logicalBytes = 0;
+    for (const k of keys) {
+        bytes += snapshotFootprint(k);
+        logicalBytes += (kvSize(k) || 0);
+    }
+    return { count: keys.length, bytes, logicalBytes };
 }
 
 function createBackupAndRotate() {
@@ -2191,6 +2213,9 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     kvDelPrefix('inlay_meta/');
     kvDelPrefix('inlay_info/');
     kvDelPrefix('coldstorage/');
+    // Composer drafts are session/device-local and not carried in the backup;
+    // wipe stale ones so an old snapshot's chats don't resurrect later drafts.
+    kvDelPrefix('drafts/');
     // Same reasoning as clearExistingData (save-folder import path): wipe stale
     // remote payloads from the prior user before this backup's contents land.
     // .bin backups never carry REMOTE blocks today, so the migration won't
@@ -2851,6 +2876,8 @@ app.post('/proxy', reverseProxyFunc);
 app.post('/proxy2', reverseProxyFunc);
 app.put('/proxy', reverseProxyFunc);
 app.put('/proxy2', reverseProxyFunc);
+app.patch('/proxy', reverseProxyFunc);
+app.patch('/proxy2', reverseProxyFunc);
 app.delete('/proxy', reverseProxyFunc);
 app.delete('/proxy2', reverseProxyFunc);
 app.post('/hub-proxy/*', hubProxyFunc);
@@ -4624,6 +4651,8 @@ function clearExistingData() {
     kvDelPrefix('inlay_thumb/');
     kvDelPrefix('inlay_meta/');
     kvDelPrefix('inlay_info/');
+    // Composer drafts aren't part of a save folder; clear stale ones on import.
+    kvDelPrefix('drafts/');
     // Drop the previous user's remote payloads. The new save folder usually
     // brings its own remotes/<id>.local.bin files (INSERT OR REPLACE), but if
     // the imported character ids reuse names from the prior user without
@@ -4658,6 +4687,9 @@ async function importHexFilesFromDir(dirPath) {
         for (const hexFile of hexFiles) {
             const key = Buffer.from(hexFile, 'hex').toString('utf-8');
             const value = readFileSync(path.join(dirPath, hexFile));
+            // Chunk the DB blob so an oversized database.bin imports instead of
+            // failing the BLOB bind limit; other keys keep the bulk fast path.
+            if (key === DB_BLOB_KEY) { kvSet(key, value); continue; }
             insert.run(key, value, now);
         }
     });
@@ -4684,6 +4716,9 @@ async function importHexEntries(entries) {
     const run = sqliteDb.transaction(() => {
         clearExistingData();
         for (const { key, value } of entries) {
+            // Chunk the DB blob so an oversized database.bin imports instead of
+            // failing the BLOB bind limit; other keys keep the bulk fast path.
+            if (key === DB_BLOB_KEY) { kvSet(key, value); continue; }
             insert.run(key, value, now);
         }
     });
@@ -4856,8 +4891,6 @@ app.post('/api/migrate/save-folder/cleanup/execute', async (req, res, next) => {
 const DB_BLOB_KEY = 'database/database.bin';
 const DB_BACKUP_PREFIX = 'database/dbbackup-';
 const ASSET_PREFIXES = ['assets/', 'remotes/', 'inlay/', 'inlay_thumb/', 'inlay_meta/', 'inlay_info/', 'coldstorage/'];
-// Slightly above 2GB BLOB ceiling — better-sqlite3 throws RangeError near INT_MAX.
-const BLOB_INT_MAX = 2 * 1024 * 1024 * 1024 - 1;
 
 function statsBasename(s) {
     if (!s) return '';
@@ -4987,6 +5020,15 @@ app.get('/api/db/stats', async (req, res, next) => {
 
         const dbBlobSize = kvSize(DB_BLOB_KEY) || 0;
 
+        // Physical storage of the chunked DB blob (and all snapshots, which share
+        // chunks). This is where the blob bytes actually live post-chunking — kv
+        // holds only a tiny marker, so the chart must count this table separately.
+        const chunkStat = sqliteDb.prepare('SELECT COUNT(*) AS c, COALESCE(SUM(LENGTH(data)), 0) AS b FROM chunks').get();
+        // Bytes the next gc() would reclaim (true orphans + chunks pinned only by
+        // stale/raw-overwritten manifests) — drives the Optimize button.
+        const orphanChunkBytes = reclaimableChunkBytes();
+        const liveChunked = isDbBlobChunked();
+
         // Prefix breakdown — split database/ into the live blob vs rotated backups.
         const prefixes = {};
         prefixes[DB_BLOB_KEY] = { totalSize: dbBlobSize, count: dbBlobSize > 0 ? 1 : 0 };
@@ -5065,7 +5107,7 @@ app.get('/api/db/stats', async (req, res, next) => {
             disk,
             backupDisk,
             sqlite: { pageSize, pageCount, freelistCount, reclaimable, journalMode, autoVacuum },
-            blob: { dbSize: dbBlobSize, intMax: BLOB_INT_MAX },
+            chunks: { count: chunkStat.c, bytes: chunkStat.b, orphanBytes: orphanChunkBytes, liveChunked },
             prefixes,
             kvRows,
             kvTotalBytes,
@@ -5253,6 +5295,11 @@ app.post('/api/db/optimize', async (req, res, next) => {
         const result = await queueStorageOperation(async () => {
             await flushPendingDb();
             const t0 = Date.now();
+            // Reclaim chunks orphaned by edits/snapshot rotation before VACUUM, so
+            // their pages get compacted in the same pass. Serialized with saves by
+            // the surrounding queueStorageOperation.
+            let gcDeleted = 0;
+            try { gcDeleted = gcChunks(); } catch (e) { logger.warn('[Optimize] chunk gc failed:', e?.message || e); }
             try { checkpointWal('TRUNCATE'); } catch (e) { logger.warn('[Optimize] checkpoint failed:', e?.message || e); }
             sqliteDb.exec('VACUUM');
             // VACUUM streams the whole DB through the WAL; without this checkpoint the
@@ -5266,6 +5313,7 @@ app.post('/api/db/optimize', async (req, res, next) => {
                 preDbSize,
                 postDbSize,
                 reclaimed: Math.max(0, preDbSize - postDbSize),
+                chunksReclaimed: gcDeleted,
             };
         });
         res.json(result);
@@ -5304,13 +5352,13 @@ app.get('/api/db/snapshots/limits', async (req, res, next) => {
     if (!await checkAuth(req, res)) return;
     try {
         const { maxCount, maxBytes } = getSnapshotLimits();
-        const items = kvListWithSizes(DB_BACKUP_PREFIX);
-        const currentBytes = items.reduce((s, it) => s + it.size, 0);
+        const usage = snapshotUsage();
         res.json({
             maxCount,
             maxBytes,
-            currentCount: items.length,
-            currentBytes,
+            currentCount: usage.count,
+            currentBytes: usage.bytes,
+            logicalBytes: usage.logicalBytes,
             bounds: {
                 minCount: SNAPSHOT_LIMIT_MIN_COUNT,
                 maxCount: SNAPSHOT_LIMIT_MAX_COUNT,
@@ -5342,12 +5390,12 @@ app.put('/api/db/snapshots/limits', async (req, res, next) => {
         kvSet(SNAPSHOT_LIMIT_COUNT_KEY, Buffer.from(String(maxCount), 'utf-8'));
         kvSet(SNAPSHOT_LIMIT_BYTES_KEY, Buffer.from(String(maxBytes), 'utf-8'));
         const trim = trimSnapshotsToLimits();
-        const items = kvListWithSizes(DB_BACKUP_PREFIX);
-        const currentBytes = items.reduce((s, it) => s + it.size, 0);
+        const usage = snapshotUsage();
         res.json({
             maxCount, maxBytes,
-            currentCount: items.length,
-            currentBytes,
+            currentCount: usage.count,
+            currentBytes: usage.bytes,
+            logicalBytes: usage.logicalBytes,
             removed: trim.removed,
         });
     } catch (err) { next(err); }
@@ -5356,11 +5404,16 @@ app.put('/api/db/snapshots/limits', async (req, res, next) => {
 app.get('/api/db/snapshots', async (req, res, next) => {
     if (!await checkAuth(req, res)) return;
     try {
-        const items = kvListWithSizes(DB_BACKUP_PREFIX);
-        const out = items.map((it) => {
-            const tsRaw = parseInt(it.key.slice(DB_BACKUP_PREFIX.length, -4), 10);
+        const out = kvList(DB_BACKUP_PREFIX).map((key) => {
+            const tsRaw = parseInt(key.slice(DB_BACKUP_PREFIX.length, -4), 10);
             const ts = Number.isFinite(tsRaw) ? tsRaw * 100 : null;
-            return { key: it.key, size: it.size, timestamp: ts };
+            // Logical size — the full data this snapshot represents (the whole DB),
+            // not its marginal on-disk cost. Users expect "this backup = my 53 MB
+            // DB"; the dedup win is shown once, as the section's savings figure.
+            // (kvSize reassembles via the manifest; the marker's 13 bytes are not
+            // what a user wants to see for a full backup.) Trimming still sizes by
+            // snapshotFootprint in db.cjs, so this display change can't over-trim.
+            return { key, size: kvSize(key) || 0, timestamp: ts };
         }).sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
         res.json({ snapshots: out });
     } catch (err) { next(err); }

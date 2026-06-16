@@ -104,7 +104,7 @@ describe('openai-compatible adapter — Vertex google-service-account integratio
         expect(headers.Authorization).not.toContain('private_key')
         expect(headers.Authorization).not.toContain('BEGIN PRIVATE KEY')
         expect(calls[0].url).toBe(
-            'https://us-central1-aiplatform.googleapis.com/v1/projects/my-proj/locations/us-central1/endpoints/openapi/chat/completions',
+            'https://aiplatform.googleapis.com/v1/projects/my-proj/locations/global/endpoints/openapi/chat/completions',
         )
 
         // Body carries the model id but no SA-related fields.

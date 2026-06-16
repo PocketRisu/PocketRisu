@@ -1,6 +1,7 @@
 {
   "id": "anthropic-compatible:custom",
   "version": 1,
+  "updatedAt": 1781025869643,
   "displayName": "Anthropic Compatible (Custom)",
   "providerBaseId": "anthropic-compatible",
   "description": "Generic Anthropic Messages endpoint. Provide your own URL, key, and model id. Use for proxies that speak the Anthropic wire format (e.g. a GitHub Copilot bridge).",

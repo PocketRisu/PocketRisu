@@ -1,0 +1,271 @@
+{
+  "id": "bedrock-anthropic",
+  "version": 1,
+  "displayName": "AWS Bedrock (Anthropic Messages)",
+  "adapterKind": "anthropic-messages",
+  "authKinds": [
+    "x-api-key"
+  ],
+  "endpointKinds": [
+    "static"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json",
+    "anthropic-version": "2023-06-01"
+  },
+  "defaultBody": {
+    "max_tokens": 4096
+  },
+  "requestSchema": [
+    {
+      "key": "endpointUrl",
+      "type": "string",
+      "label": "Endpoint URL",
+      "description": "Bedrock mantle Anthropic Messages URL (region-specific). Pattern: https://bedrock-mantle.{region}.api.aws/anthropic/v1/messages",
+      "required": true,
+      "mapsTo": {
+        "target": "custom",
+        "path": "endpointUrl"
+      },
+      "descriptionI18n": {
+        "ko": "Bedrock mantle Anthropic Messages URL (리전별). 형식: https://bedrock-mantle.{region}.api.aws/anthropic/v1/messages"
+      }
+    },
+    {
+      "key": "apiKey",
+      "type": "string",
+      "label": "API Key (Bedrock bearer token)",
+      "description": "Bedrock bearer token, sent as the x-api-key header. This path supports bearer-token auth only (SigV4 requires the dedicated AWS SDK client).",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "Bedrock bearer 토큰 (x-api-key 헤더로 전송). 이 경로는 bearer 인증만 지원합니다 (SigV4는 전용 AWS SDK 클라이언트 필요)."
+      }
+    },
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Bedrock model identifier (carries the anthropic. provider prefix).",
+      "required": true,
+      "enum": [
+        {
+          "value": "anthropic.claude-fable-5",
+          "label": "Claude Fable 5"
+        },
+        {
+          "value": "anthropic.claude-opus-4-8",
+          "label": "Claude Opus 4.8"
+        },
+        {
+          "value": "anthropic.claude-opus-4-7",
+          "label": "Claude Opus 4.7"
+        },
+        {
+          "value": "anthropic.claude-haiku-4-5",
+          "label": "Claude Haiku 4.5"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Bedrock 모델 ID (anthropic. 프로바이더 접두사 포함)."
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "description": "Anthropic Messages requires max_tokens on every request.",
+      "min": 1,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 4096,
+      "descriptionI18n": {
+        "ko": "Anthropic Messages는 모든 요청에 max_tokens가 필요합니다."
+      }
+    },
+    {
+      "key": "thinking_type",
+      "type": "string",
+      "label": "Thinking Mode",
+      "description": "Adaptive thinking. Always on (cannot be disabled) on Claude Fable 5; available on Opus 4.6 and later.",
+      "enum": [
+        {
+          "value": "adaptive",
+          "label": "Adaptive"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "thinking.type"
+      },
+      "descriptionI18n": {
+        "ko": "적응형 thinking. Claude Fable 5에서는 상시 활성(비활성화 불가), Opus 4.6 이상에서 지원."
+      }
+    },
+    {
+      "key": "effort",
+      "type": "string",
+      "label": "Thinking Effort",
+      "description": "Supported on Claude Fable 5, Opus 4.8/4.7/4.6, Sonnet 4.6. xhigh/max are Fable/Opus-tier only.",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        },
+        {
+          "value": "max",
+          "label": "Max"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "output_config.effort"
+      }
+    },
+    {
+      "key": "stop_sequences",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "stop_sequences"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "endpoint",
+        "label": "Endpoint",
+        "order": 1,
+        "labelI18n": {
+          "ko": "엔드포인트"
+        }
+      },
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 2,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 3,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 4,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 5,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "endpointUrl",
+        "widget": "text",
+        "visibility": "basic",
+        "group": "endpoint",
+        "order": 1,
+        "placeholder": "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages"
+      },
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "number-input",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "thinking_type",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "effort",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "reasoning",
+        "order": 2
+      },
+      {
+        "key": "stop_sequences",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 2
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock",
+    "https://platform.claude.com/docs/en/api/messages"
+  ],
+  "limits": {
+    "known": false,
+    "sourceUrls": [
+      "https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock"
+    ],
+    "notes": "Model-dependent provider. Context and output token limits vary by the selected Bedrock model, so PocketRisu uses a number input instead of a fixed-limit slider."
+  }
+}

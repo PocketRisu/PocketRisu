@@ -589,10 +589,15 @@ export const languageKorean = {
   prompt: "프롬프트",
   loreBookDepth: "로어북 검색 깊이",
   loreBookToken: "로어북 최대 토큰",
+  chatLoadInitialPages: "채팅 초기 로딩 개수",
+  chatLoadAdditionalPages: "채팅 추가 로딩 개수",
   removeCharacter: "캐릭터 삭제",
   exportCharacter: "캐릭터 엑스포트",
   characterPackage: "캐릭터 패키지",
   characterPackageExport: "패키지 내보내기",
+  convertToModule: "모듈로 변환",
+  convertToCharacter: "캐릭터로 변환",
+  successfullyConverted: "변환되었습니다.",
   characterPackageImport: "캐릭터 패키지 임포트 (zip)",
   characterPackageCharacter: "캐릭터",
   characterPackageChats: "채팅",
@@ -822,6 +827,7 @@ export const languageKorean = {
   chatInputExpandTitle: "메세지 입력",
   resendLastMessage: "마지막 메세지를 재전송하기",
   enterMessagePlaceholder: "메세지를 입력하세요...",
+  enterMessageToPersona: (name: string) => `${name}(으)로 메세지 보내기`,
   sendKeyEnter: "Enter (Shift+Enter로 줄바꿈)",
   sendKeyCtrlEnter: "Ctrl+Enter (Enter로 줄바꿈)",
   sendKeyShiftEnter: "Shift+Enter (Enter로 줄바꿈)",
@@ -1194,6 +1200,8 @@ export const languageKorean = {
   personaBindCurrent: "현재 페르소나 바인딩",
   personaSelectOther: "다른 페르소나 선택",
   promptBindingLabel: "프롬프트 바인딩",
+  promptPresetParamsUse: "프롬프트 파라미터 사용",
+  promptPresetParamScopeDesc: "이 파라미터들은 프롬프트 프리셋에 저장됩니다. 클래식 모델 모드에서는 항상 적용되며, 모델 프리셋 사용 시에는 사이드바 프롬프트 바인딩에서 \"프롬프트 파라미터 사용\"을 켠 채팅에서만 샘플링 파라미터가 적용됩니다. 용량 설정(최대 콘텍스트/응답 크기)은 모델의 속성이므로 항상 모델 프리셋이 결정합니다.",
   promptBindedSuccess: "프롬프트 프리셋이 성공적으로 바인드되었습니다.",
   promptUnbindedSuccess: "프롬프트 프리셋이 성공적으로 언바인드되었습니다.",
   promptBindChange: "프롬프트 프리셋 변경",
@@ -1341,6 +1349,7 @@ export const languageKorean = {
   subtitlesWarning2:
     "이 기능을 사용하려면 스트리밍 기능을 지원하는 모델을 사용해야 합니다.",
   reset: "초기화",
+  clearInputConfirm: "이 입력란의 내용을 모두 지울까요?",
   assetMaxDifference: "에셋 최대 차이",
   sourceLanguage: "원본 언어",
   destinationLanguage: "목표 언어",
@@ -1513,9 +1522,13 @@ export const languageKorean = {
   modelPresetBindedSuccess: "모델 프리셋이 성공적으로 바인드되었습니다.",
   streamingOverride: "응답 스트리밍",
   streamingOverrideHelp: "이 프리셋이 응답을 스트리밍할지 여부.",
+  decoupledStreaming: "디커플드 스트리밍 (한 번에 출력)",
+  decoupledStreamingHelp: "요청은 스트리밍으로 보내되 응답은 완성된 뒤 한 번에 표시합니다. 일부 프로바이더의 비스트리밍 출력 제한·타임아웃을 우회하고, 토큰 단위 렌더 부담을 줄입니다.",
   modelPresetToolUse: "도구 사용",
   modelPresetToolUseHelp: "이 프리셋이 설정된 도구(MCP)를 호출하도록 허용합니다. 기본 꺼짐. 도구 실행 시 스트리밍 없이 전송됩니다.",
   modelPresetAbilities: "모델 능력",
+  modelPresetPickSuggestion: "추천에서 선택…",
+  modelPresetSnapshotEmpty: "이 프리셋의 프로필 데이터가 비어 있습니다. 프로필을 다시 받거나 교체해 설정을 복구하세요.",
   modelPresetImageInput: "이미지 입력",
   modelPresetImageInputHelp: "이미지를 모델에 함께 전송합니다. 기본 꺼짐. 이미지를 지원하는 모델(예: Ollama gemma3, llava)에서만 켜세요.",
   modelPresetFoldSystem: "시스템 프롬프트 접기",
@@ -1526,9 +1539,30 @@ export const languageKorean = {
   modelPresetAlternateRoleHelp: "연속된 같은 역할의 메시지를 하나로 합칩니다. 기본 꺼짐. user/assistant 교차를 요구하는 모델(예: gemma)에서 켜세요.",
   modelPresetStartWithUser: "user 입력으로 시작",
   modelPresetStartWithUserHelp: "대화가 user로 시작하지 않으면 빈 user 턴을 앞에 추가합니다. 기본 꺼짐. 첫 턴이 user가 아니면 거부하는 모델용.",
+  modelPresetCacheSection: "컨텍스트 캐싱",
+  modelPresetCacheEnable: "컨텍스트 캐싱 사용",
+  modelPresetCacheEnableHelp: "반복되는 프롬프트 앞부분을 Google 서버에 캐시해 입력 토큰 비용을 줄입니다. 캐시 경계는 프롬프트 템플릿의 cache 카드(또는 자동 캐시 포인트)가 정합니다.",
+  modelPresetCachePluginWarning: "외부 캐시 관련 플러그인과 함께 사용하면 서로 충돌하여 캐싱이 정상 동작하지 않습니다. 둘 중 하나만 사용하세요.",
+  modelPresetCacheTtl: "캐시 유지 시간 (초)",
+  modelPresetCacheTtlHelp: "서버가 캐시를 보관하는 시간. 길수록 턴 사이 공백을 잘 견디지만, 유지 시간만큼 보관 비용이 발생합니다.",
+  modelPresetCacheExtend: "적중 시 유지 시간 연장",
+  modelPresetCacheExtendHelp: "요청이 캐시에 적중하면 유지 시간을 다시 연장합니다.",
+  modelPresetCacheAdvanced: "고급",
+  modelPresetCacheMinTokens: "최소 프롬프트 토큰",
+  modelPresetCacheMinTokensHelp: "프롬프트가 이 토큰 수보다 작으면 캐시를 만들지 않습니다.",
+  modelPresetCacheGrowth: "재생성 증가량 (토큰)",
+  modelPresetCacheGrowthHelp: "캐시 생성 후 프롬프트가 이만큼 자라면 캐시를 다시 만듭니다.",
   maxContextHelp: "이 프리셋의 입력(프롬프트) 토큰 예산. 비우면 기본값(65000)을 쓰고, 모델 컨텍스트 윈도우 한도로 제한됩니다. 응답 길이(Max Tokens)와는 다릅니다.",
   modelPresetTabPresets: "프리셋",
   modelPresetTabOptions: "설정",
+  modelPresetTabTest: "테스트",
+  modelPresetTestTitle: "테스트 요청",
+  modelPresetTestHelp: "이 프리셋으로 메시지 하나를 보내 자격증명과 엔드포인트가 응답하는지 확인합니다. 채팅에는 저장되지 않습니다.",
+  modelPresetTestSend: "테스트 전송",
+  modelPresetTestSending: "전송 중…",
+  modelPresetTestSuccess: "성공",
+  modelPresetTestFail: "실패",
+  modelPresetTestDefault: "세차를 하려고 해. 세차장은 50미터 떨어져 있어. 걸어가야 할까, 운전해서 가야 할까?",
   profileVisibilityLevel: "프로필 표시 수준",
   profileVisibilityAll: "전체 표시",
   profileVisibilityHideDeprecated: "지원 종료 숨기기",
@@ -1699,6 +1733,7 @@ export const languageKorean = {
   newMessageButtonRightCenter: "우측 중앙",
   newMessageButtonTopBar: "상단 바",
   longPressToPopupEditor: "길게 눌러 팝업 편집기 열기",
+  showInputActionBar: "입력창 액션 바 표시",
   createFolderOnBranch: "분기 시 폴더 생성",
   goToChat: "채팅으로 이동",
   duplicatePluginFoundUpdateIt:
@@ -1979,6 +2014,11 @@ export const languageKorean = {
   pluginStorageJsonError: (msg: string) => `JSON 파싱 실패: ${msg}`,
   pluginStorageSaved: (key: string) => `"${key}" 저장됨`,
   pluginStorageDeleteConfirm: (key: string) => `"${key}" 항목을 삭제할까요?`,
+  pluginStorageBulkDeleteShown: (n: number) => `보이는 ${n}개 삭제`,
+  pluginStorageBulkDeleteAll: (n: number) => `전체 삭제 (${n})`,
+  pluginStorageBulkDeleteConfirm: (backend: string, n: number) => `${backend} 백엔드의 ${n}개 항목을 삭제합니다. 되돌릴 수 없습니다.`,
+  pluginStorageBulkDeleteAllConfirm: (backend: string, n: number) => `${backend} 백엔드의 모든 플러그인 데이터 ${n}개를 삭제합니다. 되돌릴 수 없습니다.`,
+  pluginStorageBulkDeleted: (n: number) => `${n}개 항목을 삭제했습니다`,
   systemLogsFilters: "필터",
   systemLogsFilterLevel: "레벨",
   systemLogsFilterOrigin: "오리진",
@@ -2122,6 +2162,7 @@ export const languageKorean = {
   storageCharactersImage: "미디어",
   storageCharactersChat: "채팅",
   storageCharactersTrashed: "휴지통",
+  storageCharactersGoTo: "이 캐릭터로 이동",
   storageCharactersOrphan: (count: number, size: number) =>
     `고아 미디어 (어떤 캐릭터도 참조하지 않음): ${count}개, ${(size / 1024 / 1024).toFixed(1)} MB`,
   storageCharactersEmpty: "캐릭터 없음",
@@ -2171,8 +2212,19 @@ export const languageKorean = {
   backupSnapshotDeleteFailed: "스냅샷 삭제 실패",
   backupSnapshotLimits: (count: number, bytes: number) =>
     `최대 ${count}개 · ${(bytes / 1024 / 1024).toFixed(0)} MB`,
-  backupSnapshotLimitsCurrent: (count: number, bytes: number) =>
-    `현재 ${count}개 · ${(bytes / 1024 / 1024).toFixed(1)} MB 사용`,
+  backupSnapshotLimitsCurrent: (count: number, bytes: number, logicalBytes?: number) => {
+    const disk = (bytes / 1024 / 1024).toFixed(1)
+    const saved = (logicalBytes ?? 0) - bytes
+    // Only surface the dedup win when it's meaningful (chunked snapshots share
+    // chunks); for tiny/un-chunked sets logical ≈ disk, so the plain line reads
+    // cleaner without a "(0 MB saved)" tail.
+    if (saved > 1024 * 1024) {
+      const data = ((logicalBytes ?? 0) / 1024 / 1024).toFixed(0)
+      const savedMB = (saved / 1024 / 1024).toFixed(0)
+      return `현재 ${count}개 · 디스크 ${disk} MB (데이터 ${data} MB, 중복 제거로 ${savedMB} MB 절약)`
+    }
+    return `현재 ${count}개 · ${disk} MB 사용`
+  },
   backupSnapshotLimitsChange: "한도 설정",
   backupSnapshotLimitsDialog: "스냅샷 보관 한도",
   backupSnapshotLimitsDialogDesc:
@@ -2238,4 +2290,28 @@ export const languageKorean = {
   relatedArcaLiveDesc: "AI 채팅 채널에서 다른 사용자와 이야기를 나눠보세요.",
 
   selectBotHint: "채팅을 시작할 봇을 선택하세요",
+  recentChatsTitle: "최근 대화",
+  noRecentChatsDesc: "아직 대화한 봇이 없어요",
+  hideRecentChats: "대화 목록 숨기기",
+
+  showRequestStatus: "요청 상태 표시",
+  requestStatus: {
+    connecting: "요청 중…",
+    thinking: "사고 중…",
+    responding: "응답 중…",
+    retrying: "재시도 중…",
+    stalled: "멈춤…",
+    done: "완료",
+    failed: "실패",
+    aborted: "취소됨",
+    kindMain: "메인",
+    kindTranslate: "번역",
+    kindMemory: "메모리",
+    kindEmotion: "감정",
+    kindSub: "보조",
+    outputTokens: "출력",
+    thinkingTokensLabel: "사고",
+    tokensPerSec: "tok/s",
+    cacheHit: "캐시 적중 · {n} 토큰",
+  },
 } satisfies DeepPartial<typeof import("./en").languageEnglish>;

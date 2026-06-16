@@ -93,6 +93,11 @@ async function expandToolCallMessage(
     if (pending.trim().length > 0) {
         out.push({ role: 'assistant', content: pending })
     }
+    // A cachePoint on the source message covers everything through it, so the
+    // boundary lands after the LAST message it expanded into.
+    if (m.cachePoint && out.length > 0) {
+        out[out.length - 1].cachePoint = true
+    }
     return out
 }
 
@@ -108,6 +113,9 @@ export function toAdapterMessage(m: OpenAIChat, includeImages = false): AdapterC
     const role: AdapterChatMessage['role'] = m.role === 'function' ? 'tool' : m.role
     const msg: AdapterChatMessage = { role, content: m.content ?? '' }
     if (m.name) msg.name = m.name
+    // Preserve the native prompt-cache boundary flag (cache card /
+    // automaticCachePoint) so the google-gemini adapter can consume it.
+    if (m.cachePoint) msg.cachePoint = true
     // Vision: classic only attaches images to user turns (openAI/requests.ts),
     // so mirror that — assistant/system image parts are dropped.
     if (includeImages && role === 'user') {

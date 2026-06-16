@@ -1,0 +1,56 @@
+{
+  "id": "lightning-ai:gemini-35-flash",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "Gemini 3.5 Flash",
+  "displayNameI18n": {
+    "ko": "Gemini 3.5 Flash"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Gemini 3.5 Flash via Lightning AI (google/gemini-3.5-flash).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.5 Flash (Lightning AI, google/gemini-3.5-flash)."
+  },
+  "tags": [
+    "lightning-ai",
+    "google",
+    "gemini"
+  ],
+  "sortOrder": 720,
+  "modelId": "google/gemini-3.5-flash",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

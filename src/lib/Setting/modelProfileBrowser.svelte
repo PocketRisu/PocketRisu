@@ -148,7 +148,9 @@
     // that renders blank and crashes on export. (always-persist sync should
     // self-heal the cache on the next menu entry; this is the safety net.)
     function snapshotIncomplete(s: ResolvedModelProfileSnapshot): boolean {
-        return !s.auth || !s.endpoint || !Array.isArray(s.schema) || s.schema.length === 0;
+        return !s.auth || !s.endpoint
+            || !Array.isArray(s.schema) || s.schema.length === 0
+            || !Array.isArray(s.uiSchema?.fields) || s.uiSchema.fields.length === 0;
     }
 
     function createPresetFrom(profile: ModelProfile) {

@@ -1,0 +1,75 @@
+{
+  "id": "lightning-ai:gpt-54",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "GPT-5.4",
+  "displayNameI18n": {
+    "ko": "GPT-5.4"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "GPT-5.4 via Lightning AI (openai/gpt-5.4-2026-03-05).",
+  "descriptionI18n": {
+    "ko": "GPT-5.4 (Lightning AI, openai/gpt-5.4-2026-03-05)."
+  },
+  "tags": [
+    "lightning-ai",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 702,
+  "modelId": "openai/gpt-5.4-2026-03-05",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Completion Tokens",
+      "min": 1,
+      "max": 128000,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_completion_tokens"
+      },
+      "default": 8192,
+      "descriptionI18n": {
+        "ko": "최대 출력(completion) 토큰. gpt-5 계열은 max_completion_tokens로 전송됩니다."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

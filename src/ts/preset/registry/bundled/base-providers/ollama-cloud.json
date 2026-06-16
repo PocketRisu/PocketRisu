@@ -49,6 +49,10 @@
           "label": "Gemma 4 31B"
         },
         {
+          "value": "gemini-3-flash-preview:cloud",
+          "label": "Gemini 3 Flash"
+        },
+        {
           "value": "gpt-oss:120b-cloud",
           "label": "gpt-oss 120B"
         },
@@ -276,7 +280,7 @@
       },
       {
         "key": "reasoning_effort",
-        "widget": "select",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "reasoning",
         "order": 1

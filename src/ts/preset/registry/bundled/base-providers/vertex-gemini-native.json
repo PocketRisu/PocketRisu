@@ -1,0 +1,305 @@
+{
+  "id": "vertex-gemini-native",
+  "version": 7,
+  "displayName": "Vertex AI (Gemini Native)",
+  "adapterKind": "google-gemini",
+  "authKinds": [
+    "google-service-account"
+  ],
+  "endpointKinds": [
+    "static",
+    "vertex-gemini"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json",
+    "X-Vertex-AI-LLM-Request-Type": "shared"
+  },
+  "defaultBody": {},
+  "requestSchema": [
+    {
+      "key": "serviceAccountJson",
+      "type": "string",
+      "label": "Service Account JSON",
+      "description": "Full Service Account JSON for OAuth token exchange. Needs the Vertex AI User role on the project.",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "OAuth 토큰 교환용 Service Account 전체 JSON. 해당 프로젝트에 Vertex AI 사용자 역할이 필요해요."
+      }
+    },
+    {
+      "key": "location",
+      "type": "string",
+      "label": "Location",
+      "description": "Vertex AI region (e.g. us-central1, global). Defaults to global when left blank.",
+      "required": false,
+      "default": "global",
+      "mapsTo": {
+        "target": "custom",
+        "path": "location"
+      },
+      "descriptionI18n": {
+        "ko": "Vertex AI 리전 (예: us-central1, global). 비워두면 global이 됩니다."
+      }
+    },
+    {
+      "key": "projectId",
+      "type": "string",
+      "label": "Project ID",
+      "description": "Google Cloud project id. Leave blank to use the project_id from the Service Account JSON.",
+      "required": false,
+      "mapsTo": {
+        "target": "custom",
+        "path": "project"
+      },
+      "descriptionI18n": {
+        "ko": "Google Cloud 프로젝트 ID. 비워두면 Service Account JSON의 project_id를 사용합니다."
+      }
+    },
+    {
+      "key": "endpointUrl",
+      "type": "string",
+      "label": "Endpoint URL (override)",
+      "description": "Advanced: full base URL up to '.../publishers/google/models'. Leave blank to assemble it from Location and Project ID. When set, this overrides both. The model name is appended automatically.",
+      "required": false,
+      "mapsTo": {
+        "target": "custom",
+        "path": "endpointUrl"
+      },
+      "descriptionI18n": {
+        "ko": "고급: '.../publishers/google/models'까지의 전체 base URL. 비워두면 Location·Project ID로 자동 조립해요. 입력하면 그 둘보다 우선합니다. 모델 이름은 자동으로 붙어요."
+      }
+    },
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Gemini model id used on the Vertex URL path (publishers/google/models/{id}). Use the bare Gemini id without the 'google/' prefix. Leave blank to use the profile's model.",
+      "required": false,
+      "enum": [
+        { "value": "gemini-3.5-flash", "label": "Gemini 3.5 Flash" },
+        { "value": "gemini-3.1-pro-preview", "label": "Gemini 3.1 Pro" },
+        { "value": "gemini-3.1-flash-lite", "label": "Gemini 3.1 Flash-Lite" },
+        { "value": "gemini-3-flash-preview", "label": "Gemini 3 Flash" },
+        { "value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro" },
+        { "value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash" },
+        { "value": "gemini-2.5-flash-lite", "label": "Gemini 2.5 Flash-Lite" }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Vertex URL 경로(publishers/google/models/{id})에 쓰이는 Gemini 모델 ID. 'google/' 접두사 없는 bare ID를 입력하세요. 비워두면 프로필의 모델을 사용합니다."
+      }
+    },
+    {
+      "key": "temperature",
+      "type": "number",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.temperature"
+      }
+    },
+    {
+      "key": "maxOutputTokens",
+      "type": "integer",
+      "label": "Max Output Tokens",
+      "min": 1,
+      "max": 65536,
+      "default": 8192,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.maxOutputTokens"
+      }
+    },
+    {
+      "key": "thinkingLevel",
+      "type": "string",
+      "label": "Thinking Level",
+      "enum": [
+        { "value": "minimal", "label": "Minimal" },
+        { "value": "low", "label": "Low" },
+        { "value": "medium", "label": "Medium" },
+        { "value": "high", "label": "High" }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.thinkingConfig.thinkingLevel"
+      }
+    },
+    {
+      "key": "topP",
+      "type": "number",
+      "label": "Top P",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.topP"
+      }
+    },
+    {
+      "key": "topK",
+      "type": "integer",
+      "label": "Top K",
+      "min": 1,
+      "max": 1000,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.topK"
+      }
+    },
+    {
+      "key": "includeThoughts",
+      "type": "boolean",
+      "label": "Include Thoughts",
+      "default": false,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.thinkingConfig.includeThoughts"
+      }
+    },
+    {
+      "key": "presencePenalty",
+      "type": "number",
+      "label": "Presence Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.presencePenalty"
+      }
+    },
+    {
+      "key": "frequencyPenalty",
+      "type": "number",
+      "label": "Frequency Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.frequencyPenalty"
+      }
+    },
+    {
+      "key": "stopSequences",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.stopSequences"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.seed"
+      }
+    },
+    {
+      "key": "responseMimeType",
+      "type": "string",
+      "label": "Response Mime Type",
+      "enum": [
+        { "value": "text/plain", "label": "Text" },
+        { "value": "application/json", "label": "JSON" }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.responseMimeType"
+      }
+    },
+    {
+      "key": "safetySettings",
+      "type": "json",
+      "label": "Safety Settings",
+      "mapsTo": {
+        "target": "body",
+        "path": "safetySettings"
+      }
+    },
+    {
+      "key": "sharedRequestType",
+      "type": "string",
+      "label": "Shared Request Type",
+      "description": "Vertex shared-quota processing tier. Flex is ~50% cheaper but higher-latency; Priority is premium pricing with consistent low latency. Both work only on the global endpoint and select Gemini models (Gemini 2.5 is not supported). Default is standard pay-as-you-go — pick Flex/Priority to opt in.",
+      "enum": [
+        { "value": "", "label": "Standard (no Flex/Priority)" },
+        { "value": "flex", "label": "Flex" },
+        { "value": "priority", "label": "Priority" }
+      ],
+      "mapsTo": {
+        "target": "header",
+        "path": "X-Vertex-AI-LLM-Shared-Request-Type"
+      },
+      "descriptionI18n": {
+        "ko": "Vertex 공유 할당량 처리 등급. Flex는 약 50% 저렴하지만 지연이 높고, Priority는 프리미엄 과금에 일관된 저지연이에요. 둘 다 글로벌 엔드포인트와 일부 Gemini 모델에서만 동작해요(Gemini 2.5는 미지원). 기본값은 standard 종량제 — Flex/Priority는 선택 시에만 적용돼요."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      { "id": "credentials", "label": "Credentials", "order": 1, "labelI18n": { "ko": "인증 정보" } },
+      { "id": "project", "label": "Project", "order": 2, "labelI18n": { "ko": "프로젝트" } },
+      { "id": "model", "label": "Model", "order": 3, "labelI18n": { "ko": "모델" } },
+      { "id": "generation", "label": "Generation", "order": 4, "labelI18n": { "ko": "생성" } },
+      { "id": "reasoning", "label": "Reasoning", "order": 5, "labelI18n": { "ko": "추론" } },
+      { "id": "output", "label": "Output", "order": 6, "labelI18n": { "ko": "출력" } },
+      { "id": "quota", "label": "Quota", "order": 7, "labelI18n": { "ko": "할당량" } }
+    ],
+    "fields": [
+      { "key": "serviceAccountJson", "widget": "secret", "visibility": "basic", "group": "credentials", "order": 1 },
+      { "key": "location", "widget": "text", "visibility": "basic", "group": "project", "order": 1 },
+      { "key": "projectId", "widget": "text", "visibility": "advanced", "group": "project", "order": 2 },
+      {
+        "key": "endpointUrl",
+        "widget": "text",
+        "visibility": "advanced",
+        "group": "project",
+        "order": 3,
+        "placeholder": "https://aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/global/publishers/google/models"
+      },
+      { "key": "modelId", "widget": "combobox", "visibility": "basic", "group": "model", "order": 1, "placeholder": "gemini-3-flash-preview" },
+      { "key": "temperature", "widget": "slider", "visibility": "basic", "group": "generation", "order": 1 },
+      { "key": "maxOutputTokens", "widget": "number-input", "visibility": "basic", "group": "generation", "order": 2 },
+      { "key": "topP", "widget": "slider", "visibility": "advanced", "group": "generation", "order": 3 },
+      { "key": "topK", "widget": "number-input", "visibility": "advanced", "group": "generation", "order": 4 },
+      { "key": "presencePenalty", "widget": "slider", "visibility": "advanced", "group": "generation", "order": 5 },
+      { "key": "frequencyPenalty", "widget": "slider", "visibility": "advanced", "group": "generation", "order": 6 },
+      { "key": "stopSequences", "widget": "string-array", "visibility": "advanced", "group": "generation", "order": 7 },
+      { "key": "seed", "widget": "number-input", "visibility": "advanced", "group": "generation", "order": 8 },
+      { "key": "thinkingLevel", "widget": "select", "visibility": "basic", "group": "reasoning", "order": 1 },
+      { "key": "includeThoughts", "widget": "toggle", "visibility": "advanced", "group": "reasoning", "order": 2 },
+      { "key": "responseMimeType", "widget": "select", "visibility": "advanced", "group": "output", "order": 1 },
+      { "key": "safetySettings", "widget": "json", "visibility": "advanced", "group": "output", "order": 2 },
+      { "key": "sharedRequestType", "widget": "select", "visibility": "advanced", "group": "quota", "order": 1 }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json",
+    "cache"
+  ],
+  "sourceUrls": [
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent"
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "id": "google:gemini-25-flash",
-  "version": 1,
+  "version": 2,
   "displayName": "Gemini 2.5 Flash",
   "displayNameI18n": {
     "ko": "Gemini 2.5 Flash"
@@ -18,7 +18,7 @@
   ],
   "sortOrder": 311,
   "modelId": "gemini-2.5-flash",
-  "updatedAt": 1780591762548,
+  "updatedAt": 1781283722406,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"
@@ -398,7 +398,8 @@
     "reasoning",
     "vision",
     "tools",
-    "json"
+    "json",
+    "cache"
   ],
   "sourceUrls": [
     "https://ai.google.dev/gemini-api/docs/models",

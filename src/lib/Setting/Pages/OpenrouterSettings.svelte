@@ -43,7 +43,7 @@
                 <OpenrouterProviderList bind:value={DBState.db.openrouterProvider.order[i]} options={openRouterProviders} />
             {/each}
             <div class="flex gap-2">
-                <button class="bg-selected text-white p-2 rounded-md" onclick={() => {
+                <button class="bg-selected text-textcolor p-2 rounded-md" onclick={() => {
                     let value = DBState.db.openrouterProvider.order ?? []
                     value.push('')
                     DBState.db.openrouterProvider.order = value
@@ -64,7 +64,7 @@
                 <OpenrouterProviderList bind:value={DBState.db.openrouterProvider.only[i]} options={openRouterProviders} />
             {/each}
             <div class="flex gap-2">
-                <button class="bg-selected text-white p-2 rounded-md" onclick={() => {
+                <button class="bg-selected text-textcolor p-2 rounded-md" onclick={() => {
                     let value = DBState.db.openrouterProvider.only ?? []
                     value.push('')
                     DBState.db.openrouterProvider.only = value
@@ -85,7 +85,7 @@
                 <OpenrouterProviderList bind:value={DBState.db.openrouterProvider.ignore[i]} options={openRouterProviders} />
             {/each}
             <div class="flex gap-2">
-                <button class="bg-selected text-white p-2 rounded-md" onclick={() => {
+                <button class="bg-selected text-textcolor p-2 rounded-md" onclick={() => {
                     let value = DBState.db.openrouterProvider.ignore ?? []
                     value.push('')
                     DBState.db.openrouterProvider.ignore = value

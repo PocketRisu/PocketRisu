@@ -23,7 +23,7 @@ import { runInlayScreen } from "./inlayScreen";
 import { runImageEmbedding } from "./transformers";
 import { runLuaEditTrigger } from "./scriptings";
 import { getModelInfo, LLMFlags } from "../model/modellist";
-import { resolveChatModelBinding } from "./request/modelPresetBinding";
+import { resolveChatModelBinding, resolvePresetMaxOutputTokens } from "./request/modelPresetBinding";
 import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
@@ -255,6 +255,10 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     let currentChat = runCurrentChatFunction(nowChatroom.chats[selectedChat])
     nowChatroom.chats[selectedChat] = currentChat
     let maxContextTokens = DBState.db.maxContext
+    // Output-token reservation for the context budget. Defaults to the legacy
+    // global db.maxResponse (the "[채팅 봇]" max response size), overridden below
+    // when this chat is bound to a ModelPreset.
+    let maxResponseTokens = DBState.db.maxResponse
     // When this chat is bound to a ModelPreset, use the preset's own input
     // budget (preset.maxContext, default 65000) instead of the global
     // db.maxContext — clamped to the model's context window when known.
@@ -266,6 +270,13 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             const set = mainBinding.preset.maxContext
             const budget = set && set > 0 ? set : 65000
             maxContextTokens = ctxWindow ? Math.min(budget, ctxWindow) : budget
+            // Reserve output tokens from the preset's own max-output setting
+            // rather than db.maxResponse — the legacy global value can be a
+            // stray figure (e.g. 65535 carried over from an imported prompt
+            // preset) that would eat the whole context window and make even the
+            // first message fail with a false "too much token" error.
+            const presetOut = resolvePresetMaxOutputTokens(mainBinding.preset)
+            if (presetOut !== undefined) maxResponseTokens = presetOut
         }
     }
 
@@ -409,6 +420,36 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     const lorepmt = await loadLoreBookV3Prompt()
+
+    const positionRegex = /{{position::(.+?)}}/g
+    const replaceposition = (text:string):{text:string, replaced:boolean} => {
+        let replaced = false
+        const result = text.replace(positionRegex, (match, p1) => {
+            replaced = true
+            const posMatch = 'pt_' + p1
+            const matchingPrompts: string[] = []
+            for (const v of lorepmt.actives) {
+                if (v.pos === posMatch) {
+                    matchingPrompts.push(v.prompt)
+                }
+            }
+            return matchingPrompts.join('\n')
+        })
+        return {text: result, replaced}
+    }
+
+    // maxDepth controls how many levels of nesting are resolved. Currently set to 5, adjust if needed.
+    const resolvePosition = (text:string, maxDepth:number = 5) => {
+        let result = text
+        for(let i=0; i<maxDepth;i++) {
+            const r = replaceposition(result)
+            result = r.text
+            if(!r.replaced) break
+        }
+        result = result.replace(positionRegex, '')
+        return result
+    }
+
     const normalActives = lorepmt.actives.filter(v => {
         return v.pos === '' && v.inject === null
     })
@@ -417,7 +458,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const lorebook of normalActives){
         unformated.lorebook.push({
             role: lorebook.role,
-            content: risuChatParser(lorebook.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         })
     }
 
@@ -428,7 +469,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const lorebook of descActives){
         const c = {
             role: lorebook.role,
-            content: risuChatParser(lorebook.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         }
         if(lorebook.pos === 'before_desc'){
             unformated.description.unshift(c)
@@ -438,10 +479,11 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
     }
 
-    if(DBState.db.personaPrompt){
+    const personaPromptText = getPersonaPrompt()
+    if(personaPromptText){
         unformated.personaPrompt.push({
             role: 'system',
-            content: risuChatParser(getPersonaPrompt(), {chara: currentChar})
+            content: risuChatParser(personaPromptText, {chara: currentChar})
         })
     }
     
@@ -466,7 +508,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const lorebook of postEverythingLorebooks){
         unformated.postEverything.push({
             role: lorebook.role,
-            content: risuChatParser(lorebook.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         })
     }
 
@@ -487,18 +529,17 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const lorebook of postEverythingAssistantLorebooks){
         unformated.postEverything.push({
             role: lorebook.role,
-            content: risuChatParser(lorebook.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(lorebook.prompt), {chara: currentChar})
         })
     }
 
     //await tokenize currernt
-    let currentTokens = DBState.db.maxResponse
+    let currentTokens = maxResponseTokens
     let supaMemoryCardUsed = false
     
     //for unexpected error
     currentTokens += 50
     
-    const positionRegex = /{{position::(.+?)}}/g
     const positionParser = (text:string, loc:string) => {
         console.log(injectionLorePosSet)
         if(injectionLorePosSet.has(loc)){
@@ -522,16 +563,8 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 }
             }
         }
-        return text.replace(positionRegex, (match, p1) => {
-            const posMatch = 'pt_' + p1
-            const matchingPrompts: string[] = []
-            for (const v of lorepmt.actives) {
-                if (v.pos === posMatch) {
-                    matchingPrompts.push(v.prompt)
-                }
-            }
-            return matchingPrompts.join('\n')
-        })
+
+        return resolvePosition(text)
     }
 
     let hasCachePoint = false
@@ -912,7 +945,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const depthPrompt of depthPrompts){
         const chat:OpenAIChat = {
             role: depthPrompt.role,
-            content: risuChatParser(depthPrompt.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(depthPrompt.prompt), {chara: currentChar})
         }
         currentTokens += await tokenizer.tokenizeChat(chat)
     }
@@ -992,7 +1025,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     for(const depthPrompt of depthPrompts){
         const chat:OpenAIChat = {
             role: depthPrompt.role,
-            content: risuChatParser(depthPrompt.prompt, {chara: currentChar})
+            content: risuChatParser(resolvePosition(depthPrompt.prompt), {chara: currentChar})
         }
         const depth = depthPrompt.pos === 'depth' ? (depthPrompt.depth) : (unformated.chats.length - depthPrompt.depth)
         unformated.chats.splice(depth,0,chat)
@@ -1330,7 +1363,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     //estimate tokens
-    let outputTokens = DBState.db.maxResponse
+    let outputTokens = maxResponseTokens
     if(inputTokens + outputTokens > maxContextTokens){
         outputTokens = maxContextTokens - inputTokens
     }

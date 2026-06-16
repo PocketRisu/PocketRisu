@@ -261,7 +261,7 @@
       },
       {
         "key": "reasoning_effort",
-        "widget": "select",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "reasoning",
         "order": 1

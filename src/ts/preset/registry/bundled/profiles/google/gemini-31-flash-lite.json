@@ -1,6 +1,6 @@
 {
   "id": "google:gemini-31-flash-lite",
-  "version": 1,
+  "version": 2,
   "displayName": "Gemini 3.1 Flash-Lite",
   "displayNameI18n": {
     "ko": "Gemini 3.1 Flash-Lite"
@@ -18,7 +18,7 @@
   ],
   "sortOrder": 302,
   "modelId": "gemini-3.1-flash-lite",
-  "updatedAt": 1780591762548,
+  "updatedAt": 1781283722406,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"
@@ -410,7 +410,8 @@
     "reasoning",
     "vision",
     "tools",
-    "json"
+    "json",
+    "cache"
   ],
   "sourceUrls": [
     "https://ai.google.dev/gemini-api/docs/models",

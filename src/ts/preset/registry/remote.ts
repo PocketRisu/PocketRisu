@@ -96,6 +96,41 @@ export function isRefetchGuarded(lastFetched: number | undefined): boolean {
     return lastFetched !== undefined && Date.now() - lastFetched < REFETCH_GUARD_MS
 }
 
+// A null element inside an array means nothing legitimately — only the old
+// normalizeJSON bug produced it. Treat any null/undefined element in a present
+// array as the unambiguous corruption signature.
+function hasNullElement(value: unknown): boolean {
+    return Array.isArray(value) && value.some((el) => el === null || el === undefined)
+}
+
+// True when a base provider OR profile in the cached entry carries a null-corrupted
+// array (requestSchema/schema, or uiSchema.fields/groups) — the signature of the
+// now-fixed normalizeJSON bug. Such a cache must be re-downloaded even when its
+// hash still matches the published catalog, since the corruption is local. The
+// profile side matters most: a field object shared between a base provider and a
+// profile gets nulled in whichever is serialized SECOND (profiles), so scanning
+// only baseProviders would miss the common case.
+function hasCorruptSchemaArrays(holder: { requestSchema?: unknown; schema?: unknown; uiSchema?: unknown }): boolean {
+    if (hasNullElement(holder.requestSchema)) return true
+    if (hasNullElement(holder.schema)) return true
+    const uiSchema = holder.uiSchema
+    if (isPlainObject(uiSchema)) {
+        if (hasNullElement(uiSchema.fields)) return true
+        if (hasNullElement(uiSchema.groups)) return true
+    }
+    return false
+}
+
+export function isEntryCorrupted(entry: RegistryEntry | undefined): boolean {
+    for (const collection of [entry?.baseProviders, entry?.profiles]) {
+        if (!isPlainObject(collection)) continue
+        for (const item of Object.values(collection)) {
+            if (isPlainObject(item) && hasCorruptSchemaArrays(item)) return true
+        }
+    }
+    return false
+}
+
 export interface SyncResult {
     ok: boolean
     /** True when the catalog content hash changed (a new catalog was adopted). */
@@ -146,10 +181,13 @@ export async function syncRemoteRegistry(force = false): Promise<SyncResult> {
         }
 
         // Gate-skip: same source + same content hash + a populated cache. Source
-        // and hash live together in the entry, so they can't drift apart.
+        // and hash live together in the entry, so they can't drift apart. A
+        // null-corrupted entry (old normalizeJSON bug) is never skipped — its
+        // hash still matches the catalog, so we must fall through to re-download
+        // the clean data and replace it.
         const cached = db.modelProfileRegistryCache?.registries?.[getBundledRegistryId()]
         const cacheUsable = !!cached?.profiles && Object.keys(cached.profiles).length > 0
-        if (!force && cacheUsable && cached?.source === base && cached?.contentHash === index.hash) {
+        if (!force && cacheUsable && cached?.source === base && cached?.contentHash === index.hash && !isEntryCorrupted(cached)) {
             return { ok: true, changed: false, downloaded: false }
         }
 

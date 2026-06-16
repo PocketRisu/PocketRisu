@@ -1,6 +1,6 @@
 {
   "id": "google",
-  "version": 1,
+  "version": 2,
   "displayName": "Google AI Studio (Gemini)",
   "adapterKind": "google-gemini",
   "authKinds": [
@@ -56,7 +56,8 @@
     "reasoning",
     "vision",
     "tools",
-    "json"
+    "json",
+    "cache"
   ],
   "sourceUrls": [
     "https://ai.google.dev/gemini-api/docs/models",

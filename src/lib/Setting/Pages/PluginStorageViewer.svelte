@@ -83,6 +83,12 @@
         })
     })
 
+    // True when any search/owner filter narrows the list — drives the bulk
+    // button label (delete-shown vs clear-all).
+    const isFiltered = $derived(
+        searchKey.trim() !== '' || searchVal.trim() !== '' || ownerFilter !== '',
+    )
+
     // Distinct origin plugins present in the current backend, for the filter.
     const ownerOptions = $derived.by(() => {
         const set = new Set<string>()
@@ -288,6 +294,43 @@
         }
     }
 
+    // Bulk-delete every entry currently shown (i.e. matching the active search /
+    // owner filter). With no filter this is the whole backend, so one button
+    // serves both partial and full clears. The label reflects which it is.
+    async function removeFiltered() {
+        // Snapshot before load() swaps `entries` out from under `filtered`.
+        const targets = filtered.slice()
+        if (targets.length === 0) return
+
+        const isAll = targets.length === entries.length
+        const backendLabel = BACKENDS[backendIndex].label()
+        const msg = isAll
+            ? language.pluginStorageBulkDeleteAllConfirm(backendLabel, targets.length)
+            : language.pluginStorageBulkDeleteConfirm(backendLabel, targets.length)
+        const ok = await alertConfirm(msg)
+        if (!ok) return
+
+        try {
+            if (backend === 'save') {
+                // Drop all values in one pass to avoid re-resolving the reactive
+                // DB per key, then clean up the origin records.
+                const db = getDatabase()
+                db.pluginCustomStorage ??= {}
+                for (const e of targets) delete db.pluginCustomStorage[e.key]
+                for (const e of targets) await removeOwner('save', e.key)
+            } else {
+                for (const e of targets) await backendRemove(e.key)
+            }
+            detailOpen = false
+            await load()
+            notifySuccess(language.pluginStorageBulkDeleted(targets.length))
+        } catch (e) {
+            notifyError(e instanceof Error ? e.message : String(e))
+            // Re-sync the UI to whatever actually got removed on partial failure.
+            await load()
+        }
+    }
+
     // Load on mount and whenever the backend tab changes; reset search per tab.
     let loadedIndex = -1
     $effect(() => {
@@ -348,15 +391,28 @@
     </div>
 {/if}
 
-<!-- Count + refresh -->
+<!-- Count + bulk delete + refresh -->
 <div class="flex items-center justify-between mb-2">
     <span class="text-textcolor2 text-xs">
         <ShBadge variant="secondary">{filtered.length}</ShBadge> / {entries.length} keys
     </span>
-    <ShButton variant="ghost" size="sm" onclick={load} disabled={loading}>
-        <RefreshCwIcon size={14} class={loading ? 'animate-spin' : ''} />
-        {language.pluginStorageRefresh}
-    </ShButton>
+    <div class="flex items-center gap-1">
+        <ShButton
+            variant="destructive"
+            size="sm"
+            onclick={removeFiltered}
+            disabled={loading || filtered.length === 0}
+        >
+            <Trash2Icon size={14} />
+            {isFiltered
+                ? language.pluginStorageBulkDeleteShown(filtered.length)
+                : language.pluginStorageBulkDeleteAll(filtered.length)}
+        </ShButton>
+        <ShButton variant="ghost" size="sm" onclick={load} disabled={loading}>
+            <RefreshCwIcon size={14} class={loading ? 'animate-spin' : ''} />
+            {language.pluginStorageRefresh}
+        </ShButton>
+    </div>
 </div>
 
 <!-- List -->

@@ -331,8 +331,8 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 /* Track */
@@ -340,30 +340,31 @@ body {
   background: transparent;
 }
 
-/* Handle */
+/* Handle — global auto-hide. Transparent by default; fades in on hover.
+   The tint is a translucent form of the theme's secondary text color, so it
+   adapts to every theme. `visibility`/`opacity` are avoided: on a webkit thumb
+   they make Chrome fall back to the default system gray bar instead of hiding,
+   so we toggle the thumb's background-color instead. */
 ::-webkit-scrollbar-thumb {
-  background: rgba(136, 136, 136, 0.5);
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.3s linear;
 }
 
-/* Handle on hover */
+/* Hovering any scrollable area (hover bubbles to ancestors) reveals the thumb. */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--color-textcolor2) 35%, transparent);
+}
+
+/* Stronger when pointing directly at the thumb. */
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(85, 85, 85, 0.5);
+  background-color: color-mix(in srgb, var(--color-textcolor2) 55%, transparent);
 }
 
-.n-scroll::-webkit-scrollbar-thumb {
-  visibility: hidden;
-  opacity: 0;
-  transition: visibility 0.5s, opacity 0.5s linear;
-}
-
-.n-scroll:hover::-webkit-scrollbar-thumb {
-  visibility: visible;
-  opacity: 1;
-}
-
-.n-scroll:focus::-webkit-scrollbar-thumb {
-  visibility: visible;
-  opacity: 1;
+/* Firefox: thin neutral scrollbar (inherits from root; no per-element auto-hide). */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-textcolor2) 35%, transparent) transparent;
 }
 
 * {

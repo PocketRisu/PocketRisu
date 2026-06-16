@@ -1,6 +1,7 @@
 {
   "id": "anthropic-compatible:custom-noauth",
   "version": 1,
+  "updatedAt": 1781025869643,
   "displayName": "Anthropic Compatible (Custom, no auth)",
   "providerBaseId": "anthropic-compatible",
   "description": "Generic Anthropic Messages endpoint without authentication. Use for local bridges (e.g. a GitHub Copilot proxy on localhost) or any gateway that does not require an API key.",

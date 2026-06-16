@@ -1,4 +1,5 @@
 export type {
+    AdapterCacheContext,
     AdapterChatMessage,
     AdapterChatOptions,
     AdapterChatResponse,

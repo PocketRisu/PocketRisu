@@ -17,7 +17,7 @@
   ],
   "sortOrder": 115,
   "modelId": "gpt-5.1",
-  "updatedAt": 1780591128566,
+  "updatedAt": 1781103554581,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -301,7 +301,7 @@
       },
       {
         "key": "reasoning_effort",
-        "widget": "select",
+        "widget": "combobox",
         "visibility": "basic",
         "group": "reasoning",
         "order": 1

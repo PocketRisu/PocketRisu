@@ -18,7 +18,7 @@
   ],
   "sortOrder": 321,
   "modelId": "gemma-4-26b-a4b-it",
-  "updatedAt": 1780591762548,
+  "updatedAt": 1781283722406,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"

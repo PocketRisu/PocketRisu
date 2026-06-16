@@ -41,8 +41,10 @@ export const accessibilitySettingsItems: SettingItem[] = [
         helpKey: 'sendKeyMobile',
         options: {
             selectOptions: [
-                { value: 'button', labelKey: 'sendKeyButton' },
                 { value: 'enter', labelKey: 'sendKeyEnter' },
+                { value: 'ctrl-enter', labelKey: 'sendKeyCtrlEnter' },
+                { value: 'shift-enter', labelKey: 'sendKeyShiftEnter' },
+                { value: 'button', labelKey: 'sendKeyButton' },
             ],
         },
         keywords: ['send', 'enter', 'keyboard', 'submit', 'mobile']
@@ -78,6 +80,14 @@ export const accessibilitySettingsItems: SettingItem[] = [
         bindKey: 'longPressToPopupEditor',
         helpKey: 'longPressToPopupEditor',
         keywords: ['long', 'press', 'popup', 'editor']
+    },
+    {
+        id: 'acc.showInputActionBar',
+        type: 'check',
+        labelKey: 'showInputActionBar',
+        bindKey: 'showInputActionBar',
+        helpKey: 'showInputActionBar',
+        keywords: ['input', 'action', 'bar', 'toolbar', 'copy', 'reset', 'expand', 'editor']
     },
     {
         id: 'acc.enableDragPartialEdit',
@@ -203,6 +213,24 @@ export const accessibilitySettingsItems: SettingItem[] = [
         }
     },
     {
+        id: 'acc.chatLoadInitialPages',
+        type: 'number',
+        labelKey: 'chatLoadInitialPages',
+        bindKey: 'chatLoadInitialPages',
+        helpKey: 'chatLoadInitialPages',
+        options: { min: 1 },
+        keywords: ['chat', 'load', 'initial', 'pages', 'scroll', 'message', 'count'],
+    },
+    {
+        id: 'acc.chatLoadAdditionalPages',
+        type: 'number',
+        labelKey: 'chatLoadAdditionalPages',
+        bindKey: 'chatLoadAdditionalPages',
+        helpKey: 'chatLoadAdditionalPages',
+        options: { min: 1 },
+        keywords: ['chat', 'load', 'additional', 'pages', 'scroll', 'message', 'count'],
+    },
+    {
         id: 'acc.createFolderOnBranch',
         type: 'check',
         labelKey: 'createFolderOnBranch',
@@ -217,6 +245,13 @@ export const accessibilitySettingsItems: SettingItem[] = [
         bindKey: 'hamburgerButtonBottom',
         helpKey: 'hamburgerButtonBottom',
         keywords: ['hamburger', 'button', 'bottom', 'menu', 'sidebar', 'accessibility'],
+    },
+    {
+        id: 'acc.moveInsteadOfCopyOnCMPConvert',
+        type: 'check',
+        labelKey: 'moveInsteadOfCopyOnCMPConvert',
+        bindKey: 'moveInsteadOfCopyOnCMPConvert',
+        keywords: ['move', 'instead', 'of', 'copy', 'on', 'CMP', 'convert'],
     },
     {
         id: 'acc.hideLeftBarCollapseButton',
@@ -336,6 +371,7 @@ export const accessibilityEditingItems = pick([
     'acc.enableBlockPartialEdit',
     'acc.enableDragPartialEdit',
     'acc.longPressToPopupEditor',
+    'acc.showInputActionBar',
 ]);
 
 export const accessibilityScrollItems = pick([
@@ -343,6 +379,8 @@ export const accessibilityScrollItems = pick([
     'acc.alwaysScrollToNewMessage',
     'acc.newMessageButtonStyle',
     'acc.nodeOnlyScrollButtonType',
+    'acc.chatLoadInitialPages',
+    'acc.chatLoadAdditionalPages',
 ]);
 
 export const accessibilitySidebarItems = pick([
@@ -369,4 +407,5 @@ export const accessibilityOtherItems = pick([
     'acc.showTranslationLoading',
     'acc.disableMobileDragDrop',
     'acc.disableToggleBinding',
+    'acc.moveInsteadOfCopyOnCMPConvert',
 ]);

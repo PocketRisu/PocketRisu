@@ -1,0 +1,56 @@
+{
+  "id": "lightning-ai:kimi-k25",
+  "version": 1,
+  "updatedAt": 1781104476429,
+  "displayName": "Kimi K2.5",
+  "displayNameI18n": {
+    "ko": "Kimi K2.5"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Kimi K2.5 via Lightning AI (lightning-ai/kimi-k2.5).",
+  "descriptionI18n": {
+    "ko": "Kimi K2.5 (Lightning AI, lightning-ai/kimi-k2.5)."
+  },
+  "tags": [
+    "lightning-ai",
+    "kimi"
+  ],
+  "sortOrder": 731,
+  "modelId": "lightning-ai/kimi-k2.5",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 256000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

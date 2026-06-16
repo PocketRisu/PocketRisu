@@ -2,6 +2,7 @@ import { changeFullscreen, checkNullish, sleep } from "./util"
 import { v4 as uuidv4, v4 } from 'uuid';
 import { tick } from "svelte";
 import { get } from "svelte/store";
+import streamSaver from 'streamsaver';
 import { setDatabase, type Database, defaultSdDataFunc, getDatabase, appVer, nodeOnlyVer, getCurrentCharacter, loadTogglesFromChat } from "./storage/database.svelte";
 import { checkRisuUpdate } from "./update";
 import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, selIdState, ReloadGUIPointer, bodyIntercepterStore, loadingOverlayStore, chatDeselected } from "./stores.svelte";
@@ -20,6 +21,7 @@ import { updateColorScheme, updateTextThemeAndCSS } from "./gui/colorscheme";
 import { language } from "src/lang";
 import { startObserveDom } from "./observer.svelte";
 import { updateGuisize } from "./gui/guisize";
+import { deepTouch } from "./gui/deepTouch.svelte";
 import { updateLorebooks } from "./characters";
 import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
@@ -511,7 +513,7 @@ export async function saveDb() {
                     key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
                     key !== 'plugins' && key !== 'pluginCustomStorage'
                 ) {
-                    $state.snapshot(DBState.db[key])
+                    deepTouch(DBState.db[key])
                 }
             }
             if (!didInitRootEffect) {
@@ -523,8 +525,8 @@ export async function saveDb() {
         })
         $effect(() => {
             DBState.db.botPresetsId
-            try { $state.snapshot(DBState.db.botPresets) } catch (e) {
-                console.warn('[Save] $state.snapshot(botPresets) failed:', e)
+            try { deepTouch(DBState.db.botPresets) } catch (e) {
+                console.warn('[Save] deepTouch(botPresets) failed:', e)
                 return
             }
             if (!didInitBotPresetEffect) {
@@ -535,8 +537,8 @@ export async function saveDb() {
             saveTimeoutExecute()
         })
         $effect(() => {
-            try { $state.snapshot(DBState.db.modules) } catch (e) {
-                console.warn('[Save] $state.snapshot(modules) failed:', e)
+            try { deepTouch(DBState.db.modules) } catch (e) {
+                console.warn('[Save] deepTouch(modules) failed:', e)
                 return
             }
             if (!didInitModulesEffect) {
@@ -547,7 +549,7 @@ export async function saveDb() {
             saveTimeoutExecute()
         })
         $effect(() => {
-            $state.snapshot(DBState.db.plugins)
+            deepTouch(DBState.db.plugins)
             if (!didInitPluginsEffect) {
                 didInitPluginsEffect = true
                 return
@@ -556,7 +558,7 @@ export async function saveDb() {
             saveTimeoutExecute()
         })
         $effect(() => {
-            $state.snapshot(DBState.db.pluginCustomStorage)
+            deepTouch(DBState.db.pluginCustomStorage)
             if (!didInitPluginStorageEffect) {
                 didInitPluginStorageEffect = true
                 return
@@ -566,7 +568,7 @@ export async function saveDb() {
         })
         $effect(() => {
             const currentCharacterIds = (DBState?.db?.characters ?? []).map((character) => character?.chaId).filter(Boolean)
-            $state.snapshot(currentCharacterIds)
+            deepTouch(currentCharacterIds)
 
             const currentCharacterIdSet = new Set<string>(currentCharacterIds)
             for (const previousCharacterId of knownCharacterIds) {
@@ -580,11 +582,11 @@ export async function saveDb() {
                 for (const key in DBState.db.characters[selIdState]) {
                     // Exclude chats — chat changes are tracked via chat-specific server save, not database.bin
                     if (key !== 'chats') {
-                        $state.snapshot(DBState.db.characters[selIdState][key])
+                        deepTouch(DBState.db.characters[selIdState][key])
                     }
                 }
                 // Track stub metadata and chat ordering for database.bin persistence.
-                $state.snapshot(DBState.db.characters[selIdState].chats.map(c => ({
+                deepTouch(DBState.db.characters[selIdState].chats.map(c => ({
                     id: c.id,
                     name: c.name,
                     lastDate: c.lastDate,
@@ -606,7 +608,7 @@ export async function saveDb() {
             const activeChar = DBState?.db?.characters?.[selIdState]
             const activeChat = activeChar?.chats?.[activeChar?.chatPage]
             if (activeChat) {
-                $state.snapshot(activeChat)
+                deepTouch(activeChat)
             }
 
             const activeChaId = activeChar?.chaId ?? ''
@@ -1520,12 +1522,27 @@ export function getUncleanables(db: Database, uptype: 'basename' | 'pure' = 'bas
                     addUncleanable(asset[1])
                 }
             }
+            if(module.icon){
+                addUncleanable(module.icon)
+            }
         }
     }
 
     if (db.personas) {
         db.personas.map((v) => {
             addUncleanable(v.icon);
+
+            if(v.embeddedModule){
+                const assets = v.embeddedModule.assets
+                if (assets) {
+                    for (const asset of assets) {
+                        addUncleanable(asset[1])
+                    }
+                }
+                if(v.embeddedModule.icon){
+                    addUncleanable(v.embeddedModule.icon)
+                }
+            }
         });
     }
 
@@ -1723,7 +1740,6 @@ export class LocalWriter {
      * @returns {Promise<boolean>} - A promise that resolves to a boolean indicating success.
      */
     async init(name = 'Binary', ext = ['bin']): Promise<boolean> {
-        const streamSaver = await import('streamsaver')
         const writableStream = streamSaver.createWriteStream(name + '.' + ext[0])
         this.writer = writableStream.getWriter()
         return true

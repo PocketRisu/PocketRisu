@@ -2,6 +2,7 @@ import { changeFullscreen, checkNullish } from "./util"
 import { v4 as uuidv4 } from 'uuid';
 import { get } from "svelte/store";
 import { setDatabase, defaultSdDataFunc, getDatabase, changeToThemePreset } from "./storage/database.svelte";
+import { chatDraftKey, sweepOrphanDrafts } from "./storage/chatDraft";
 import { checkRisuUpdate } from "./update";
 import { fetchPublicStats } from "./publicStats";
 import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, bootBackupPromptStore } from "./stores.svelte";
@@ -478,6 +479,18 @@ async function checkNewFormat(): Promise<void> {
     }
     setDatabase(db);
     checkCharOrder();
+
+    // One-pass cleanup of composer drafts whose chat no longer exists (deleted
+    // chats/characters, trash purge, plugin/script removals). Replaces per-delete
+    // wiring: any orphan, however it was created, is swept here at boot.
+    const validDraftKeys = new Set<string>();
+    for (const char of db.characters) {
+        if (!char?.chaId) continue;
+        for (const chat of char.chats ?? []) {
+            if (chat?.id) validDraftKeys.add(chatDraftKey(char.chaId, chat.id));
+        }
+    }
+    void sweepOrphanDrafts(validDraftKeys);
 }
 
 /**

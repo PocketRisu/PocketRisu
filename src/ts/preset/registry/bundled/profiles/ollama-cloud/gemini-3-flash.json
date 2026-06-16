@@ -1,0 +1,63 @@
+{
+  "id": "ollama-cloud:gemini-3-flash",
+  "version": 1,
+  "updatedAt": 1781106547056,
+  "displayName": "Gemini 3 Flash",
+  "displayNameI18n": {
+    "ko": "Gemini 3 Flash"
+  },
+  "providerBaseId": "ollama-cloud",
+  "description": "Gemini 3 Flash hosted on Ollama Cloud (gemini-3-flash-preview:cloud).",
+  "descriptionI18n": {
+    "ko": "Gemini 3 Flash (Ollama Cloud 호스팅, gemini-3-flash-preview:cloud)."
+  },
+  "tags": [
+    "ollama",
+    "cloud",
+    "gemini"
+  ],
+  "sortOrder": 626,
+  "modelId": "gemini-3-flash-preview:cloud",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ollama.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ollama.com/library/gemini-3-flash-preview",
+    "https://docs.ollama.com/cloud"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 65536,
+    "notes": "Native model spec (1M context, text+image); Ollama Cloud may cap context per deployment and does not expose per-model limits via /v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준(1M 컨텍스트, text+image). Ollama Cloud는 배포별로 컨텍스트를 제한할 수 있고 /v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://ollama.com/library/gemini-3-flash-preview",
+      "https://ollama.com/search?c=cloud"
+    ]
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

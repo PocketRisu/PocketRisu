@@ -1,0 +1,304 @@
+{
+  "id": "lightning-ai",
+  "version": 1,
+  "displayName": "Lightning AI",
+  "adapterKind": "openai-compatible",
+  "authKinds": [
+    "bearer"
+  ],
+  "endpointKinds": [
+    "static"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json"
+  },
+  "defaultBody": {},
+  "requestSchema": [
+    {
+      "key": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "description": "Lightning AI API key.",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "Lightning AI API 키."
+      }
+    },
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Provider/model identifier (e.g. openai/gpt-5.4-2026-03-05).",
+      "required": true,
+      "enum": [
+        {
+          "value": "openai/gpt-5.4-2026-03-05",
+          "label": "OpenAI / GPT-5.4"
+        },
+        {
+          "value": "anthropic/claude-opus-4-8",
+          "label": "Anthropic / Claude Opus 4.8"
+        },
+        {
+          "value": "google/gemini-3.5-flash",
+          "label": "Google / Gemini 3.5 Flash"
+        },
+        {
+          "value": "lightning-ai/glm-5",
+          "label": "Lightning AI / GLM-5"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "공급자/모델 ID (예: openai/gpt-5.4-2026-03-05)."
+      }
+    },
+    {
+      "key": "temperature",
+      "type": "number",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "temperature"
+      }
+    },
+    {
+      "key": "top_p",
+      "type": "number",
+      "label": "Top P",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "top_p"
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "min": 1,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 8192
+    },
+    {
+      "key": "frequency_penalty",
+      "type": "number",
+      "label": "Frequency Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "frequency_penalty"
+      }
+    },
+    {
+      "key": "presence_penalty",
+      "type": "number",
+      "label": "Presence Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "presence_penalty"
+      }
+    },
+    {
+      "key": "stop",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "stop"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "seed"
+      }
+    },
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth for thinking models. Suggestions follow the gpt-5 family; type a custom value if your model uses a different scale. Only applies to reasoning-capable models.",
+      "enum": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra high"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning_effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. 제안값은 gpt-5 계열 기준이며, 다른 스케일을 쓰는 모델은 값을 직접 입력하세요. reasoning 지원 모델에만 적용."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "temperature",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "number-input",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 2
+      },
+      {
+        "key": "top_p",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 3
+      },
+      {
+        "key": "frequency_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 4
+      },
+      {
+        "key": "presence_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "stop",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 6
+      },
+      {
+        "key": "seed",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 7
+      },
+      {
+        "key": "reasoning_effort",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/docs/overview/model-apis",
+    "https://lightning.ai/api/v1/models"
+  ],
+  "limits": {
+    "known": false,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ],
+    "notes": "Model-dependent gateway. Context and output token limits vary by selected model, so PocketRisu uses a number input instead of a fixed-limit slider.",
+    "notesI18n": {
+      "ko": "모델별 게이트웨이. 컨텍스트·출력 토큰 한도가 선택 모델에 따라 달라, 고정 한도 슬라이더 대신 숫자 입력을 사용합니다."
+    }
+  }
+}

@@ -11,6 +11,7 @@ import { alertError, alertInput, alertNormal, alertSelect } from "../alert";
 import type { OpenAIChat } from "./index.svelte";
 import { HypaProcesser } from "./memory/hypamemory";
 import { requestChatData } from "./request/request";
+import { collectStreamingText } from "./request/shared";
 import { generateAIImage } from "./stableDiff";
 import { writeInlayImage } from "./files/inlays";
 import { runScripted } from "./scriptings";
@@ -1034,26 +1035,6 @@ export const requestAllowList = [
     'v2GetRequestStateLength',
     ...safeSubset
 ]
-
-async function collectStreamingText(stream: ReadableStream<{ [key: string]: string }>): Promise<string> {
-    const reader = stream.getReader()
-    let lastChunk = ''
-
-    while (true) {
-        const { done, value } = await reader.read()
-        if (value) {
-            const firstKey = Object.keys(value)[0]
-            if (firstKey) {
-                lastChunk = value[firstKey] ?? lastChunk
-            }
-        }
-        if (done) {
-            break
-        }
-    }
-
-    return lastChunk
-}
 
 export async function runTrigger(char:character,mode:triggerMode, arg:{
     chat: Chat,

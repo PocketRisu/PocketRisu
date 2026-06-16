@@ -120,6 +120,31 @@ export function applyAdditionalParameters<T extends Record<string, any>>(
     return body
 }
 
+// Drain a streaming response to its final text. Every chunk on the
+// requestDataResponse boundary carries the FULL accumulated text in its first
+// key (deltas are folded upstream), so the last chunk holds the complete reply.
+// Used by callers that requested a streaming wire request but want a single
+// string result (trigger/Lua collectors, per-preset decoupled streaming).
+export async function collectStreamingText(stream: ReadableStream<{ [key: string]: string }>): Promise<string> {
+    const reader = stream.getReader()
+    let lastChunk = ''
+
+    while (true) {
+        const { done, value } = await reader.read()
+        if (value) {
+            const firstKey = Object.keys(value)[0]
+            if (firstKey) {
+                lastChunk = value[firstKey] ?? lastChunk
+            }
+        }
+        if (done) {
+            break
+        }
+    }
+
+    return lastChunk
+}
+
 export function applyParameters(
     data: Record<string, any>,
     parameters: LLMParameter[],
