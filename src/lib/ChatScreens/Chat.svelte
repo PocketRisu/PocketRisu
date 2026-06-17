@@ -337,10 +337,8 @@
         {/if}
         {#if DBState.db.translatorType === 'llm' && translated}
             <button class="text-sm p-1 text-textcolor2 border-darkborderc float-end mr-2 my-1
-                            hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={translating}
+                            hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center"
                     onclick={() => {
-                        if(translating) return
                         retranslate = true
                     }}
             >
@@ -759,8 +757,7 @@
 
 {#snippet translationButton(showNames = false)}
     {#if DBState.db.translator !== '' && !blankMessage}
-        <button class={"flex items-center cursor-pointer hover:text-primary transition-colors button-icon-translate disabled:opacity-60 disabled:cursor-not-allowed " + (translated ? 'text-blue-400':'')} class:translating={translating} disabled={translating} onclick={async () => {
-            if(translating) return
+        <button class={"flex items-center cursor-pointer hover:text-primary transition-colors button-icon-translate " + (translated ? 'text-blue-400':'')} class:translating={translating} onclick={async () => {
             translated = !translated
         }}>
             <LanguagesIcon />

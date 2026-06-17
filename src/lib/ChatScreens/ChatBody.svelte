@@ -3,7 +3,7 @@
     import { DBState } from 'src/ts/stores.svelte'
     import { sleep } from "src/ts/util"
     import { alertError } from "../../ts/alert"
-    import { tick, untrack } from 'svelte'
+    import { tick } from 'svelte'
     import { addMetadataToElement, getDistance, ParseMarkdown, postTranslationParse, resolveInlayPlaceholders, trimMarkdown, type CbsConditions, type simpleCharacterArgument } from "../../ts/parser/parser.svelte"
     import { getLLMCache, translateHTML } from "../../ts/translator/translator"
     import { getModuleAssets } from "src/ts/process/modules";
@@ -102,16 +102,12 @@
                 }
             }
             if(retranslate || translated){
-                if(untrack(() => translating)){
-                    return lastParsed || data
-                }
-
                 if (DBState.db.showTranslationLoading) {
                     lastParsed = `<div style="display:flex;justify-content:center;align-items:center;height:48px;"><div style="animation: spin 1s linear infinite; border-radius: 50%; height: 32px; width: 32px; border: 2px solid #3b82f6; border-top: 2px solid transparent;"></div></div><style>@keyframes spin { to { transform: rotate(360deg); } }</style>`
                 }
 
                 let transResult
-
+                
                 if(DBState.db.translatorType === 'llm' && DBState.db.translateBeforeHTMLFormatting){
                     await sleep(100)
                     translating = true
@@ -125,9 +121,8 @@
                 else if(!DBState.db.legacyTranslation){
                     const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
                     translating = true
-                    const translatedHtml = await translateHTML(marked, false, charArg, chatID, retranslate)
+                    const translated = await postTranslationParse(await translateHTML(marked, false, charArg, chatID, retranslate))
                     translating = false
-                    const translated = await postTranslationParse(translatedHtml)
                     lastParsedQueue = translated
                     lastCharArg = charArg
                     transResult = translated
@@ -165,9 +160,7 @@
         }
         finally{
             //since trimMarkdown is fast, we don't need to cache it
-            if(lastParsedQueue !== ''){
-                lastParsed = lastParsedQueue
-            }
+            lastParsed = lastParsedQueue
         }
     }
 
