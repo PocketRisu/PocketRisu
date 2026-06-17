@@ -1,6 +1,6 @@
 import { Ollama } from 'ollama/dist/browser.mjs';
 import { language } from "../../../lang";
-import { globalFetch, fetchNative } from "../../globalApi.svelte";
+import { addFetchLog, globalFetch, fetchNative } from "../../globalApi.svelte";
 import { getModelInfo, LLMFlags, LLMFormat, type LLMModel } from "../../model/modellist";
 import { risuChatParser, risuEscape, risuUnescape } from "../../parser/parser.svelte";
 import { pluginProcess, pluginV2 } from "../../plugins/plugins.svelte";
@@ -586,7 +586,7 @@ function previewModelPreset(
 // chatId (= the message generationId) is threaded into fetchNative so the
 // request is recorded in the fetch log against the message — otherwise the
 // per-message "view log" shows "deleted log" for binding requests.
-function makeProxiedFetch(chatId?: string): typeof fetch {
+function makeProxiedFetch(chatId?: string, suppressFetchLog = false): typeof fetch {
     return ((input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
         return fetchNative(url, {
@@ -600,6 +600,7 @@ function makeProxiedFetch(chatId?: string): typeof fetch {
             networkRoute: isLocalNetworkUrl(url) ? 'local_network' : 'auto',
             // Honor the same request-timeout the classic path uses.
             requestTimeoutMs: (getDatabase().localNetworkTimeoutSec ?? 600) * 1000,
+            suppressFetchLog,
         })
     }) as typeof fetch
 }
@@ -897,6 +898,7 @@ async function createAnthropicPresetBatchJob(
         signal: options.abortSignal,
         customId: uuidv4(),
         chatId,
+        logFetch: addFetchLog,
     })
     if (submission.ok === false) {
         if (status?.report) {
@@ -1074,11 +1076,12 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         }
 
         if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
+            const batchFetchImpl = makeProxiedFetch(arg.chatId, true)
             return await createAnthropicPresetBatchJob(
                 preset,
-                { messages, abortSignal: abortSignal ?? undefined, fetchImpl },
+                { messages, abortSignal: abortSignal ?? undefined, fetchImpl: batchFetchImpl },
                 credential,
-                fetchImpl,
+                batchFetchImpl,
                 arg.chatId,
                 { report: reportStatus, genId, kind: statusKind },
             )

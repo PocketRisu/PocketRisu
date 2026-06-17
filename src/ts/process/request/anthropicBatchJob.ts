@@ -201,7 +201,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                 method: 'POST',
                 headers: this.prepared.headers,
                 body: '{}',
-            }, this.logFetch, this.chatId)
+            }, undefined, this.chatId)
         } catch (e) {
             console.error('[ModelPreset] Anthropic batch cancel failed', e)
         }
@@ -233,7 +233,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                         method: 'GET',
                         headers: this.prepared.headers,
                         signal: this.cancelRequested ? undefined : options.signal ?? undefined,
-                    }, this.logFetch, this.chatId)
+                    }, undefined, this.chatId)
                 } catch (e) {
                     if (options.signal?.aborted || this.cancelRequested) continue
                     return { type: 'fail', result: e instanceof Error ? e.message : String(e) }

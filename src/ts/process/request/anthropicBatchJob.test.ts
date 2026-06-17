@@ -154,9 +154,9 @@ describe('Anthropic preset batch jobs', () => {
         expect(statusCall?.signal).toBeNull()
     })
 
-    test('logs create, status, cancel, and results bodies without consuming responses', async () => {
+    test('logs submit and results bodies without consuming responses', async () => {
         const logs: AnthropicBatchFetchLogEntry[] = []
-        const { fetchImpl } = captureFetch((call) => {
+        const { fetchImpl, calls } = captureFetch((call) => {
             if (call.url.endsWith('/cancel')) return jsonResponse({ id: 'batch_123', processing_status: 'canceling' })
             if (call.url.endsWith('/results')) return textResponse(successJsonl('Logged final text'))
             if (call.url.endsWith('/batch_123')) return jsonResponse({ processing_status: 'ended' })
@@ -180,18 +180,14 @@ describe('Anthropic preset batch jobs', () => {
         expect(result).toEqual({ type: 'success', result: 'Logged final text' })
         expect(logs.map((log) => log.url)).toEqual([
             'https://api.anthropic.com/v1/messages/batches',
-            'https://api.anthropic.com/v1/messages/batches/batch_123/cancel',
-            'https://api.anthropic.com/v1/messages/batches/batch_123',
             'https://api.anthropic.com/v1/messages/batches/batch_123/results',
         ])
+        expect(calls.some((call) => call.url.endsWith('/cancel'))).toBe(true)
+        expect(calls.some((call) => call.url.endsWith('/batch_123') && call.method === 'GET')).toBe(true)
         expect(logs[0].body).toContain('custom-1')
         expect(logs[0].response).toContain('batch_123')
-        expect(logs[1].body).toBe('{}')
-        expect(logs[1].response).toContain('canceling')
-        expect(logs[2].body).toBe('')
-        expect(logs[2].response).toContain('ended')
-        expect(logs[3].body).toBe('')
-        expect(logs[3].response).toContain('Logged final text')
+        expect(logs[1].body).toBe('')
+        expect(logs[1].response).toContain('Logged final text')
         expect(logs.every((log) => log.success === true && log.status === 200)).toBe(true)
     })
 })
