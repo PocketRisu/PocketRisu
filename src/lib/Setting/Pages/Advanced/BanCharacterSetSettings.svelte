@@ -18,6 +18,7 @@
 </script>
 
 <Accordion styled name={language.banCharacterset}>
+    <p class="mb-2 text-sm text-textcolor2">{language.banCharactersetDesc}</p>
     {#each characterSets as set}
         <Button styled={DBState.db.banCharacterset.includes(set) ? 'primary' : "outlined"} onclick={(e) => {
             if (DBState.db.banCharacterset.includes(set)) {

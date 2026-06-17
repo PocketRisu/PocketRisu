@@ -1362,6 +1362,7 @@ export const languageKorean = {
     "이 플러그인은 {{plugin_version}} 버전입니다. 이 버전의 PocketRisu와 호환되지 않습니다. 플러그인을 {{required_version}} 버전으로 업데이트하세요.",
   imageTranslation: "이미지 번역",
   banCharacterset: "문자 집합으로 자동 재생성",
+  banCharactersetDesc: "응답에 선택한 문자 집합이 포함되면 자동으로 다시 생성합니다. 배치 작업은 결과가 몇 분 걸릴 수 있어 자동 재생성을 수행하지 않습니다. 이 재시도 동작이 필요하면 배치가 아닌 요청을 사용하세요.",
   realmDirectOpen: "RisuRealm 미리보기에서 바로 열기",
   showPromptComparison: "프롬프트 비교 보기",
   inlayErrorResponse: "인레이 오류 응답",

@@ -1253,6 +1253,7 @@ export const languageEnglish = {
         "This is {{plugin_version}} version of the plugin. which is not compatible with this version of PocketRisu. please update the plugin to {{required_version}} version.",
     imageTranslation: "Image Translation",
     banCharacterset: "Auto Regenerate On Characterset",
+    banCharactersetDesc: "Automatically retries when a response contains the selected character set. Batch jobs do not auto-regenerate because batch results can take several minutes; use non-batch requests if this retry behavior is required.",
     realmDirectOpen: "Directly open character in RisuRealm",
     showPromptComparison: "Show Prompt Comparison",
     inlayErrorResponse: "Inlay Error Response",
