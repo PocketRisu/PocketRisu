@@ -27,6 +27,7 @@ import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import { isLocalNetworkUrl } from "./network/localNetwork";
 import { decodeProxyJobWsChunk, formatProxyStreamErrorMessage, parseProxyJobWsEvent } from "./network/proxyJobWs";
+import { shouldLogFetch } from "./fetchLogPolicy";
 
 export const forageStorage = new AutoStorage()
 
@@ -2047,7 +2048,7 @@ export async function fetchNative(url: string, arg: {
         throw new Error('Invalid body type')
     }
 
-    if (!arg.suppressFetchLog) {
+    if (shouldLogFetch(arg)) {
         addFetchLog({
             body: realBody ? new TextDecoder().decode(realBody) : '',
             headers: arg.headers,

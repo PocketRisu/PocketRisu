@@ -71,6 +71,10 @@ function successJsonl(text = 'Done'): string {
     }) + '\n'
 }
 
+function expiredJsonl(): string {
+    return JSON.stringify({ result: { type: 'expired' } }) + '\n'
+}
+
 describe('Anthropic preset batch jobs', () => {
     test('builds batch URLs from messages endpoint URLs', () => {
         expect(anthropicBatchBaseUrl('https://api.anthropic.com/v1/messages'))
@@ -189,5 +193,35 @@ describe('Anthropic preset batch jobs', () => {
         expect(logs[1].body).toBe('')
         expect(logs[1].response).toContain('Logged final text')
         expect(logs.every((log) => log.success === true && log.status === 200)).toBe(true)
+    })
+
+    test('logs submit and final expired results without status polling noise', async () => {
+        const logs: AnthropicBatchFetchLogEntry[] = []
+        const { fetchImpl, calls } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse(expiredJsonl())
+            if (call.url.endsWith('/batch_123')) return jsonResponse({ processing_status: 'ended' })
+            return jsonResponse({ id: 'batch_123' })
+        })
+
+        const submitted = await submitAnthropicBatchJob({
+            prepared: prepared(),
+            fetchImpl,
+            customId: 'custom-1',
+            sleep: async () => {},
+            logFetch: (entry) => logs.push(entry),
+        })
+
+        expect(submitted.ok).toBe(true)
+        if (submitted.ok === false) return
+
+        const result = await submitted.job.wait()
+
+        expect(result).toEqual({ type: 'fail', result: 'Anthropic batch request expired' })
+        expect(logs.map((log) => log.url)).toEqual([
+            'https://api.anthropic.com/v1/messages/batches',
+            'https://api.anthropic.com/v1/messages/batches/batch_123/results',
+        ])
+        expect(calls.some((call) => call.url.endsWith('/batch_123') && call.method === 'GET')).toBe(true)
+        expect(logs[1].response).toContain('expired')
     })
 })
