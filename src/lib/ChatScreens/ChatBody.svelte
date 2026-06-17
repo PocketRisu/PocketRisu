@@ -3,7 +3,7 @@
     import { DBState } from 'src/ts/stores.svelte'
     import { sleep } from "src/ts/util"
     import { alertError } from "../../ts/alert"
-    import { tick } from 'svelte'
+    import { tick, untrack } from 'svelte'
     import { addMetadataToElement, getDistance, ParseMarkdown, postTranslationParse, resolveInlayPlaceholders, trimMarkdown, type CbsConditions, type simpleCharacterArgument } from "../../ts/parser/parser.svelte"
     import { getLLMCache, translateHTML } from "../../ts/translator/translator"
     import { getModuleAssets } from "src/ts/process/modules";
@@ -41,6 +41,7 @@
     let lastParsed = ''
     let lastCharArg:string|simpleCharacterArgument = null
     let lastChatId = -10
+    let inflightTranslation: Promise<string> | null = null
 
     function getCbsCondition(){
         try{
@@ -102,39 +103,75 @@
                 }
             }
             if(retranslate || translated){
+                if(untrack(() => translating) && inflightTranslation){
+                    return inflightTranslation
+                }
+
                 if (DBState.db.showTranslationLoading) {
                     lastParsed = `<div style="display:flex;justify-content:center;align-items:center;height:48px;"><div style="animation: spin 1s linear infinite; border-radius: 50%; height: 32px; width: 32px; border: 2px solid #3b82f6; border-top: 2px solid transparent;"></div></div><style>@keyframes spin { to { transform: rotate(360deg); } }</style>`
                 }
 
                 let transResult
-                
+
                 if(DBState.db.translatorType === 'llm' && DBState.db.translateBeforeHTMLFormatting){
-                    await sleep(100)
-                    translating = true
-                    data = await translateHTML(data, false, charArg, chatID, retranslate)
-                    translating = false
-                    const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
-                    lastParsedQueue = marked
-                    lastCharArg = charArg
-                    transResult = marked
+                    inflightTranslation = (async () => {
+                        await sleep(100)
+                        translating = true
+                        let translatedData = ''
+                        try {
+                            translatedData = await translateHTML(data, false, charArg, chatID, retranslate)
+                        }
+                        finally {
+                            translating = false
+                        }
+                        const marked = await ParseMarkdown(translatedData, charArg, mode, chatID, getCbsCondition())
+                        lastParsedQueue = marked
+                        lastCharArg = charArg
+                        return marked
+                    })()
                 }
                 else if(!DBState.db.legacyTranslation){
-                    const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
-                    translating = true
-                    const translated = await postTranslationParse(await translateHTML(marked, false, charArg, chatID, retranslate))
-                    translating = false
-                    lastParsedQueue = translated
-                    lastCharArg = charArg
-                    transResult = translated
+                    inflightTranslation = (async () => {
+                        
+                        translating = true
+                        let translatedHtml = ''
+                        let translated = ''
+                        try {
+                            const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
+                            translatedHtml = await translateHTML(marked, false, charArg, chatID, retranslate)
+                            translated = await postTranslationParse(translatedHtml)
+                        }
+                        finally {
+                            translating = false
+                        }
+                        
+                        lastParsedQueue = translated
+                        lastCharArg = charArg
+                        return translated
+                    })()
                 }
                 else{
-                    const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
-                    translating = true
-                    const translated = await translateHTML(marked, false, charArg, chatID, retranslate)
-                    translating = false
-                    lastParsedQueue = translated
-                    lastCharArg = charArg
-                    transResult = translated
+                    inflightTranslation = (async () => {
+                        translating = true
+                        let translated = ''
+                        try {
+                            const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
+                            translated = await translateHTML(marked, false, charArg, chatID, retranslate)
+                        }
+                        finally {
+                            translating = false
+                        }
+                        lastParsedQueue = translated
+                        lastCharArg = charArg
+                        return translated
+                    })()
+                }
+
+                try {
+                    transResult = await inflightTranslation
+                }
+                finally {
+                    inflightTranslation = null
                 }
 
                 setTimeout(() => {
@@ -160,7 +197,9 @@
         }
         finally{
             //since trimMarkdown is fast, we don't need to cache it
-            lastParsed = lastParsedQueue
+            if(lastParsedQueue !== ''){
+                lastParsed = lastParsedQueue
+            }
         }
     }
 

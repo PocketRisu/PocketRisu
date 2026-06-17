@@ -337,8 +337,10 @@
         {/if}
         {#if DBState.db.translatorType === 'llm' && translated}
             <button class="text-sm p-1 text-textcolor2 border-darkborderc float-end mr-2 my-1
-                            hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center"
+                            hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={translating}
                     onclick={() => {
+                        if(translating) return
                         retranslate = true
                     }}
             >
@@ -347,8 +349,10 @@
                     {language.retranslate}
                 </span>
             </button>
-            <button class={"text-sm p-1 border-darkborderc float-end mr-2 my-1 hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center " + (editTranslationMode ? 'text-blue-400' : 'text-textcolor2')}
+            <button class={"text-sm p-1 border-darkborderc float-end mr-2 my-1 hover:ring-darkbutton hover:ring-3 rounded-md hover:text-textcolor transition-all flex justify-center items-center disabled:opacity-60 disabled:cursor-not-allowed " + (editTranslationMode ? 'text-blue-400' : 'text-textcolor2')}
+                    disabled={translating}
                     onclick={() => {
+                        if(translating) return
                         if(editTranslationMode){
                             saveTranslationEdit()
                         }
@@ -757,7 +761,8 @@
 
 {#snippet translationButton(showNames = false)}
     {#if DBState.db.translator !== '' && !blankMessage}
-        <button class={"flex items-center cursor-pointer hover:text-primary transition-colors button-icon-translate " + (translated ? 'text-blue-400':'')} class:translating={translating} onclick={async () => {
+        <button class={"flex items-center cursor-pointer hover:text-primary transition-colors button-icon-translate disabled:opacity-60 disabled:cursor-not-allowed " + (translated ? 'text-blue-400':'')} class:translating={translating} disabled={translating} onclick={async () => {
+            if(translating) return
             translated = !translated
         }}>
             <LanguagesIcon />
@@ -767,7 +772,8 @@
         </button>
     {/if}
     {#if idx > -1}
-        <button class={"flex items-center hover:text-primary transition-colors button-icon-edit "+(editMode?'text-blue-400':'')} onclick={() => {
+        <button class={"flex items-center hover:text-primary transition-colors button-icon-edit disabled:opacity-60 disabled:cursor-not-allowed "+(editMode?'text-blue-400':'')} disabled={translating} onclick={() => {
+            if(translating) return
             if(!editMode){
                 editMode = true
             }
@@ -789,18 +795,19 @@
     {#if (rerollIcon || altGreeting) && role !== 'user'}
         {#if altGreeting}
             <!-- First message: ← counter → -->
-            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-unreroll" onclick={unReroll}>
+            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-unreroll disabled:opacity-60 disabled:cursor-not-allowed" disabled={translating} onclick={() => { if(translating) return; unReroll() }}>
                 <ArrowLeft size={22}/>
             </button>
             {#if !DBState.db.hideMessagePageCount}
                 <span class="flex items-center text-xs text-textcolor2 shrink overflow-hidden whitespace-nowrap min-w-0">{currentPage}/{totalPages}</span>
             {/if}
-            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll" onclick={onReroll}>
+            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll disabled:opacity-60 disabled:cursor-not-allowed" disabled={translating} onclick={() => { if(translating) return; onReroll() }}>
                 <ArrowRight size={22}/>
             </button>
         {:else}
             <!-- Normal messages: ← counter → ↻ -->
-            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-unreroll" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} onclick={async () => {
+            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-unreroll disabled:opacity-60 disabled:cursor-not-allowed" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} disabled={translating} onclick={async () => {
+                if(translating) return
                 if (totalPages <= 1) {
                     if (!DBState.db.confirmReroll || await alertConfirm(language.noSwipesRerollConfirm)) onReroll()
                 } else {
@@ -812,7 +819,8 @@
             {#if !DBState.db.hideMessagePageCount}
                 <span class="flex items-center text-xs text-textcolor2 shrink overflow-hidden whitespace-nowrap min-w-0" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'}>{currentPage}/{totalPages}</span>
             {/if}
-            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} onclick={async () => {
+            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll disabled:opacity-60 disabled:cursor-not-allowed" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} disabled={translating} onclick={async () => {
+                if(translating) return
                 if (totalPages <= 1) {
                     if (!DBState.db.confirmReroll || await alertConfirm(language.noSwipesRerollConfirm)) onReroll()
                 } else {
@@ -821,7 +829,8 @@
             }}>
                 <ArrowRight size={22}/>
             </button>
-            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} onclick={async () => {
+            <button class="flex items-center shrink-0 hover:text-primary transition-colors button-icon-reroll disabled:opacity-60 disabled:cursor-not-allowed" class:dyna-icon={rerollIcon === 'dynamic' || rerollIcon === 'force'} class:force-show={rerollIcon === 'force'} disabled={translating} onclick={async () => {
+                if(translating) return
                 if (!DBState.db.confirmReroll || await alertConfirm(language.rerollConfirm)) onReroll()
             }}>
                 <RefreshCcwIcon size={20}/>
