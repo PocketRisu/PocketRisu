@@ -476,7 +476,6 @@ import { isMobile } from 'src/ts/platform'
             let msg = cha.pop()
             if(!msg) return
         }
-        const generationStartMessageCount = cha.length
         DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = cha
         const generated = await sendChatMain()
 

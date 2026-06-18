@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { AdapterPreparedRequest } from 'src/ts/preset/adapter'
-import { AnthropicBatchJob, anthropicBatchBaseUrl, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
+import { AnthropicBatchJob, anthropicBatchBaseUrl, anthropicBatchHasUnsupportedTools, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
 
 interface CapturedCall {
     url: string
@@ -149,6 +149,22 @@ describe('Anthropic preset batch jobs', () => {
                 },
             }],
         })
+    })
+
+    test('rejects prepared batch requests that contain tools', () => {
+        expect(anthropicBatchHasUnsupportedTools(prepared({
+            body: {
+                ...prepared().body,
+                tools: [{ name: 'Dice', input_schema: { type: 'object' } }],
+            },
+        }))).toBe(true)
+
+        expect(anthropicBatchHasUnsupportedTools(prepared({
+            body: {
+                ...prepared().body,
+                system: 'You are helpful.\n\n<MCP Info>Name:Dice</MCP Info>',
+            },
+        }))).toBe(true)
     })
 
     test('polls until ended and parses successful JSONL results', async () => {

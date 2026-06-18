@@ -42,7 +42,7 @@ import {
     type RequestKind,
 } from "src/ts/status/requestStatus";
 import type { ProviderRequestJob } from './providerJob';
-import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, previewAnthropicBatchRequest, submitAnthropicBatchJob } from './anthropicBatchJob';
+import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, anthropicBatchHasUnsupportedTools, previewAnthropicBatchRequest, submitAnthropicBatchJob } from './anthropicBatchJob';
 import { ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS, wrapAnthropicBatchStatusJob } from './anthropicBatchStatusJob';
 import { safeStatus } from './safeStatus';
 
@@ -676,6 +676,11 @@ function requestStatusText(key: keyof typeof language.requestStatus, fallback: s
     return typeof text === 'string' ? text : fallback
 }
 
+function anthropicBatchToolsUnsupportedText(): string {
+    return language.errors.anthropicBatchToolsUnsupported
+        ?? 'Anthropic batch jobs do not support tools. Disable Anthropic batch mode or remove MCP/tools from the request.'
+}
+
 // Per-preset streaming resolution. Independent of the global db.useStreaming:
 // the preset's own on/off decides (default off). Forced off when the profile
 // does not declare the 'streaming' capability, or when the caller opted out
@@ -741,11 +746,10 @@ function hasPresetBodyValue(preset: ModelPreset, path: string, value: unknown): 
     return false
 }
 
-function shouldUseAnthropicPresetBatch(arg: RequestDataArgumentExtended, preset: ModelPreset, tools: AdapterToolDef[] | undefined): boolean {
+function shouldUseAnthropicPresetBatch(preset: ModelPreset): boolean {
     if (preset.profileSnapshot.adapterKind !== 'anthropic-messages') return false
     if (preset.profileSnapshot.providerBaseId !== 'anthropic') return false
-    if (tools !== undefined) return false
-    return getDatabase().claudeBatching === true || hasPresetBodyValue(preset, 'service_tier', 'batch')
+    return hasPresetBodyValue(preset, 'service_tier', 'batch')
 }
 
 async function createAnthropicPresetBatchJob(
@@ -768,13 +772,30 @@ async function createAnthropicPresetBatchJob(
             })
             addBadge(status.genId, {
                 key: 'batch',
-                text: requestStatusText('batchSubmitted', 'Anthropic batch submitted'),
+                text: requestStatusText('batchSubmitting', 'Anthropic batch submitting...'),
                 tone: 'info',
             })
         })
     }
     const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
     delete prepared.body.stream
+    if (anthropicBatchHasUnsupportedTools(prepared)) {
+        const message = anthropicBatchToolsUnsupportedText()
+        if (status?.report) {
+            safeStatus(() => {
+                addBadge(status.genId, {
+                    key: 'batch',
+                    text: requestStatusText('batchFailed', 'Anthropic batch failed'),
+                    tone: 'warn',
+                })
+                endStatus(status.genId, 'failed', {
+                    now: Date.now(),
+                    error: message,
+                })
+            })
+        }
+        return { type: 'fail', result: message, model: preset.name }
+    }
     const submission = await submitAnthropicBatchJob({
         prepared,
         fetchImpl,
@@ -801,6 +822,15 @@ async function createAnthropicPresetBatchJob(
             })
         }
         return { type: 'fail', result: submission.error, model: preset.name }
+    }
+    if (status?.report) {
+        safeStatus(() => {
+            addBadge(status.genId, {
+                key: 'batch',
+                text: requestStatusText('batchSubmitted', 'Anthropic batch submitted'),
+                tone: 'info',
+            })
+        })
     }
     const job = status?.report ? wrapAnthropicBatchStatusJob(submission.job, status.genId) : submission.job
     return {
@@ -844,6 +874,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     const tools = (supportsTools && arg.tools && arg.tools.length > 0)
         ? arg.tools.map(toAdapterToolDef)
         : undefined
+    const wantsAnthropicBatch = shouldUseAnthropicPresetBatch(preset)
 
     // Vision gate: send attached images when the adapter implements image wire AND
     // either the profile declares the 'vision' capability OR the user opted in via
@@ -938,7 +969,10 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     if (arg.previewBody) {
         try {
             const prepared = await previewModelPreset(kind, preset, { messages, tools, fetchImpl }, credential)
-            if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
+            if (wantsAnthropicBatch) {
+                if (tools !== undefined || anthropicBatchHasUnsupportedTools(prepared)) {
+                    return { type: 'fail', result: anthropicBatchToolsUnsupportedText(), model: preset.name }
+                }
                 return {
                     type: 'success',
                     result: JSON.stringify(previewAnthropicBatchRequest(prepared)),
@@ -960,12 +994,16 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         // needs the full structured response (tool_calls) each turn, and
         // streaming tool_call assembly is a later stage. Status is NOT reported
         // for the tool path in v1 (it bypasses the pump); see the toast infra note.
+        if (wantsAnthropicBatch && tools !== undefined) {
+            return { type: 'fail', result: anthropicBatchToolsUnsupportedText(), model: preset.name }
+        }
+
         if (tools) {
             const { result, toolsExecuted } = await runModelPresetToolLoop(arg, preset, kind, credential, fetchImpl, messages, tools, abortSignal)
             return { type: 'success', result, model: preset.name, toolExecuted: toolsExecuted }
         }
 
-        if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
+        if (wantsAnthropicBatch) {
             const batchFetchImpl = makeProxiedFetch(arg.chatId, true)
             return await createAnthropicPresetBatchJob(
                 preset,

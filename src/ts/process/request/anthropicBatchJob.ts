@@ -164,6 +164,25 @@ export function previewAnthropicBatchRequest(prepared: AdapterPreparedRequest, c
     }
 }
 
+function containsLegacyMcpToolPrompt(value: unknown): boolean {
+    if (typeof value === 'string') return value.includes('<MCP Info')
+    if (Array.isArray(value)) return value.some(containsLegacyMcpToolPrompt)
+    if (isRecord(value)) return Object.values(value).some(containsLegacyMcpToolPrompt)
+    return false
+}
+
+export function anthropicBatchHasUnsupportedTools(prepared: AdapterPreparedRequest): boolean {
+    const body = prepared.body
+    if (!isRecord(body)) return false
+    if (body.tools !== undefined || body.tool_choice !== undefined || body.toolConfig !== undefined) {
+        return true
+    }
+    if (containsLegacyMcpToolPrompt(body.system) || containsLegacyMcpToolPrompt(body.messages)) {
+        return true
+    }
+    return false
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
