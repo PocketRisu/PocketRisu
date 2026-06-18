@@ -25,9 +25,9 @@ export type AnthropicBatchSubmitResult =
     | { ok: false; error: string }
 
 export interface AnthropicBatchFetchLogEntry {
-    body: any
+    body: unknown
     headers?: Record<string, string>
-    response: any
+    response: unknown
     success: boolean
     url: string
     resType?: string
@@ -50,7 +50,7 @@ function formatReasoning(reasoning?: AdapterReasoningPart[]): string {
     return `<Thoughts>\n${body}\n</Thoughts>\n\n`
 }
 
-export async function safeJson(response: Response): Promise<any> {
+export async function safeJson(response: Response): Promise<unknown> {
     try {
         return await response.json()
     } catch {
@@ -146,12 +146,31 @@ export function anthropicBatchBaseUrl(messagesUrl: string): string {
     return clean.endsWith('/messages') ? `${clean}/batches` : `${clean}/messages/batches`
 }
 
-function toAnthropicBatchParams(body: AdapterPreparedRequest['body']): AdapterPreparedRequest['body'] {
+export function toAnthropicBatchParams(body: AdapterPreparedRequest['body']): AdapterPreparedRequest['body'] {
     const params = { ...body }
     if (params.service_tier === 'batch') {
         delete params.service_tier
     }
     return params
+}
+
+export function previewAnthropicBatchRequest(prepared: AdapterPreparedRequest, customId = 'preview') {
+    const params = toAnthropicBatchParams(prepared.body)
+    delete params.stream
+    return {
+        url: anthropicBatchBaseUrl(prepared.url),
+        body: { requests: [{ custom_id: customId, params }] },
+        headers: prepared.headers,
+    }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function parseBatchStatus(payload: unknown): string | undefined {
+    if (!isRecord(payload)) return undefined
+    return typeof payload.processing_status === 'string' ? payload.processing_status : undefined
 }
 
 export class AnthropicBatchJob implements ProviderRequestJob {
@@ -245,14 +264,16 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                     return { type: 'fail', result: message }
                 }
 
-                const statusData = await safeJson(statusRes)
-                const processingStatus = typeof statusData?.processing_status === 'string'
-                    ? statusData.processing_status
-                    : undefined
+                const processingStatus = parseBatchStatus(await safeJson(statusRes))
+                if (!processingStatus) {
+                    const message = 'Invalid Anthropic batch status response'
+                    this.setStatus({ state: 'failed', message }, options.onStatus)
+                    return { type: 'fail', result: message }
+                }
                 if (processingStatus !== 'ended') {
                     this.setStatus({
                         state: this.cancelRequested ? 'cancel-requested' : 'running',
-                        message: processingStatus ? `Anthropic batch ${processingStatus}` : 'Anthropic batch running',
+                        message: `Anthropic batch ${processingStatus}`,
                     }, options.onStatus)
                     continue
                 }
@@ -283,13 +304,14 @@ export class AnthropicBatchJob implements ProviderRequestJob {
 
         const lines = (await batchRes.text()).split('\n').filter((line) => line.trim().length > 0)
         for (const line of lines) {
-            let batchData: any
+            let batchData: unknown
             try {
                 batchData = JSON.parse(line)
             } catch {
                 continue
             }
-            const result = batchData?.result
+            if (!isRecord(batchData) || !isRecord(batchData.result)) continue
+            const result = batchData.result
             switch (result?.type) {
                 case 'succeeded': {
                     const response = parseAnthropicMessage(result.message)
@@ -298,10 +320,11 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                     return { type: 'success', result: text }
                 }
                 case 'errored': {
-                    const error = result.error
-                    const message = error?.error?.message
-                        ? `${error.error.type}: ${error.error.message}`
-                        : JSON.stringify(error)
+                    const error = isRecord(result.error) ? result.error : undefined
+                    const innerError = error && isRecord(error.error) ? error.error : undefined
+                    const message = typeof innerError?.message === 'string'
+                        ? `${String(innerError.type)}: ${innerError.message}`
+                        : JSON.stringify(error) ?? 'Anthropic batch errored'
                     this.setStatus({ state: 'failed', message }, onStatus)
                     return { type: 'fail', result: message }
                 }
@@ -354,7 +377,7 @@ export async function submitAnthropicBatchJob(options: AnthropicBatchSubmitOptio
         return { ok: false, error: await safeResponseText(response) }
     }
     const payload = await safeJson(response)
-    if (typeof payload?.id !== 'string' || payload.id.length === 0) {
+    if (!isRecord(payload) || typeof payload.id !== 'string' || payload.id.length === 0) {
         return { ok: false, error: 'No batch id returned from Anthropic batch request' }
     }
     return {

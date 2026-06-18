@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { AdapterPreparedRequest } from 'src/ts/preset/adapter'
-import { AnthropicBatchJob, anthropicBatchBaseUrl, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
+import { AnthropicBatchJob, anthropicBatchBaseUrl, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
 
 interface CapturedCall {
     url: string
@@ -83,6 +83,34 @@ describe('Anthropic preset batch jobs', () => {
             .toBe('https://proxy.test/v1/messages/batches')
     })
 
+    test('builds preview batch request body from prepared Anthropic messages request', () => {
+        const req = prepared({
+            body: {
+                ...prepared().body,
+                service_tier: 'batch',
+                stream: true,
+            },
+        })
+
+        const preview = previewAnthropicBatchRequest(req)
+
+        expect(preview).toEqual({
+            url: 'https://api.anthropic.com/v1/messages/batches',
+            body: {
+                requests: [{
+                    custom_id: 'preview',
+                    params: {
+                        model: 'claude-test',
+                        messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+                        max_tokens: 100,
+                    },
+                }],
+            },
+            headers: req.headers,
+        })
+        expect(preview.headers).toBe(req.headers)
+    })
+
     test('submits a single-message batch request and returns a job', async () => {
         const { fetchImpl, calls } = captureFetch(() => jsonResponse({ id: 'batch_123' }))
         const req = prepared()
@@ -138,6 +166,23 @@ describe('Anthropic preset batch jobs', () => {
         expect(result).toEqual({ type: 'success', result: 'Final text' })
         expect(statuses).toEqual(['running', 'succeeded'])
         expect(job.getStatus()).toEqual({ state: 'succeeded', message: 'Anthropic batch completed' })
+    })
+
+    test.each([
+        ['malformed JSON', () => textResponse('{')],
+        ['missing processing_status', () => jsonResponse({ id: 'batch_123' })],
+    ])('fails fast when status response has %s', async (_case, responseFactory) => {
+        const { fetchImpl, calls } = captureFetch(() => responseFactory())
+        const statuses: string[] = []
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, { sleep: async () => {} })
+
+        const result = await job.wait({ onStatus: (status) => statuses.push(status.state) })
+
+        expect(result).toEqual({ type: 'fail', result: 'Invalid Anthropic batch status response' })
+        expect(job.getStatus()).toEqual({ state: 'failed', message: 'Invalid Anthropic batch status response' })
+        expect(statuses).toEqual(['failed'])
+        expect(calls).toHaveLength(1)
+        expect(calls[0].url).toBe('https://api.anthropic.com/v1/messages/batches/batch_123')
     })
 
     test('cancel requests provider cancellation but still accepts late success', async () => {

@@ -42,8 +42,9 @@ import {
     type RequestKind,
 } from "src/ts/status/requestStatus";
 import type { ProviderRequestJob } from './providerJob';
-import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, submitAnthropicBatchJob } from './anthropicBatchJob';
+import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, previewAnthropicBatchRequest, submitAnthropicBatchJob } from './anthropicBatchJob';
 import { ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS, wrapAnthropicBatchStatusJob } from './anthropicBatchStatusJob';
+import { safeStatus } from './safeStatus';
 
 export type ToolCall = {
     name: string;
@@ -656,10 +657,6 @@ setStatusTokenCounter(async (text) => {
     return encoded.length
 })
 
-function safeStatus(fn: () => void): void {
-    try { fn() } catch (e) { console.error('[ModelPreset] status publish failed', e) }
-}
-
 // Map the request pipeline's mode to the status-channel chip kind. submodel and
 // otherAx collapse to 'sub' (both are internal aux calls the user rarely
 // distinguishes; see the toast infra note).
@@ -747,7 +744,6 @@ function hasPresetBodyValue(preset: ModelPreset, path: string, value: unknown): 
 function shouldUseAnthropicPresetBatch(arg: RequestDataArgumentExtended, preset: ModelPreset, tools: AdapterToolDef[] | undefined): boolean {
     if (preset.profileSnapshot.adapterKind !== 'anthropic-messages') return false
     if (preset.profileSnapshot.providerBaseId !== 'anthropic') return false
-    if (arg.previewBody === true) return false
     if (tools !== undefined) return false
     return getDatabase().claudeBatching === true || hasPresetBodyValue(preset, 'service_tier', 'batch')
 }
@@ -942,6 +938,13 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     if (arg.previewBody) {
         try {
             const prepared = await previewModelPreset(kind, preset, { messages, tools, fetchImpl }, credential)
+            if (shouldUseAnthropicPresetBatch(arg, preset, tools)) {
+                return {
+                    type: 'success',
+                    result: JSON.stringify(previewAnthropicBatchRequest(prepared)),
+                    model: preset.name,
+                }
+            }
             return {
                 type: 'success',
                 result: JSON.stringify({ url: prepared.url, body: prepared.body, headers: prepared.headers }),

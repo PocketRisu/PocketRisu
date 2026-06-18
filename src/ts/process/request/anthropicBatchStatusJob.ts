@@ -1,12 +1,9 @@
 import { language } from '../../../lang'
 import { addBadge, endStatus, markPhase } from 'src/ts/status/requestStatus'
 import type { ProviderJobStatus, ProviderRequestJob } from './providerJob'
+import { safeStatus } from './safeStatus'
 
 export const ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS = 5 * 60 * 1000
-
-function safeStatus(fn: () => void): void {
-    try { fn() } catch (e) { console.error('[ModelPreset] status publish failed', e) }
-}
 
 function requestStatusText(key: keyof typeof language.requestStatus, fallback: string): string {
     const text = language.requestStatus[key]
