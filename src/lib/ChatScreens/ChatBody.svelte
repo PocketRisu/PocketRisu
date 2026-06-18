@@ -3,7 +3,7 @@
     import { DBState } from 'src/ts/stores.svelte'
     import { sleep } from "src/ts/util"
     import { alertError } from "../../ts/alert"
-    import { tick, untrack } from 'svelte'
+    import { tick } from 'svelte'
     import { addMetadataToElement, getDistance, ParseMarkdown, postTranslationParse, resolveInlayPlaceholders, trimMarkdown, type CbsConditions, type simpleCharacterArgument } from "../../ts/parser/parser.svelte"
     import { getLLMCache, translateHTML } from "../../ts/translator/translator"
     import { getModuleAssets } from "src/ts/process/modules";
@@ -103,7 +103,7 @@
                 }
             }
             if(retranslate || translated){
-                if(untrack(() => translating) && inflightTranslation){
+                if(inflightTranslation){
                     return inflightTranslation
                 }
 
@@ -115,55 +115,49 @@
 
                 if(DBState.db.translatorType === 'llm' && DBState.db.translateBeforeHTMLFormatting){
                     inflightTranslation = (async () => {
-                        await sleep(100)
                         translating = true
-                        let translatedData = ''
                         try {
-                            translatedData = await translateHTML(data, false, charArg, chatID, retranslate)
+                            await sleep(100)
+                            const translatedData = await translateHTML(data, false, charArg, chatID, retranslate)
+                            const marked = await ParseMarkdown(translatedData, charArg, mode, chatID, getCbsCondition())
+                            lastParsedQueue = marked
+                            lastCharArg = charArg
+                            return marked
                         }
                         finally {
                             translating = false
                         }
-                        const marked = await ParseMarkdown(translatedData, charArg, mode, chatID, getCbsCondition())
-                        lastParsedQueue = marked
-                        lastCharArg = charArg
-                        return marked
                     })()
                 }
                 else if(!DBState.db.legacyTranslation){
                     inflightTranslation = (async () => {
-                        
                         translating = true
-                        let translatedHtml = ''
-                        let translated = ''
                         try {
                             const marked = await ParseMarkdown(data, charArg, 'pretranslate', chatID, getCbsCondition())
-                            translatedHtml = await translateHTML(marked, false, charArg, chatID, retranslate)
-                            translated = await postTranslationParse(translatedHtml)
+                            const translatedHtml = await translateHTML(marked, false, charArg, chatID, retranslate)
+                            const translated = await postTranslationParse(translatedHtml)
+                            lastParsedQueue = translated
+                            lastCharArg = charArg
+                            return translated
                         }
                         finally {
                             translating = false
                         }
-                        
-                        lastParsedQueue = translated
-                        lastCharArg = charArg
-                        return translated
                     })()
                 }
                 else{
                     inflightTranslation = (async () => {
                         translating = true
-                        let translated = ''
                         try {
                             const marked = await ParseMarkdown(data, charArg, mode, chatID, getCbsCondition())
-                            translated = await translateHTML(marked, false, charArg, chatID, retranslate)
+                            const translated = await translateHTML(marked, false, charArg, chatID, retranslate)
+                            lastParsedQueue = translated
+                            lastCharArg = charArg
+                            return translated
                         }
                         finally {
                             translating = false
                         }
-                        lastParsedQueue = translated
-                        lastCharArg = charArg
-                        return translated
                     })()
                 }
 
