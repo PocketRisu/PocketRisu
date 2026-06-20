@@ -1143,7 +1143,7 @@ export const languageSpanish = {
     "all": "Todos",
     "showFolderNameInIcon": "Mostrar Nombre de Carpeta en Icono",
     "claudeCachingRetrival": "Recuperación de Caché de Claude",
-    "claudeCachingRetrivalDesc": "Extiende el tiempo de caché para Claude Caching, solicitando cada 4 minutos. esto puede reducir la tasa de fallos de caché, pero puede aumentar el costo si no se usa correctamente.",
+    "claudeCachingRetrivalDesc": "Extiende el tiempo de caché para Claude Caching, solicitando cada 4 minutos. esto puede reducir la tasa de fallos de caché, pero puede aumentar el costo si no se usa correctamente. No se aplica a la solicitud de preset.",
     "automaticCachePoint": "Punto de Caché Automático",
     "experimentalChatCompression": "Manejo Experimental de Datos de Chat",
     "loadingChatData": "Cargando Datos de Chat",

@@ -1217,7 +1217,7 @@ export const languageChineseTraditional = {
     "all": "全部",
     "showFolderNameInIcon": "在圖示中顯示資料夾名稱",
     "claudeCachingRetrival": "Claude 快取檢索",
-    "claudeCachingRetrivalDesc": "透過每 4 分鐘請求一次來延長 Claude 快取的保留時間。這可以降低快取未命中率，但如果不當使用可能會增加成本。",
+    "claudeCachingRetrivalDesc": "透過每 4 分鐘請求一次來延長 Claude 快取的保留時間。這可以降低快取未命中率，但如果不當使用可能會增加成本。不會套用至預設請求。",
     "automaticCachePoint": "自動快取點",
     "experimentalChatCompression": "對話資料壓縮（實驗性功能）",
     "loadingChatData": "正在載入對話資料",

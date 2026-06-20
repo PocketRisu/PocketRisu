@@ -48,6 +48,8 @@ export const languageKorean = {
     chatGuardPersistTitle: "기존 채팅 데이터 보호를 위해 저장을 중단했어요",
     chatGuardPersistDesc:
       "서버에서 손상된 채팅 구조를 감지하여 디스크 기록을 거부했어요. 최근 변경사항이 아직 디스크에 반영되지 않았을 수 있으니 새로고침 전에 다시 확인해주세요. 기존 데이터는 안전합니다.",
+    anthropicBatchToolsUnsupported:
+      "Anthropic 배치 작업은 도구를 지원하지 않습니다. Anthropic 배치 모드를 끄거나 요청에서 MCP/도구를 제거하세요.",
   },
   showHelp: "도움말 보기",
   help: helpKo,
@@ -1480,7 +1482,7 @@ export const languageKorean = {
   showFolderNameInIcon: "아이콘에 폴더 이름 표시",
   claudeCachingRetrival: "Claude 캐싱 재활용",
   claudeCachingRetrivalDesc:
-    "4분마다 요청하여 Claude 캐싱의 캐시 시간을 연장합니다. 캐시 누락률을 줄일 수 있지만, 적절히 사용하지 않으면 비용이 증가할 수 있습니다.",
+    "4분마다 요청하여 Claude 캐싱의 캐시 시간을 연장합니다. 캐시 누락률을 줄일 수 있지만, 적절히 사용하지 않으면 비용이 증가할 수 있습니다. 프리셋 요청에는 적용되지 않습니다.",
   automaticCachePoint: "자동 캐시 포인트",
   experimentalChatCompression: "실험적 채팅 데이터 처리",
   loadingChatData: "채팅 데이터 로딩 중",
@@ -2315,6 +2317,7 @@ export const languageKorean = {
     thinkingTokensLabel: "사고",
     tokensPerSec: "tok/s",
     cacheHit: "캐시 적중 · {n} 토큰",
+    batchSubmitting: "Anthropic 배치 제출 중...",
     batchSubmitted: "Anthropic 배치 제출됨",
     batchRunning: "Anthropic 배치 실행 중",
     batchCancelRequested: "Anthropic 배치 취소 요청됨",

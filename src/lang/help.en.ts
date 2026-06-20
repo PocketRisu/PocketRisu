@@ -146,7 +146,7 @@ export const helpEn = {
         luaHelp:
             "You can use Lua scripts as a trigger script. you can define onInput, onOutput, onStart functions. onInput is called when user sends a message, onOutput is called when character sends a message, onStart is called when the chat starts. for more information, see the documentation.",
         claudeCachingExperimental:
-            "Caching in Claude is experimental feature that can reduce the cost of the model, but it can also increase the cost if you use it without reroll. since this is a experimental feature, it can be unstable and behavior can be changed in the future.",
+            "Classic Claude prompt caching can reduce model cost, but can also increase cost if used without reroll. Experimental; behavior may change.",
         urllora:
             "You can use direct download link of the model file. you can make direct url from google drive like website like https://sites.google.com/site/gdocs2direct/ , or use civitai URL, copy the the AIR (looks like `urn:air:flux1:lora:civitai:180891@776656` or just `civitai:180891@776656`) and paste it.",
         v2GetAlertSelect: "Options are separated by | (pipe) character.",
@@ -196,7 +196,7 @@ export const helpEn = {
         legacyMediaFindings: "If enabled, it will use the old method to find media assets, without using the additional search algorithm.",
         comfyWorkflow:
             "Put the API workflow of comfy UI. you can get your API workflow in comfy UI by pressing the 'Workflow > Export (API)' button. you must also put {{risu_prompt}} in you workflow text. the {{risu_prompt}} will be replaced with the prompt provided by the Risu.",
-        automaticCachePoint: "Automatically creates cache point after the chat ends, if the caching point doesn't exist.",
+        automaticCachePoint: "Automatically create a prompt cache point after the chat ends if one does not exist. Used by supported classic Claude and ModelPreset Gemini context-cache paths.",
         experimentalChatCompressionDesc:
             "Compresses the unused chat data and saves in seperate file. this greatly reduces the size of the chat data, and greatly improves the performance, however its experimental and can be unstable, causing issues in backup feature and more.",
         promptInfoInsideChatDesc:
@@ -348,9 +348,9 @@ export const helpEn = {
         antiServerOverload:
             "Automatically increase retry intervals when an API server responds as overloaded (for example 429 or 503). Helps reduce pressure on unstable providers.",
         claude1HourCaching:
-            "Use Claude's 1-hour prompt cache TTL instead of the default 5-minute cache. This can save more cost for repeated contexts, but 1-hour cache pricing differs.",
+            "Use Claude's 1-hour prompt cache TTL instead of the default 5-minute cache for classic Claude requests. This can save more cost for repeated contexts, but 1-hour cache pricing differs. It is not applied to the preset request.",
         claudeBatching:
-            "Use Claude Batch API to process requests in batches. Cheaper, but responses are not immediate and may take minutes to hours. Best for background work.",
+            "Use Claude Batch API for legacy/classic Claude requests only. ModelPreset Anthropic batch uses the preset's service_tier=batch value instead. Cheaper, but responses may take minutes to hours. It is not applied to the preset request.",
         rememberToolUsage:
             "Keep tool-use results in chat so later responses can refer to them. When off, tool results are treated as one-off data.",
         bookmark:
@@ -366,7 +366,7 @@ export const helpEn = {
         unrecommendedNewGoogleTrans:
             "Use the new experimental Google Translate path. It may be faster than the old path, but can break in some cases.",
         unrecommendedClaudeCachingRetrival:
-            "Try reusing cached Claude responses for repeated requests. Cache invalidation is tricky and can return unintended results, so this is not recommended.",
+            "Try reusing cached classic Claude responses for repeated requests. Cache invalidation is tricky and can return unintended results, so this is not recommended. It is not applied to the preset request.",
         lightningRealmImport:
             "Use a faster import path when importing characters from RisuRealm while account sync is enabled. Experimental.",
         unrecommendedTriggerV1:

@@ -1143,7 +1143,7 @@ export const languageGerman = {
     "all": "Alle",
     "showFolderNameInIcon": "Ordnernamen im Symbol anzeigen",
     "claudeCachingRetrival": "Claude-Caching-Abruf",
-    "claudeCachingRetrivalDesc": "Verlängert die Cache-Zeit für Claude-Caching, indem alle 4 Minuten angefordert wird. Dies kann die Cache-Miss-Rate verringern, aber die Kosten erhöhen, wenn es nicht richtig verwendet wird.",
+    "claudeCachingRetrivalDesc": "Verlängert die Cache-Zeit für Claude-Caching, indem alle 4 Minuten angefordert wird. Dies kann die Cache-Miss-Rate verringern, aber die Kosten erhöhen, wenn es nicht richtig verwendet wird. Diese Einstellung wird nicht auf Preset-Anfragen angewendet.",
     "automaticCachePoint": "Automatischer Cache-Punkt",
     "experimentalChatCompression": "Experimentelle Chat-Datenverarbeitung",
     "loadingChatData": "Lade Chat-Daten",

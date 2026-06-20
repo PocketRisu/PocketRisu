@@ -1143,7 +1143,7 @@ export const languageChinese = {
     "all": "全部",
     "showFolderNameInIcon": "在图标中显示文件夹名称",
     "claudeCachingRetrival": "Claude 缓存检索",
-    "claudeCachingRetrivalDesc": "通过每 4 分钟请求一次来延长 Claude 缓存的缓存时间。这可以降低缓存未命中率，但如果不正确使用，可能会增加成本。",
+    "claudeCachingRetrivalDesc": "通过每 4 分钟请求一次来延长 Claude 缓存的缓存时间。这可以降低缓存未命中率，但如果不正确使用，可能会增加成本。不会应用于预设请求。",
     "automaticCachePoint": "自动缓存点",
     "experimentalChatCompression": "实验性聊天数据处理",
     "loadingChatData": "加载聊天数据",

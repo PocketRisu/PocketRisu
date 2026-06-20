@@ -1143,7 +1143,7 @@ export const languageVietnamese = {
     "all": "Tất cả",
     "showFolderNameInIcon": "Hiển thị tên thư mục trong biểu tượng",
     "claudeCachingRetrival": "Truy xuất bộ nhớ đệm Claude",
-    "claudeCachingRetrivalDesc": "Kéo dài thời gian lưu trữ bộ nhớ đệm Claude bằng cách yêu cầu mỗi 4 phút. Điều này có thể giảm tỷ lệ bỏ lỡ bộ nhớ đệm, nhưng có thể tăng chi phí nếu không sử dụng đúng cách.",
+    "claudeCachingRetrivalDesc": "Kéo dài thời gian lưu trữ bộ nhớ đệm Claude bằng cách yêu cầu mỗi 4 phút. Điều này có thể giảm tỷ lệ bỏ lỡ bộ nhớ đệm, nhưng có thể tăng chi phí nếu không sử dụng đúng cách. Tùy chọn này không áp dụng cho yêu cầu preset.",
     "automaticCachePoint": "Điểm lưu trữ tự động",
     "experimentalChatCompression": "Xử lý dữ liệu trò chuyện thử nghiệm",
     "loadingChatData": "Đang tải dữ liệu trò chuyện",
