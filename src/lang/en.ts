@@ -40,7 +40,6 @@ export const languageEnglish = {
         chatGuardDesc: "Suspicious save patterns blocked. Your changes will be persisted via the safe full-write fallback. If this keeps happening, please report it with browser console logs.",
         chatGuardPersistTitle: "Save aborted to protect existing chat data",
         chatGuardPersistDesc: "Server detected corrupted chat structure mid-persist and refused to write to disk. Your latest changes may NOT be on disk yet — re-verify before refreshing. Existing data is safe.",
-        anthropicBatchToolsUnsupported: "Anthropic batch jobs do not support tools. Disable Anthropic batch mode or remove MCP/tools from the request.",
     },
     showHelp: "Show Help",
     help: helpEn,

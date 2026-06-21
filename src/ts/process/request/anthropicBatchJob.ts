@@ -1,4 +1,4 @@
-import { parseAnthropicMessage, type AdapterPreparedRequest, type AdapterReasoningPart } from 'src/ts/preset/adapter'
+import { parseAnthropicMessage, type AdapterChatResponse, type AdapterPreparedRequest, type AdapterReasoningPart } from 'src/ts/preset/adapter'
 import type { ProviderJobResult, ProviderJobStatus, ProviderRequestJob } from './providerJob'
 
 export const DEFAULT_ANTHROPIC_BATCH_POLL_MS = 3_000
@@ -21,8 +21,13 @@ export interface AnthropicBatchSubmitOptions extends AnthropicBatchJobOptions {
 }
 
 export type AnthropicBatchSubmitResult =
-    | { ok: true; job: ProviderRequestJob }
+    | { ok: true; job: AnthropicBatchJob }
     | { ok: false; error: string }
+
+export type AnthropicBatchMessageResult =
+    | { type: 'success'; response: AdapterChatResponse }
+    | { type: 'fail'; result: string }
+    | { type: 'canceled'; result?: string }
 
 export interface AnthropicBatchFetchLogEntry {
     body: unknown
@@ -48,6 +53,10 @@ function formatReasoning(reasoning?: AdapterReasoningPart[]): string {
     }
     if (body.trim().length === 0) return ''
     return `<Thoughts>\n${body}\n</Thoughts>\n\n`
+}
+
+function formatAnthropicResponse(response: AdapterChatResponse): string {
+    return formatReasoning(response.reasoning) + response.text
 }
 
 export async function safeJson(response: Response): Promise<unknown> {
@@ -164,25 +173,6 @@ export function previewAnthropicBatchRequest(prepared: AdapterPreparedRequest, c
     }
 }
 
-function containsLegacyMcpToolPrompt(value: unknown): boolean {
-    if (typeof value === 'string') return value.includes('<MCP Info')
-    if (Array.isArray(value)) return value.some(containsLegacyMcpToolPrompt)
-    if (isRecord(value)) return Object.values(value).some(containsLegacyMcpToolPrompt)
-    return false
-}
-
-export function anthropicBatchHasUnsupportedTools(prepared: AdapterPreparedRequest): boolean {
-    const body = prepared.body
-    if (!isRecord(body)) return false
-    if (body.tools !== undefined || body.tool_choice !== undefined || body.toolConfig !== undefined) {
-        return true
-    }
-    if (containsLegacyMcpToolPrompt(body.system) || containsLegacyMcpToolPrompt(body.messages)) {
-        return true
-    }
-    return false
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -246,6 +236,12 @@ export class AnthropicBatchJob implements ProviderRequestJob {
     }
 
     async wait(options: { signal?: AbortSignal | null; onStatus?: (status: ProviderJobStatus) => void } = {}): Promise<ProviderJobResult> {
+        const response = await this.waitForResponse(options)
+        if (response.type !== 'success') return response
+        return { type: 'success', result: formatAnthropicResponse(response.response) }
+    }
+
+    async waitForResponse(options: { signal?: AbortSignal | null; onStatus?: (status: ProviderJobStatus) => void } = {}): Promise<AnthropicBatchMessageResult> {
         const startedAt = this.now()
         const abortHandler = () => {
             this.setStatus({ state: 'cancel-requested', message: 'Cancel requested; waiting for final batch state' }, options.onStatus)
@@ -298,7 +294,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                 }
 
                 try {
-                    return await this.readResults(options.onStatus)
+                    return await this.readResponseResult(options.onStatus)
                 } catch (e) {
                     const message = e instanceof Error ? e.message : String(e)
                     this.setStatus({ state: 'failed', message }, options.onStatus)
@@ -310,7 +306,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
         }
     }
 
-    private async readResults(onStatus?: (status: ProviderJobStatus) => void): Promise<ProviderJobResult> {
+    private async readResponseResult(onStatus?: (status: ProviderJobStatus) => void): Promise<AnthropicBatchMessageResult> {
         const batchRes = await fetchAnthropicBatch(this.fetchImpl, this.resultsUrl(), {
             method: 'GET',
             headers: this.prepared.headers,
@@ -334,9 +330,8 @@ export class AnthropicBatchJob implements ProviderRequestJob {
             switch (result?.type) {
                 case 'succeeded': {
                     const response = parseAnthropicMessage(result.message)
-                    const text = formatReasoning(response.reasoning) + response.text
                     this.setStatus({ state: 'succeeded', message: 'Anthropic batch completed' }, onStatus)
-                    return { type: 'success', result: text }
+                    return { type: 'success', response }
                 }
                 case 'errored': {
                     const error = isRecord(result.error) ? result.error : undefined

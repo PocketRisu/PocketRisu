@@ -48,8 +48,6 @@ export const languageKorean = {
     chatGuardPersistTitle: "기존 채팅 데이터 보호를 위해 저장을 중단했어요",
     chatGuardPersistDesc:
       "서버에서 손상된 채팅 구조를 감지하여 디스크 기록을 거부했어요. 최근 변경사항이 아직 디스크에 반영되지 않았을 수 있으니 새로고침 전에 다시 확인해주세요. 기존 데이터는 안전합니다.",
-    anthropicBatchToolsUnsupported:
-      "Anthropic 배치 작업은 도구를 지원하지 않습니다. Anthropic 배치 모드를 끄거나 요청에서 MCP/도구를 제거하세요.",
   },
   showHelp: "도움말 보기",
   help: helpKo,

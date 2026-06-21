@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { AdapterPreparedRequest } from 'src/ts/preset/adapter'
-import { AnthropicBatchJob, anthropicBatchBaseUrl, anthropicBatchHasUnsupportedTools, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
+import { AnthropicBatchJob, anthropicBatchBaseUrl, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchFetchLogEntry } from './anthropicBatchJob'
 
 interface CapturedCall {
     url: string
@@ -73,6 +73,18 @@ function successJsonl(text = 'Done'): string {
 
 function expiredJsonl(): string {
     return JSON.stringify({ result: { type: 'expired' } }) + '\n'
+}
+
+function toolUseJsonl(): string {
+    return JSON.stringify({
+        result: {
+            type: 'succeeded',
+            message: {
+                content: [{ type: 'tool_use', id: 'toolu_1', name: 'Dice', input: { sides: 6 } }],
+                stop_reason: 'tool_use',
+            },
+        },
+    }) + '\n'
 }
 
 describe('Anthropic preset batch jobs', () => {
@@ -151,20 +163,32 @@ describe('Anthropic preset batch jobs', () => {
         })
     })
 
-    test('rejects prepared batch requests that contain tools', () => {
-        expect(anthropicBatchHasUnsupportedTools(prepared({
-            body: {
-                ...prepared().body,
-                tools: [{ name: 'Dice', input_schema: { type: 'object' } }],
-            },
-        }))).toBe(true)
+    test('preserves tool fields in submitted batch params', async () => {
+        const { fetchImpl, calls } = captureFetch(() => jsonResponse({ id: 'batch_123' }))
+        await submitAnthropicBatchJob({
+            prepared: prepared({
+                body: {
+                    ...prepared().body,
+                    tools: [{ name: 'Dice', input_schema: { type: 'object' } }],
+                    tool_choice: { type: 'tool', name: 'Dice' },
+                },
+            }),
+            fetchImpl,
+            customId: 'custom-1',
+        })
 
-        expect(anthropicBatchHasUnsupportedTools(prepared({
-            body: {
-                ...prepared().body,
-                system: 'You are helpful.\n\n<MCP Info>Name:Dice</MCP Info>',
-            },
-        }))).toBe(true)
+        expect(calls[0].body).toEqual({
+            requests: [{
+                custom_id: 'custom-1',
+                params: {
+                    model: 'claude-test',
+                    messages: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+                    max_tokens: 100,
+                    tools: [{ name: 'Dice', input_schema: { type: 'object' } }],
+                    tool_choice: { type: 'tool', name: 'Dice' },
+                },
+            }],
+        })
     })
 
     test('polls until ended and parses successful JSONL results', async () => {
@@ -182,6 +206,21 @@ describe('Anthropic preset batch jobs', () => {
         expect(result).toEqual({ type: 'success', result: 'Final text' })
         expect(statuses).toEqual(['running', 'succeeded'])
         expect(job.getStatus()).toEqual({ state: 'succeeded', message: 'Anthropic batch completed' })
+    })
+
+    test('parses tool_use JSONL results for batch follow-ups', async () => {
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse(toolUseJsonl())
+            return jsonResponse({ processing_status: 'ended' })
+        })
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, { sleep: async () => {} })
+
+        const result = await job.waitForResponse()
+
+        expect(result.type).toBe('success')
+        if (result.type !== 'success') return
+        expect(result.response.toolCalls).toEqual([{ id: 'toolu_1', name: 'Dice', arguments: '{"sides":6}' }])
+        expect(result.response.providerEcho).toEqual([{ type: 'tool_use', id: 'toolu_1', name: 'Dice', input: { sides: 6 } }])
     })
 
     test.each([
