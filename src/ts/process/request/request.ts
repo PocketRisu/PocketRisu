@@ -30,7 +30,7 @@ import {
     type AdapterCacheContext,
     type AdapterChatMessage, type AdapterChatOptions, type AdapterChatResponse,
     type AdapterChatStreamDelta, type AdapterCredential,
-    type AdapterReasoningPart, type AdapterToolCall, type AdapterToolDef,
+    type AdapterToolCall, type AdapterToolDef,
 } from "src/ts/preset/adapter";
 import { TOOL_CAPABLE_ADAPTER_KINDS, VISION_CAPABLE_ADAPTER_KINDS, type AdapterKind, type ModelPreset } from "src/ts/preset/types";
 import { pumpPresetStream } from "./presetStreamPump";
@@ -42,9 +42,12 @@ import {
     type RequestKind,
 } from "src/ts/status/requestStatus";
 import type { ProviderJobResult, ProviderJobStatus, ProviderRequestJob } from './providerJob';
+import { decorateJob } from './providerJob';
 import { DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS, previewAnthropicBatchRequest, submitAnthropicBatchJob, type AnthropicBatchJob } from './anthropicBatchJob';
 import { ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS, wrapAnthropicBatchStatusJob } from './anthropicBatchStatusJob';
 import { safeStatus } from './safeStatus';
+import { formatPresetReasoning } from './formatReasoning';
+import { requestStatusText } from './requestStatusText';
 
 export type ToolCall = {
     name: string;
@@ -133,13 +136,7 @@ function mapProviderJobResult(
     job: ProviderRequestJob,
     mapSuccess: (text: string) => Promise<string>,
 ): ProviderRequestJob {
-    return {
-        id: job.id,
-        provider: job.provider,
-        kind: job.kind,
-        createdAt: job.createdAt,
-        getStatus: () => job.getStatus(),
-        cancel: () => job.cancel(),
+    return decorateJob(job, {
         wait: async (options) => {
             const result = await job.wait(options)
             if (result.type !== 'success') return result
@@ -149,6 +146,23 @@ function mapProviderJobResult(
                 return { type: 'fail', result: e instanceof Error ? e.message : String(e) }
             }
         },
+    })
+}
+
+export async function resolveRequestJob(
+    res: requestDataResponse,
+    signal?: AbortSignal | null,
+): Promise<Exclude<requestDataResponse, { type: 'job' }>> {
+    if (res.type !== 'job') return res
+    const result = await res.job.wait({ signal })
+    if (result.type === 'success') {
+        return { type: 'success', result: result.result, special: res.special, model: res.model }
+    }
+    return {
+        type: 'fail',
+        result: result.result ?? 'Provider job canceled',
+        special: res.special,
+        model: res.model,
     }
 }
 
@@ -671,11 +685,6 @@ function toRequestKind(mode: ModelModeExtended): RequestKind {
     }
 }
 
-function requestStatusText(key: keyof typeof language.requestStatus, fallback: string): string {
-    const text = language.requestStatus[key]
-    return typeof text === 'string' ? text : fallback
-}
-
 // Per-preset streaming resolution. Independent of the global db.useStreaming:
 // the preset's own on/off decides (default off). Forced off when the profile
 // does not declare the 'streaming' capability, or when the caller opted out
@@ -702,21 +711,6 @@ const MODEL_PRESET_MAX_TOOL_STEPS = 8
 // bounding re-parse cost. The final chunk is always flushed regardless.
 const STREAM_FLUSH_INTERVAL_MS = 50
 
-// Render a turn's reasoning for DISPLAY, wrapped in the <Thoughts> tags the chat
-// renderer already parses (mirrors the classic anthropic path). Returns '' when
-// there is nothing to show, so non-reasoning models are byte-identical to before.
-// redacted_thinking has no visible text — surface the same placeholder as classic.
-function formatPresetReasoning(reasoning?: AdapterReasoningPart[]): string {
-    if (!reasoning || reasoning.length === 0) return ''
-    let body = ''
-    for (const part of reasoning) {
-        if (part.redactedData !== undefined) body += '\n{{redacted_thinking}}\n'
-        else if (part.text) body += part.text
-    }
-    if (body.trim().length === 0) return ''
-    return `<Thoughts>\n${body}\n</Thoughts>\n\n`
-}
-
 function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
     return {
         name: tool.name,
@@ -727,7 +721,12 @@ function toAdapterToolDef(tool: MCPTool): AdapterToolDef {
     }
 }
 
-function hasPresetBodyValue(preset: ModelPreset, path: string, value: unknown): boolean {
+const ANTHROPIC_MESSAGES_ADAPTER_KIND = 'anthropic-messages'
+const ANTHROPIC_PROVIDER_BASE_ID = 'anthropic'
+const ANTHROPIC_SERVICE_TIER_PATH = 'service_tier'
+const ANTHROPIC_BATCH_SERVICE_TIER = 'batch'
+
+function getEffectivePresetBodyValue(preset: ModelPreset, path: string): unknown {
     const userValues = preset.userValues ?? {}
     for (const field of preset.profileSnapshot.schema) {
         if (field.mapsTo?.target !== 'body' || field.mapsTo.path !== path) continue
@@ -736,15 +735,15 @@ function hasPresetBodyValue(preset: ModelPreset, path: string, value: unknown): 
             ? userValues[field.key]
             : field.default
         if (effective === undefined || effective === '') continue
-        if (effective === value) return true
+        return effective
     }
-    return false
+    return undefined
 }
 
 function shouldUseAnthropicPresetBatch(preset: ModelPreset): boolean {
-    if (preset.profileSnapshot.adapterKind !== 'anthropic-messages') return false
-    if (preset.profileSnapshot.providerBaseId !== 'anthropic') return false
-    return hasPresetBodyValue(preset, 'service_tier', 'batch')
+    if (preset.profileSnapshot.adapterKind !== ANTHROPIC_MESSAGES_ADAPTER_KIND) return false
+    if (preset.profileSnapshot.providerBaseId !== ANTHROPIC_PROVIDER_BASE_ID) return false
+    return getEffectivePresetBodyValue(preset, ANTHROPIC_SERVICE_TIER_PATH) === ANTHROPIC_BATCH_SERVICE_TIER
 }
 
 async function createAnthropicPresetBatchJob(
@@ -768,13 +767,12 @@ async function createAnthropicPresetBatchJob(
             })
             addBadge(status.genId, {
                 key: 'batch',
-                text: requestStatusText('batchSubmitting', 'Anthropic batch submitting...'),
+                text: requestStatusText('batchSubmitting'),
                 tone: 'info',
             })
         })
     }
     const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
-    delete prepared.body.stream
     const submission = await submitAnthropicBatchJob({
         prepared,
         fetchImpl,
@@ -790,8 +788,8 @@ async function createAnthropicPresetBatchJob(
                 addBadge(status.genId, {
                     key: 'batch',
                     text: outcome === 'failed'
-                        ? requestStatusText('batchFailed', 'Anthropic batch failed')
-                        : requestStatusText('batchCanceled', 'Anthropic batch canceled'),
+                        ? requestStatusText('batchFailed')
+                        : requestStatusText('batchCanceled'),
                     tone: 'warn',
                 })
                 endStatus(status.genId, outcome, {
@@ -806,7 +804,7 @@ async function createAnthropicPresetBatchJob(
         safeStatus(() => {
             addBadge(status.genId, {
                 key: 'batch',
-                text: requestStatusText('batchSubmitted', 'Anthropic batch submitted'),
+                text: requestStatusText('batchSubmitted'),
                 tone: 'info',
             })
         })
@@ -843,11 +841,7 @@ function createAnthropicPresetBatchToolLoopJob(options: {
 }): ProviderRequestJob {
     let currentJob: AnthropicBatchJob = options.firstJob
 
-    return {
-        id: options.firstJob.id,
-        provider: options.firstJob.provider,
-        kind: options.firstJob.kind,
-        createdAt: options.firstJob.createdAt,
+    return decorateJob(options.firstJob, {
         getStatus: () => currentJob.getStatus(),
         cancel: () => currentJob.cancel(),
         wait: async (waitOptions = {}): Promise<ProviderJobResult> => {
@@ -866,7 +860,6 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                                 options.credential,
                                 false,
                             )
-                            delete prepared.body.stream
                             const submitted = await submitAnthropicBatchJob({
                                 prepared,
                                 fetchImpl: options.fetchImpl,
@@ -915,7 +908,7 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                 return { type: 'fail', result: err instanceof Error ? err.message : String(err) }
             }
         },
-    }
+    })
 }
 
 async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelPreset, abortSignal:AbortSignal=null, mode:ModelModeExtended='model'):Promise<requestDataResponse> {
@@ -1194,7 +1187,16 @@ export async function testModelPreset(preset: ModelPreset, message: string, abor
         useStreaming: false,
     }
     const start = performance.now()
-    const res = await requestModelPreset(arg, preset, abortSignal)
+    let res: Exclude<requestDataResponse, { type: 'job' }>
+    try {
+        res = await resolveRequestJob(await requestModelPreset(arg, preset, abortSignal), abortSignal)
+    } catch (err) {
+        return {
+            ok: false,
+            message: err instanceof Error ? err.message : String(err),
+            latencyMs: Math.round(performance.now() - start),
+        }
+    }
     const latencyMs = Math.round(performance.now() - start)
     // useStreaming:false + no tools guarantees a success/fail (never streaming/multiline),
     // but fall through defensively rather than asserting the union.
@@ -1203,26 +1205,6 @@ export async function testModelPreset(preset: ModelPreset, message: string, abor
     }
     if (res.type === 'fail') {
         return { ok: false, message: res.result, latencyMs }
-    }
-    if (res.type === 'job') {
-        try {
-            const result = await res.job.wait({ signal: abortSignal })
-            const finishedLatencyMs = Math.round(performance.now() - start)
-            if (result.type === 'success') {
-                return { ok: true, message: result.result, latencyMs: finishedLatencyMs }
-            }
-            return {
-                ok: false,
-                message: result.result ?? res.job.getStatus().message ?? 'Provider job did not complete successfully',
-                latencyMs: finishedLatencyMs,
-            }
-        } catch (err) {
-            return {
-                ok: false,
-                message: err instanceof Error ? err.message : String(err),
-                latencyMs: Math.round(performance.now() - start),
-            }
-        }
     }
     return { ok: false, message: 'Unexpected response type', latencyMs }
 }

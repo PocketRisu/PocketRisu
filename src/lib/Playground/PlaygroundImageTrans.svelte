@@ -4,7 +4,7 @@
     import TextAreaInput from "../UI/GUI/TextAreaInput.svelte";
     import Button from "../UI/GUI/Button.svelte";
     import { jsonOutputTrimmer, selectSingleFile } from "src/ts/util";
-    import { requestChatData } from "src/ts/process/request/request";
+    import { requestChatData, resolveRequestJob } from "src/ts/process/request/request";
     import { notifyError } from "src/ts/alert";
     import SelectInput from "../UI/GUI/SelectInput.svelte";
     import NumberInput from "../UI/GUI/NumberInput.svelte";
@@ -159,7 +159,7 @@
             }
     
 
-            const d = await requestChatData({
+            let d = await requestChatData({
                 formated: [{
                     role: 'user',
                     content: prompt.replace('{{slot}}', selLang),
@@ -171,17 +171,9 @@
                 bias: {},
                 schema: JSON.stringify(schema)
             }, 'translate')
+            d = await resolveRequestJob(d)
 
             let responseText = ''
-            if(d.type === 'job'){
-                const jobResult = await d.job.wait()
-                if(jobResult.type !== 'success'){
-                    loading = false;
-                    return notifyError(jobResult.result ?? 'Provider job canceled')
-                }
-                responseText = jobResult.result
-            }
-
             if(d.type === 'streaming' || d.type === 'multiline'){
                 loading = false;
                 return notifyError('This model is not supported in the playground')

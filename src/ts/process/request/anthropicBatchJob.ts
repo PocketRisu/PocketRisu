@@ -1,5 +1,6 @@
-import { parseAnthropicMessage, type AdapterChatResponse, type AdapterPreparedRequest, type AdapterReasoningPart } from 'src/ts/preset/adapter'
+import { parseAnthropicMessage, type AdapterChatResponse, type AdapterPreparedRequest } from 'src/ts/preset/adapter'
 import type { ProviderJobResult, ProviderJobStatus, ProviderRequestJob } from './providerJob'
+import { formatPresetReasoning } from './formatReasoning'
 
 export const DEFAULT_ANTHROPIC_BATCH_POLL_MS = 3_000
 export const DEFAULT_ANTHROPIC_BATCH_TIMEOUT_MS = 24 * 60 * 60 * 1000 + 10 * 60 * 1000
@@ -44,19 +45,8 @@ function defaultSleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function formatReasoning(reasoning?: AdapterReasoningPart[]): string {
-    if (!reasoning || reasoning.length === 0) return ''
-    let body = ''
-    for (const part of reasoning) {
-        if (part.redactedData !== undefined) body += '\n{{redacted_thinking}}\n'
-        else if (part.text) body += part.text
-    }
-    if (body.trim().length === 0) return ''
-    return `<Thoughts>\n${body}\n</Thoughts>\n\n`
-}
-
 function formatAnthropicResponse(response: AdapterChatResponse): string {
-    return formatReasoning(response.reasoning) + response.text
+    return formatPresetReasoning(response.reasoning) + response.text
 }
 
 export async function safeJson(response: Response): Promise<unknown> {
@@ -157,15 +147,13 @@ export function anthropicBatchBaseUrl(messagesUrl: string): string {
 
 export function toAnthropicBatchParams(body: AdapterPreparedRequest['body']): AdapterPreparedRequest['body'] {
     const params = { ...body }
-    if (params.service_tier === 'batch') {
-        delete params.service_tier
-    }
+    delete params.service_tier
+    delete params.stream
     return params
 }
 
 export function previewAnthropicBatchRequest(prepared: AdapterPreparedRequest, customId = 'preview') {
     const params = toAnthropicBatchParams(prepared.body)
-    delete params.stream
     return {
         url: anthropicBatchBaseUrl(prepared.url),
         body: { requests: [{ custom_id: customId, params }] },
@@ -249,14 +237,13 @@ export class AnthropicBatchJob implements ProviderRequestJob {
         }
         options.signal?.addEventListener('abort', abortHandler, { once: true })
         try {
+            if (options.signal?.aborted && !this.cancelRequested) {
+                await this.cancel()
+            }
             while (true) {
                 if (this.now() - startedAt > this.timeoutMs) {
                     this.setStatus({ state: 'failed', message: 'Anthropic batch request timed out after 24 hours' }, options.onStatus)
                     return { type: 'fail', result: 'Anthropic batch request timed out after 24 hours' }
-                }
-
-                if (options.signal?.aborted && !this.cancelRequested) {
-                    await this.cancel()
                 }
 
                 await this.sleep(this.pollMs)
@@ -327,7 +314,8 @@ export class AnthropicBatchJob implements ProviderRequestJob {
             }
             if (!isRecord(batchData) || !isRecord(batchData.result)) continue
             const result = batchData.result
-            switch (result?.type) {
+            const resultType = typeof result.type === 'string' ? result.type : undefined
+            switch (resultType) {
                 case 'succeeded': {
                     const response = parseAnthropicMessage(result.message)
                     this.setStatus({ state: 'succeeded', message: 'Anthropic batch completed' }, onStatus)
@@ -338,7 +326,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                     const innerError = error && isRecord(error.error) ? error.error : undefined
                     const message = typeof innerError?.message === 'string'
                         ? `${String(innerError.type)}: ${innerError.message}`
-                        : JSON.stringify(error) ?? 'Anthropic batch errored'
+                        : error ? JSON.stringify(error) : 'Anthropic batch errored'
                     this.setStatus({ state: 'failed', message }, onStatus)
                     return { type: 'fail', result: message }
                 }
@@ -394,8 +382,16 @@ export async function submitAnthropicBatchJob(options: AnthropicBatchSubmitOptio
     if (!isRecord(payload) || typeof payload.id !== 'string' || payload.id.length === 0) {
         return { ok: false, error: 'No batch id returned from Anthropic batch request' }
     }
+    const jobOptions: AnthropicBatchJobOptions = {
+        pollMs: options.pollMs,
+        timeoutMs: options.timeoutMs,
+        sleep: options.sleep,
+        now: options.now,
+        logFetch: options.logFetch,
+        chatId: options.chatId,
+    }
     return {
         ok: true,
-        job: new AnthropicBatchJob(options.customId, options.prepared, payload.id, options.fetchImpl, options),
+        job: new AnthropicBatchJob(options.customId, options.prepared, payload.id, options.fetchImpl, jobOptions),
     }
 }

@@ -1,31 +1,27 @@
-import { language } from '../../../lang'
 import { addBadge, endStatus, markPhase } from 'src/ts/status/requestStatus'
 import type { ProviderJobStatus, ProviderRequestJob } from './providerJob'
+import { decorateJob } from './providerJob'
 import { safeStatus } from './safeStatus'
+import { requestStatusText } from './requestStatusText'
 
 export const ANTHROPIC_BATCH_STATUS_ABANDON_GRACE_MS = 5 * 60 * 1000
-
-function requestStatusText(key: keyof typeof language.requestStatus, fallback: string): string {
-    const text = language.requestStatus[key]
-    return typeof text === 'string' ? text : fallback
-}
 
 function anthropicBatchBadgeText(status: ProviderJobStatus): string {
     switch (status.state) {
         case 'submitted':
         case 'queued':
-            return requestStatusText('batchSubmitted', 'Anthropic batch submitted')
+            return requestStatusText('batchSubmitted')
         case 'running':
-            return status.message ?? requestStatusText('batchRunning', 'Anthropic batch running')
+            return status.message ?? requestStatusText('batchRunning')
         case 'cancel-requested':
-            return requestStatusText('batchCancelRequested', 'Anthropic batch cancel requested')
+            return requestStatusText('batchCancelRequested')
         case 'succeeded':
-            return requestStatusText('batchSucceeded', 'Anthropic batch completed')
+            return requestStatusText('batchSucceeded')
         case 'failed':
         case 'expired':
-            return status.message ?? requestStatusText('batchFailed', 'Anthropic batch failed')
+            return status.message ?? requestStatusText('batchFailed')
         case 'canceled':
-            return status.message ?? requestStatusText('batchCanceled', 'Anthropic batch canceled')
+            return status.message ?? requestStatusText('batchCanceled')
     }
 }
 
@@ -59,12 +55,7 @@ function publishAnthropicBatchStatus(genId: string, status: ProviderJobStatus): 
 }
 
 export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: string): ProviderRequestJob {
-    return {
-        id: job.id,
-        provider: job.provider,
-        kind: job.kind,
-        createdAt: job.createdAt,
-        getStatus: () => job.getStatus(),
+    return decorateJob(job, {
         cancel: async () => {
             safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'cancel-requested' }))
             await job.cancel()
@@ -95,7 +86,7 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
                 }
                 else if (options?.signal?.aborted) {
                     safeStatus(() => {
-                        addBadge(genId, { key: 'batch', text: requestStatusText('batchCanceled', 'Anthropic batch canceled'), tone: 'warn' })
+                        addBadge(genId, { key: 'batch', text: requestStatusText('batchCanceled'), tone: 'warn' })
                         endStatus(genId, 'aborted', { now: Date.now() })
                     })
                     return { type: 'canceled', result: 'Aborted' }
@@ -119,5 +110,5 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
                 throw err
             }
         },
-    }
+    })
 }

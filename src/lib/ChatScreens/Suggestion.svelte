@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { requestChatData } from "src/ts/process/request/request";
+	import { requestChatData, resolveRequestJob } from "src/ts/process/request/request";
     import { doingChat, type OpenAIChat } from "../../ts/process/index.svelte";
     import { setDatabase, type character, type Message, type Database } from "../../ts/storage/database.svelte";
 	import { DBState } from 'src/ts/stores.svelte';
@@ -86,12 +86,9 @@
                 bias: {},
                 currentChar : currentChar as character
             }, 'submodel', abortController.signal).then(async rq2=>{
+                rq2 = await resolveRequestJob(rq2, abortController.signal)
                 let resultText = ''
-                if(rq2.type === 'job'){
-                    const jobResult = await rq2.job.wait({ signal: abortController.signal })
-                    if(jobResult.type === 'success') resultText = jobResult.result
-                }
-                else if(rq2.type !== 'fail' && rq2.type !== 'streaming' && rq2.type !== 'multiline'){
+                if(rq2.type !== 'fail' && rq2.type !== 'streaming' && rq2.type !== 'multiline'){
                     resultText = rq2.result
                 }
                 if(resultText && progress){

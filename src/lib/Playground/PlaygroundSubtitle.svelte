@@ -6,7 +6,7 @@
     import Button from "../UI/GUI/Button.svelte";
     import { DBState } from "src/ts/stores.svelte";
     import { getModelInfo, LLMFlags } from "src/ts/model/modellist";
-    import { requestChatData } from "src/ts/process/request/request";
+    import { requestChatData, resolveRequestJob } from "src/ts/process/request/request";
     import { asBuffer, selectFileByDom, selectSingleFile, sleep } from "src/ts/util";
     import { alertSelect, notifyError } from "src/ts/alert";
     import { risuChatParser } from "src/ts/parser/parser.svelte";
@@ -77,7 +77,7 @@
             video.remove()
         }
 
-        const v =await requestChatData({
+        let v =await requestChatData({
             formated: [{
                 role: "user",
                 content: risuChatParser(prompt).replace(/{{slot}}/g, selLang).replace(/{{slot::time}}/g, time),
@@ -86,23 +86,20 @@
             bias: {},
             useStreaming: true
         }, 'model')
+        v = await resolveRequestJob(v)
 
         if(v.type === 'multiline'){
             notifyError(v.result[0][1])
             return
         }
 
-        if(v.type === 'job'){
-            const jobResult = await v.job.wait()
-            if(jobResult.type !== 'success'){
-                notifyError(jobResult.result ?? 'Provider job canceled')
-                return
-            }
-            outputText = jobResult.result
-        }
-        else if(v.type !== 'streaming'){
+        if(v.type === 'fail'){
             notifyError(v.result)
             return
+        }
+
+        if(v.type === 'success'){
+            outputText = v.result
         }
 
         if(v.type === 'streaming'){
@@ -306,7 +303,7 @@
         }
 
 
-        const v = await requestChatData({
+        let v = await requestChatData({
             formated: [{
                 role: "user",
                 content: risuChatParser(prompt).replace(/{{slot}}/g, selLang).replace(/{{slot::data}}/g, outputText),
@@ -314,6 +311,7 @@
             bias: {},
             useStreaming: true
         }, 'model')
+        v = await resolveRequestJob(v)
 
 
         if(v.type === 'multiline'){
@@ -321,17 +319,13 @@
             return
         }
 
-        if(v.type === 'job'){
-            const jobResult = await v.job.wait()
-            if(jobResult.type !== 'success'){
-                notifyError(jobResult.result ?? 'Provider job canceled')
-                return
-            }
-            outputText = jobResult.result
-        }
-        else if(v.type !== 'streaming'){
+        if(v.type === 'fail'){
             notifyError(v.result)
             return
+        }
+
+        if(v.type === 'success'){
+            outputText = v.result
         }
 
         console.log("Reading...")

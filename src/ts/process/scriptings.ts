@@ -10,7 +10,7 @@ import { HypaProcesser } from "./memory/hypamemory";
 import { generateAIImage } from "./stableDiff";
 import { writeInlayImage, getInlayAsset } from "./files/inlays";
 import type { OpenAIChat, MultiModal } from "./index.svelte";
-import { requestChatData, type StreamResponseChunk } from "./request/request";
+import { requestChatData, resolveRequestJob, type StreamResponseChunk } from "./request/request";
 import { v4 } from "uuid";
 import { getModuleLorebooks, getModuleTriggers } from "./modules";
 import { Mutex } from "../mutex";
@@ -538,13 +538,14 @@ export async function runScripted(code:string, arg:{
                 }
 
                 const options = parseLuaOptions(optionsStr) as { streaming?: boolean }
-                const result = await requestChatData({
+                let result = await requestChatData({
                     formated: promptbody,
                     bias: {},
                     useStreaming: options.streaming === true,
                     forceStreaming: options.streaming === true,
                     noMultiGen: true,
                 }, 'model')
+                result = await resolveRequestJob(result)
 
                 if(result.type === 'fail'){
                     return JSON.stringify({
@@ -567,14 +568,6 @@ export async function runScripted(code:string, arg:{
                     }
                 }
 
-                if(result.type === 'job'){
-                    const jobResult = await result.job.wait()
-                    return JSON.stringify({
-                        success: jobResult.type === 'success',
-                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
-                    })
-                }
-
                 if(result.type === 'multiline'){
                     return JSON.stringify({
                         success: false,
@@ -592,7 +585,7 @@ export async function runScripted(code:string, arg:{
                 if(!ScriptingLowLevelIds.has(id)){
                     return
                 }
-                const result = await requestChatData({
+                let result = await requestChatData({
                     formated: [{
                         role: 'user',
                         content: prompt
@@ -601,19 +594,12 @@ export async function runScripted(code:string, arg:{
                     useStreaming: false,
                     noMultiGen: true,
                 }, 'model')
+                result = await resolveRequestJob(result)
 
                 if(result.type === 'fail'){
                     return {
                         success: false,
                         result: 'Error: ' + result.result
-                    }
-                }
-
-                if(result.type === 'job'){
-                    const jobResult = await result.job.wait()
-                    return {
-                        success: jobResult.type === 'success',
-                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
                     }
                 }
 
@@ -914,13 +900,14 @@ export async function runScripted(code:string, arg:{
                 }
 
                 const options = parseLuaOptions(optionsStr) as { streaming?: boolean }
-                const result = await requestChatData({
+                let result = await requestChatData({
                     formated: promptbody,
                     bias: {},
                     useStreaming: options.streaming === true,
                     forceStreaming: options.streaming === true,
                     noMultiGen: true,
                 }, 'otherAx')
+                result = await resolveRequestJob(result)
 
                 if(result.type === 'fail'){
                     return JSON.stringify({
@@ -941,14 +928,6 @@ export async function runScripted(code:string, arg:{
                             result: 'Error: ' + error
                         })
                     }
-                }
-
-                if(result.type === 'job'){
-                    const jobResult = await result.job.wait()
-                    return JSON.stringify({
-                        success: jobResult.type === 'success',
-                        result: jobResult.type === 'success' ? jobResult.result : 'Error: ' + (jobResult.result ?? 'Provider job canceled')
-                    })
                 }
 
                 if(result.type === 'multiline'){

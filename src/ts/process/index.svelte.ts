@@ -8,7 +8,7 @@ import { alertError, notifyError } from "../alert";
 import { parseChatML } from "../parser/chatML";
 import { loadLoreBookV3Prompt } from "./lorebook.svelte";
 import { findCharacterbyId, getAuthorNoteDefaultText, getPersonaPrompt, getUserName, isLastCharPunctuation, trimUntilPunctuation, parseToggleSyntax, prebuiltAssetCommand } from "../util";
-import { requestChatData } from "./request/request";
+import { requestChatData, resolveRequestJob } from "./request/request";
 import { stableDiff } from "./stableDiff";
 import { processScript, processScriptFull, risuChatParser } from "./scripts";
 import { exampleMessage } from "./exampleMessages";
@@ -1421,6 +1421,28 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     let result = ''
     let emoChanged = false
     let resendChat = false
+    const finalizeAssistantMessage = async (msgIndex: number, ttsText: string) => {
+        DBState.db.characters[selectedChar].chats[selectedChat] = runCurrentChatFunction(DBState.db.characters[selectedChar].chats[selectedChat])
+        currentChat = DBState.db.characters[selectedChar].chats[selectedChat]
+        const triggerResult = await runTrigger(currentChar, 'output', {chat:currentChat})
+        if(triggerResult && triggerResult.chat){
+            currentChat = normalizeChat(triggerResult.chat)
+        }
+        if(triggerResult && triggerResult.sendAIprompt){
+            resendChat = true
+        }
+        const inlayr = runInlayScreen(currentChar, currentChat.message[msgIndex].data)
+        currentChat.message[msgIndex].data = inlayr.text
+        DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
+        if(inlayr.promise){
+            const t = await inlayr.promise
+            currentChat.message[msgIndex].data = t
+            DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
+        }
+        if(DBState.db.ttsAutoSpeech){
+            await sayTTS(currentChar, ttsText)
+        }
+    }
     
     if(abortSignal.aborted === true && req.type !== 'job'){
         return false
@@ -1488,26 +1510,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         result = result2.data
         emoChanged = result2.emoChanged
 
-        DBState.db.characters[selectedChar].chats[selectedChat] = runCurrentChatFunction(DBState.db.characters[selectedChar].chats[selectedChat])
-        currentChat = DBState.db.characters[selectedChar].chats[selectedChat]
-        const triggerResult = await runTrigger(currentChar, 'output', {chat:currentChat})
-        if(triggerResult && triggerResult.chat){
-            currentChat = normalizeChat(triggerResult.chat)
-        }
-        if(triggerResult && triggerResult.sendAIprompt){
-            resendChat = true
-        }
-        const inlayr = runInlayScreen(currentChar, currentChat.message[msgIndex].data)
-        currentChat.message[msgIndex].data = inlayr.text
-        DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
-        if(inlayr.promise){
-            const t = await inlayr.promise
-            currentChat.message[msgIndex].data = t
-            DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
-        }
-        if(DBState.db.ttsAutoSpeech){
-            await sayTTS(currentChar, result)
-        }
+        await finalizeAssistantMessage(msgIndex, result)
     }
     else if(req.type === 'streaming'){
         const reader = req.result.getReader()
@@ -1581,26 +1584,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             return false
         }
 
-        DBState.db.characters[selectedChar].chats[selectedChat] = runCurrentChatFunction(DBState.db.characters[selectedChar].chats[selectedChat])
-        currentChat = DBState.db.characters[selectedChar].chats[selectedChat]        
-        const triggerResult = await runTrigger(currentChar, 'output', {chat:currentChat})
-        if(triggerResult && triggerResult.chat){
-            currentChat = normalizeChat(triggerResult.chat)
-        }
-        if(triggerResult && triggerResult.sendAIprompt){
-            resendChat = true
-        }
-        const inlayr = runInlayScreen(currentChar, currentChat.message[msgIndex].data)
-        currentChat.message[msgIndex].data = inlayr.text
-        DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
-        if(inlayr.promise){
-            const t = await inlayr.promise
-            currentChat.message[msgIndex].data = t
-            DBState.db.characters[selectedChar].chats[selectedChat] = currentChat
-        }
-        if(DBState.db.ttsAutoSpeech){
-            await sayTTS(currentChar, result)
-        }
+        await finalizeAssistantMessage(msgIndex, result)
     }
     else{
         const msgs = (req.type === 'success') ? [['char',req.result]] as const 
@@ -1893,12 +1877,13 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 },
             ]
 
-            const rq = await requestChatData({
+            let rq = await requestChatData({
                 formated: promptbody,
                 bias: emobias,
                 currentChar: currentChar,
                 maxTokens: 30,
             }, 'emotion', abortSignal)
+            rq = await resolveRequestJob(rq, abortSignal)
 
             if(rq.type === 'fail'){
                 if(abortSignal.aborted){
@@ -1908,17 +1893,6 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 return true
             }
             let emotionResult = ''
-            if(rq.type === 'job'){
-                const jobResult = await rq.job.wait({ signal: abortSignal })
-                if(jobResult.type !== 'success'){
-                    if(abortSignal.aborted){
-                        return true
-                    }
-                    throwError(jobResult.result ?? 'Provider job canceled')
-                    return true
-                }
-                emotionResult = jobResult.result
-            }
             if(rq.type === 'streaming' || rq.type === 'multiline'){
                 if(abortSignal.aborted){
                     return true

@@ -14,7 +14,7 @@ import {
     getDatabase,
 } from "src/ts/storage/database.svelte";
 import { type OpenAIChat } from "../index.svelte";
-import { requestChatData } from "../request/request";
+import { requestChatData, resolveRequestJob } from "../request/request";
 import { resolveChatMaxResponseTokens } from "../request/modelPresetBinding";
 import { isLocalNetworkUrl } from "src/ts/network/localNetwork";
 import { chatCompletion, unloadEngine } from "../webllm";
@@ -1724,7 +1724,7 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
             subModelUrl = db.customModels?.find(m => m.id === actualModel)?.url ?? '';
         }
 
-        const response = await requestChatData(
+        let response = await requestChatData(
             {
                 formated,
                 bias: {},
@@ -1734,16 +1734,9 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
             },
             "memory"
         );
+        response = await resolveRequestJob(response);
 
         let responseText = "";
-        if (response.type === "job") {
-            const jobResult = await response.job.wait();
-            if (jobResult.type !== "success") {
-                throw new Error(jobResult.result ?? "Provider job canceled");
-            }
-            responseText = jobResult.result;
-        }
-
         if (response.type === "streaming" || response.type === "multiline") {
             throw new Error("Unexpected response type");
         }

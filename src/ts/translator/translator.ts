@@ -8,7 +8,7 @@ import {
 } from "./presets";
 import { globalFetch } from "../globalApi.svelte"
 import { notifyError } from "../alert"
-import { requestChatData } from "../process/request/request"
+import { requestChatData, resolveRequestJob } from "../process/request/request"
 import { doingChat, type OpenAIChat } from "../process/index.svelte"
 import { applyMarkdownToNode, type simpleCharacterArgument } from "../parser/parser.svelte"
 import { selectedCharID } from "../stores.svelte"
@@ -572,27 +572,20 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
             }
         ]
     }
-    const rq = await requestChatData({
+    let rq = await requestChatData({
         formated,
         bias: {},
         useStreaming: false,
         noMultiGen: true,
         maxTokens: preset.maxResponse,
     }, 'translate')
+    rq = await resolveRequestJob(rq)
 
     if(rq.type === 'fail'){
         notifyError(rq.result)
         return text
     }
     let responseText = ''
-    if(rq.type === 'job'){
-        const jobResult = await rq.job.wait()
-        if(jobResult.type !== 'success'){
-            notifyError(jobResult.result ?? 'Provider job canceled')
-            return text
-        }
-        responseText = jobResult.result
-    }
     if(rq.type === 'streaming' || rq.type === 'multiline'){
         notifyError('Unexpected response type')
         return text

@@ -32,3 +32,18 @@ export interface ProviderRequestJob {
     cancel(): Promise<void>
     wait(options?: ProviderJobWaitOptions): Promise<ProviderJobResult>
 }
+
+export function decorateJob(
+    base: ProviderRequestJob,
+    overrides: Partial<Pick<ProviderRequestJob, 'getStatus' | 'cancel' | 'wait'>>,
+): ProviderRequestJob {
+    return {
+        id: base.id,
+        provider: base.provider,
+        kind: base.kind,
+        createdAt: base.createdAt,
+        getStatus: overrides.getStatus ?? (() => base.getStatus()),
+        cancel: overrides.cancel ?? (() => base.cancel()),
+        wait: overrides.wait ?? ((options) => base.wait(options)),
+    }
+}
