@@ -62,6 +62,19 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
             safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
         },
         wait: async (options) => {
+            let cancelStarted = false
+            const requestProviderCancel = async () => {
+                if (cancelStarted) return
+                cancelStarted = true
+                safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'cancel-requested' }))
+                await job.cancel()
+                safeStatus(() => publishAnthropicBatchStatus(genId, job.getStatus()))
+            }
+            const abortHandler = () => {
+                void requestProviderCancel().catch((err) => {
+                    console.error('[ModelPreset] Anthropic batch cancel failed', err)
+                })
+            }
             const shouldDeferAbortedTerminalStatus = (status: ProviderJobStatus) => (
                 options?.signal?.aborted === true
                 && (status.state === 'failed' || status.state === 'expired' || status.state === 'canceled')
@@ -75,6 +88,11 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
             const currentStatus = job.getStatus()
             if (!shouldDeferAbortedTerminalStatus(currentStatus)) {
                 safeStatus(() => publishAnthropicBatchStatus(genId, currentStatus))
+            }
+            if (options?.signal?.aborted) {
+                await requestProviderCancel()
+            } else {
+                options?.signal?.addEventListener('abort', abortHandler, { once: true })
             }
             try {
                 const result = await job.wait({ ...options, onStatus: forwardStatus })
@@ -108,6 +126,8 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
                     return { type: 'canceled', result: 'Aborted' }
                 }
                 throw err
+            } finally {
+                options?.signal?.removeEventListener('abort', abortHandler)
             }
         },
     })

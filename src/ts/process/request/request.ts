@@ -774,10 +774,25 @@ async function createAnthropicPresetBatchJob(
         })
     }
     const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
+    if (options.abortSignal?.aborted) {
+        if (status?.report) {
+            safeStatus(() => {
+                addBadge(status.genId, {
+                    key: 'batch',
+                    text: requestStatusText('batchCanceled'),
+                    tone: 'warn',
+                })
+                endStatus(status.genId, 'aborted', { now: Date.now() })
+            })
+        }
+        return { type: 'fail', result: 'Aborted', model: preset.name }
+    }
     const submission = await submitAnthropicBatchJob({
         prepared,
         fetchImpl,
-        signal: options.abortSignal,
+        // Do not abort the create-batch transport with the UI signal: Anthropic may
+        // accept the batch but the aborted response would lose the provider batch id,
+        // leaving us unable to submit /cancel. Let creation return an id, then cancel.
         customId: uuidv4(),
         chatId,
         logFetch: addFetchLog,
@@ -800,6 +815,9 @@ async function createAnthropicPresetBatchJob(
             })
         }
         return { type: 'fail', result: submission.error, model: preset.name }
+    }
+    if (options.abortSignal?.aborted) {
+        await submission.job.cancel()
     }
     if (status?.report) {
         safeStatus(() => {
@@ -855,16 +873,24 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                     abortSignal: waitOptions.signal ?? undefined,
                     send: async (convo) => {
                         if (!first) {
+                            if (waitOptions.signal?.aborted) {
+                                throw new ToolLoopAbortError('Anthropic batch canceled')
+                            }
                             const prepared = await prepareAnthropicChatRequest(
                                 options.preset,
                                 { messages: convo, tools: options.tools, abortSignal: waitOptions.signal ?? undefined, fetchImpl: options.fetchImpl },
                                 options.credential,
                                 false,
                             )
+                            if (waitOptions.signal?.aborted) {
+                                throw new ToolLoopAbortError('Anthropic batch canceled')
+                            }
                             const submitted = await submitAnthropicBatchJob({
                                 prepared,
                                 fetchImpl: options.fetchImpl,
-                                signal: waitOptions.signal ?? undefined,
+                                // Preserve the follow-up batch id even if the user
+                                // cancels while creation is in flight; then send
+                                // Anthropic's explicit cancel request below.
                                 customId: uuidv4(),
                                 chatId: options.chatId,
                                 logFetch: addFetchLog,
@@ -875,6 +901,11 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                                 throw new Error(submitted.error)
                             }
                             currentJob = submitted.job
+                            if (waitOptions.signal?.aborted) {
+                                await currentJob.cancel()
+                                waitOptions.onStatus?.(currentJob.getStatus())
+                                throw new ToolLoopAbortError('Anthropic batch canceled')
+                            }
                             waitOptions.onStatus?.(currentJob.getStatus())
                         }
                         first = false

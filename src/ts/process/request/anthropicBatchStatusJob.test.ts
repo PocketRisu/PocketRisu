@@ -7,6 +7,7 @@ import type { ProviderJobResult, ProviderJobStatus, ProviderJobWaitOptions, Prov
 function makeJob(
     initialStatus: ProviderJobStatus,
     waitImpl: (options?: ProviderJobWaitOptions) => Promise<ProviderJobResult>,
+    onCancel: () => void = () => {},
 ): ProviderRequestJob {
     let status = initialStatus
     return {
@@ -15,7 +16,7 @@ function makeJob(
         kind: 'message-batch',
         createdAt: 0,
         getStatus: () => status,
-        cancel: async () => { status = { state: 'cancel-requested' } },
+        cancel: async () => { onCancel(); status = { state: 'cancel-requested' } },
         wait: async (options) => waitImpl({
             ...options,
             onStatus: (next) => {
@@ -79,5 +80,27 @@ describe('wrapAnthropicBatchStatusJob', () => {
         expect(entry.phase).toBe('aborted')
         expect(entry.error).toBeUndefined()
         expect(entry.badges).toContainEqual({ key: 'batch', text: 'Anthropic batch canceled', tone: 'warn' })
+    })
+
+    test('requests provider cancellation when wait starts with an aborted signal', async () => {
+        const controller = new AbortController()
+        controller.abort()
+        startStatus('g1', { kind: 'main', label: 'preset', phase: 'waiting', now: 0 })
+        let cancelCalls = 0
+        const job = makeJob(
+            { state: 'submitted' },
+            async () => ({ type: 'canceled', result: 'Aborted' }),
+            () => { cancelCalls++ },
+        )
+
+        const result = await wrapAnthropicBatchStatusJob(job, 'g1').wait({ signal: controller.signal })
+
+        expect(result).toEqual({ type: 'canceled', result: 'Aborted' })
+        expect(cancelCalls).toBe(1)
+        expect(get(requestStatuses).get('g1')!.badges).toContainEqual({
+            key: 'batch',
+            text: 'Anthropic batch canceled',
+            tone: 'warn',
+        })
     })
 })
