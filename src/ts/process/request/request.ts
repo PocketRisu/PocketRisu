@@ -27,6 +27,7 @@ import {
     prepareAnthropicChatRequest,
     sendGoogleChatRequest, streamGoogleChatRequest, previewGoogleChatRequest,
     runToolLoop,
+    ToolLoopAbortError,
     type AdapterCacheContext,
     type AdapterChatMessage, type AdapterChatOptions, type AdapterChatResponse,
     type AdapterChatStreamDelta, type AdapterCredential,
@@ -870,6 +871,7 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                             })
                             if (submitted.ok === false) {
                                 lastFailure = { type: 'fail', result: submitted.error }
+                                if (waitOptions.signal?.aborted) throw new ToolLoopAbortError(submitted.error)
                                 throw new Error(submitted.error)
                             }
                             currentJob = submitted.job
@@ -882,6 +884,9 @@ function createAnthropicPresetBatchToolLoopJob(options: {
                         })
                         if (response.type !== 'success') {
                             lastFailure = response
+                            if (response.type === 'canceled') {
+                                throw new ToolLoopAbortError(response.result ?? 'Anthropic batch canceled')
+                            }
                             throw new Error(response.result ?? 'Anthropic batch did not complete successfully')
                         }
                         return response.response

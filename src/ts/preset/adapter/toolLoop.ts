@@ -34,6 +34,13 @@ export interface ToolLoopDeps {
     abortSignal?: AbortSignal
 }
 
+export class ToolLoopAbortError extends Error {
+    constructor(message = 'Tool loop aborted') {
+        super(message)
+        this.name = 'ToolLoopAbortError'
+    }
+}
+
 // Drives the tool-use loop: send → if the model requested tools, execute them and
 // append assistant{toolCalls} + tool{result} turns, then re-request, until the
 // model stops calling tools or the step cap is hit. The returned string
@@ -61,7 +68,9 @@ export async function runToolLoop(
             // on the first send (nothing executed yet) is safe to surface for
             // normal retry/fallback.
             if (!executedAny) throw err
-            parts.push('[ModelPreset: follow-up request failed after tool execution]')
+            parts.push(err instanceof ToolLoopAbortError
+                ? '[ModelPreset: aborted before completing tool calls]'
+                : '[ModelPreset: follow-up request failed after tool execution]')
             return joinParts(parts)
         }
         // Prepend this turn's reasoning (for display) to its text segment, matching

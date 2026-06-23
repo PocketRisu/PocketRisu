@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { runToolLoop, type ToolLoopDeps } from './toolLoop'
+import { runToolLoop, ToolLoopAbortError, type ToolLoopDeps } from './toolLoop'
 import type { AdapterChatMessage, AdapterChatResponse, AdapterToolCall } from './types'
 
 const NL2 = String.fromCharCode(10, 10) // blank-line separator the loop joins with
@@ -130,6 +130,23 @@ describe('runToolLoop', () => {
         expect(out).toContain('first')
         expect(out).toContain('follow-up request failed')
         expect(executeTool).toHaveBeenCalledTimes(1) // ran once, not re-run
+    })
+
+    test('reports abort marker when a follow-up send raises a typed abort', async () => {
+        const executeTool = vi.fn(async () => ({ text: 'r' }))
+        const send = vi.fn()
+            .mockResolvedValueOnce(res('first', [call('c1', 'x')]))
+            .mockRejectedValueOnce(new ToolLoopAbortError('Anthropic batch canceled'))
+
+        const out = await runToolLoop(initial, {
+            send,
+            executeTool,
+            maxSteps: 8,
+        })
+        expect(out).toContain('first')
+        expect(out).toContain('aborted before completing tool calls')
+        expect(out).not.toContain('follow-up request failed')
+        expect(executeTool).toHaveBeenCalledTimes(1)
     })
 
     test('returns partial (no throw) when executeTool fails after a side effect', async () => {
