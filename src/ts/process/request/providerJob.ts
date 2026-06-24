@@ -21,6 +21,7 @@ export type ProviderJobResult =
 export interface ProviderJobWaitOptions {
     signal?: AbortSignal | null
     onStatus?: (status: ProviderJobStatus) => void
+    deferSuccessStatus?: boolean
 }
 
 export interface ProviderRequestJob {
@@ -31,11 +32,12 @@ export interface ProviderRequestJob {
     getStatus(): ProviderJobStatus
     cancel(): Promise<void>
     wait(options?: ProviderJobWaitOptions): Promise<ProviderJobResult>
+    finishMappedResult?(result: ProviderJobResult): void
 }
 
 export function decorateJob(
     base: ProviderRequestJob,
-    overrides: Partial<Pick<ProviderRequestJob, 'getStatus' | 'cancel' | 'wait'>>,
+    overrides: Partial<Pick<ProviderRequestJob, 'getStatus' | 'cancel' | 'wait' | 'finishMappedResult'>>,
 ): ProviderRequestJob {
     return {
         id: base.id,
@@ -45,5 +47,6 @@ export function decorateJob(
         getStatus: overrides.getStatus ?? (() => base.getStatus()),
         cancel: overrides.cancel ?? (() => base.cancel()),
         wait: overrides.wait ?? ((options) => base.wait(options)),
+        finishMappedResult: overrides.finishMappedResult ?? base.finishMappedResult,
     }
 }

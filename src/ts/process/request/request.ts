@@ -139,12 +139,16 @@ function mapProviderJobResult(
 ): ProviderRequestJob {
     return decorateJob(job, {
         wait: async (options) => {
-            const result = await job.wait(options)
+            const result = await job.wait({ ...options, deferSuccessStatus: true })
             if (result.type !== 'success') return result
             try {
-                return { type: 'success', result: await mapSuccess(result.result) }
+                const mapped = { type: 'success' as const, result: await mapSuccess(result.result) }
+                job.finishMappedResult?.(mapped)
+                return mapped
             } catch (e) {
-                return { type: 'fail', result: e instanceof Error ? e.message : String(e) }
+                const mapped = { type: 'fail' as const, result: e instanceof Error ? e.message : String(e) }
+                job.finishMappedResult?.(mapped)
+                return mapped
             }
         },
     })
@@ -727,24 +731,17 @@ const ANTHROPIC_PROVIDER_BASE_ID = 'anthropic'
 const ANTHROPIC_SERVICE_TIER_PATH = 'service_tier'
 const ANTHROPIC_BATCH_SERVICE_TIER = 'batch'
 
-function getEffectivePresetBodyValue(preset: ModelPreset, path: string): unknown {
-    const userValues = preset.userValues ?? {}
-    for (const field of preset.profileSnapshot.schema) {
-        if (field.mapsTo?.target !== 'body' || field.mapsTo.path !== path) continue
-        const effective = Object.prototype.hasOwnProperty.call(userValues, field.key)
-            && userValues[field.key] !== undefined
-            ? userValues[field.key]
-            : field.default
-        if (effective === undefined || effective === '') continue
-        return effective
-    }
-    return undefined
+function isAnthropicPresetBatchCandidate(preset: ModelPreset): boolean {
+    return preset.profileSnapshot.adapterKind === ANTHROPIC_MESSAGES_ADAPTER_KIND
+        && preset.profileSnapshot.providerBaseId === ANTHROPIC_PROVIDER_BASE_ID
 }
 
-function shouldUseAnthropicPresetBatch(preset: ModelPreset): boolean {
-    if (preset.profileSnapshot.adapterKind !== ANTHROPIC_MESSAGES_ADAPTER_KIND) return false
-    if (preset.profileSnapshot.providerBaseId !== ANTHROPIC_PROVIDER_BASE_ID) return false
-    return getEffectivePresetBodyValue(preset, ANTHROPIC_SERVICE_TIER_PATH) === ANTHROPIC_BATCH_SERVICE_TIER
+function shouldUsePreparedAnthropicPresetBatch(
+    preset: ModelPreset,
+    prepared: Awaited<ReturnType<typeof prepareAnthropicChatRequest>>,
+): boolean {
+    return isAnthropicPresetBatchCandidate(preset)
+        && prepared.body[ANTHROPIC_SERVICE_TIER_PATH] === ANTHROPIC_BATCH_SERVICE_TIER
 }
 
 async function createAnthropicPresetBatchJob(
@@ -753,6 +750,7 @@ async function createAnthropicPresetBatchJob(
     credential: AdapterCredential | undefined,
     fetchImpl: typeof fetch,
     arg: RequestDataArgumentExtended,
+    prepared: Awaited<ReturnType<typeof prepareAnthropicChatRequest>>,
     chatId?: string,
     status?: { report: boolean, genId: string, kind: RequestKind },
 ): Promise<requestDataResponse> {
@@ -773,7 +771,6 @@ async function createAnthropicPresetBatchJob(
             })
         })
     }
-    const prepared = await prepareAnthropicChatRequest(preset, options, credential, false)
     if (options.abortSignal?.aborted) {
         if (status?.report) {
             safeStatus(() => {
@@ -981,7 +978,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     const tools = (supportsTools && arg.tools && arg.tools.length > 0)
         ? arg.tools.map(toAdapterToolDef)
         : undefined
-    const wantsAnthropicBatch = shouldUseAnthropicPresetBatch(preset)
+    const canUseAnthropicBatch = isAnthropicPresetBatchCandidate(preset)
 
     // Vision gate: send attached images when the adapter implements image wire AND
     // either the profile declares the 'vision' capability OR the user opted in via
@@ -1076,7 +1073,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     if (arg.previewBody) {
         try {
             const prepared = await previewModelPreset(kind, preset, { messages, tools, fetchImpl }, credential)
-            if (wantsAnthropicBatch) {
+            if (shouldUsePreparedAnthropicPresetBatch(preset, prepared)) {
                 return {
                     type: 'success',
                     result: JSON.stringify(previewAnthropicBatchRequest(prepared)),
@@ -1094,17 +1091,26 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     }
 
     try {
-        if (wantsAnthropicBatch) {
+        if (canUseAnthropicBatch) {
             const batchFetchImpl = makeProxiedFetch(arg.chatId, true)
-            return await createAnthropicPresetBatchJob(
+            const prepared = await prepareAnthropicChatRequest(
                 preset,
                 { messages, tools, abortSignal: abortSignal ?? undefined, fetchImpl: batchFetchImpl },
                 credential,
-                batchFetchImpl,
-                arg,
-                arg.chatId,
-                { report: reportStatus, genId, kind: statusKind },
+                false,
             )
+            if (shouldUsePreparedAnthropicPresetBatch(preset, prepared)) {
+                return await createAnthropicPresetBatchJob(
+                    preset,
+                    { messages, tools, abortSignal: abortSignal ?? undefined, fetchImpl: batchFetchImpl },
+                    credential,
+                    batchFetchImpl,
+                    arg,
+                    prepared,
+                    arg.chatId,
+                    { report: reportStatus, genId, kind: statusKind },
+                )
+            }
         }
 
         // Tool runs always go non-streaming for now: the execute→re-request loop

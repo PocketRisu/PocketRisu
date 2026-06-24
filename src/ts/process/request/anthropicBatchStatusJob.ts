@@ -1,5 +1,5 @@
 import { addBadge, endStatus, markPhase } from 'src/ts/status/requestStatus'
-import type { ProviderJobStatus, ProviderRequestJob } from './providerJob'
+import type { ProviderJobResult, ProviderJobStatus, ProviderRequestJob } from './providerJob'
 import { decorateJob } from './providerJob'
 import { safeStatus } from './safeStatus'
 import { requestStatusText } from './requestStatusText'
@@ -55,7 +55,20 @@ function publishAnthropicBatchStatus(genId: string, status: ProviderJobStatus): 
 }
 
 export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: string): ProviderRequestJob {
+    const finishMappedResult = (result: ProviderJobResult) => {
+        if (result.type === 'success') {
+            safeStatus(() => {
+                publishAnthropicBatchStatus(genId, { state: 'succeeded' })
+                endStatus(genId, 'done', { now: Date.now() })
+            })
+        } else if (result.type === 'canceled') {
+            safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'canceled', message: result.result }))
+        } else {
+            safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'failed', message: result.result }))
+        }
+    }
     return decorateJob(job, {
+        finishMappedResult,
         cancel: async () => {
             safeStatus(() => publishAnthropicBatchStatus(genId, { state: 'cancel-requested' }))
             await job.cancel()
@@ -97,10 +110,7 @@ export function wrapAnthropicBatchStatusJob(job: ProviderRequestJob, genId: stri
             try {
                 const result = await job.wait({ ...options, onStatus: forwardStatus })
                 if (result.type === 'success') {
-                    safeStatus(() => {
-                        publishAnthropicBatchStatus(genId, { state: 'succeeded' })
-                        endStatus(genId, 'done', { now: Date.now() })
-                    })
+                    if (!options?.deferSuccessStatus) finishMappedResult(result)
                 }
                 else if (options?.signal?.aborted) {
                     safeStatus(() => {

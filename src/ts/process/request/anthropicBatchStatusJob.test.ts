@@ -103,4 +103,39 @@ describe('wrapAnthropicBatchStatusJob', () => {
             tone: 'warn',
         })
     })
+
+    test('defers success terminal status until mapped result is finished', async () => {
+        startStatus('g1', { kind: 'main', label: 'preset', phase: 'waiting', now: 0 })
+        const job = makeJob({ state: 'submitted' }, async (options) => {
+            options?.onStatus?.({ state: 'succeeded' })
+            return { type: 'success', result: 'raw' }
+        })
+        const wrapped = wrapAnthropicBatchStatusJob(job, 'g1')
+
+        const result = await wrapped.wait({ deferSuccessStatus: true })
+
+        expect(result).toEqual({ type: 'success', result: 'raw' })
+        expect(get(requestStatuses).get('g1')!.phase).toBe('waiting')
+
+        wrapped.finishMappedResult?.({ type: 'fail', result: 'after-request failed' })
+
+        const entry = get(requestStatuses).get('g1')!
+        expect(entry.phase).toBe('failed')
+        expect(entry.error).toBe('after-request failed')
+    })
+
+    test('publishes normal success lifecycle', async () => {
+        startStatus('g1', { kind: 'main', label: 'preset', phase: 'waiting', now: 0 })
+        const job = makeJob({ state: 'submitted' }, async (options) => {
+            options?.onStatus?.({ state: 'running', message: 'Anthropic batch in_progress' })
+            return { type: 'success', result: 'done' }
+        })
+
+        const result = await wrapAnthropicBatchStatusJob(job, 'g1').wait()
+
+        const entry = get(requestStatuses).get('g1')!
+        expect(result).toEqual({ type: 'success', result: 'done' })
+        expect(entry.phase).toBe('done')
+        expect(entry.badges).toContainEqual({ key: 'batch', text: 'Anthropic batch completed', tone: 'success' })
+    })
 })

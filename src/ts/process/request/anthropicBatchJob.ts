@@ -31,14 +31,20 @@ export type AnthropicBatchMessageResult =
     | { type: 'canceled'; result?: string }
 
 export interface AnthropicBatchFetchLogEntry {
-    body: unknown
+    body: string
     headers?: Record<string, string>
-    response: unknown
+    response: string
     success: boolean
     url: string
     resType?: string
     chatId?: string
     status?: number
+}
+
+export interface AnthropicBatchPreviewRequest {
+    url: string
+    body: { requests: { custom_id: string; params: AdapterPreparedRequest['body'] }[] }
+    headers: Record<string, string>
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -80,9 +86,7 @@ function requestBodyText(body: BodyInit | null | undefined): string {
 
 function requestHeaders(headers: HeadersInit | undefined): Record<string, string> {
     if (!headers) return {}
-    if (headers instanceof Headers) return Object.fromEntries(headers.entries())
-    if (Array.isArray(headers)) return Object.fromEntries(headers)
-    return headers as Record<string, string>
+    return Object.fromEntries(new Headers(headers).entries())
 }
 
 async function logAnthropicBatchFetch(
@@ -152,7 +156,10 @@ export function toAnthropicBatchParams(body: AdapterPreparedRequest['body']): Ad
     return params
 }
 
-export function previewAnthropicBatchRequest(prepared: AdapterPreparedRequest, customId = 'preview') {
+export function previewAnthropicBatchRequest(
+    prepared: AdapterPreparedRequest,
+    customId = 'preview',
+): AnthropicBatchPreviewRequest {
     const params = toAnthropicBatchParams(prepared.body)
     return {
         url: anthropicBatchBaseUrl(prepared.url),
@@ -242,11 +249,10 @@ export class AnthropicBatchJob implements ProviderRequestJob {
             }
             while (true) {
                 if (this.now() - startedAt > this.timeoutMs) {
-                    this.setStatus({ state: 'failed', message: 'Anthropic batch request timed out after 24 hours' }, options.onStatus)
-                    return { type: 'fail', result: 'Anthropic batch request timed out after 24 hours' }
+                    const message = 'Anthropic batch request timed out'
+                    this.setStatus({ state: 'failed', message }, options.onStatus)
+                    return { type: 'fail', result: message }
                 }
-
-                await this.sleep(this.pollMs)
 
                 let statusRes: Response
                 try {
@@ -256,7 +262,10 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                         signal: this.cancelRequested ? undefined : options.signal ?? undefined,
                     }, undefined, this.chatId)
                 } catch (e) {
-                    if (options.signal?.aborted || this.cancelRequested) continue
+                    if (options.signal?.aborted || this.cancelRequested) {
+                        await this.sleep(this.pollMs)
+                        continue
+                    }
                     return { type: 'fail', result: e instanceof Error ? e.message : String(e) }
                 }
 
@@ -277,6 +286,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                         state: this.cancelRequested ? 'cancel-requested' : 'running',
                         message: `Anthropic batch ${processingStatus}`,
                     }, options.onStatus)
+                    await this.sleep(this.pollMs)
                     continue
                 }
 
@@ -325,7 +335,7 @@ export class AnthropicBatchJob implements ProviderRequestJob {
                     const error = isRecord(result.error) ? result.error : undefined
                     const innerError = error && isRecord(error.error) ? error.error : undefined
                     const message = typeof innerError?.message === 'string'
-                        ? `${String(innerError.type)}: ${innerError.message}`
+                        ? `${typeof innerError.type === 'string' ? `${innerError.type}: ` : ''}${innerError.message}`
                         : error ? JSON.stringify(error) : 'Anthropic batch errored'
                     this.setStatus({ state: 'failed', message }, onStatus)
                     return { type: 'fail', result: message }

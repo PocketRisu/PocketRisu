@@ -75,6 +75,14 @@ function expiredJsonl(): string {
     return JSON.stringify({ result: { type: 'expired' } }) + '\n'
 }
 
+function erroredJsonl(): string {
+    return JSON.stringify({ result: { type: 'errored', error: { error: { message: 'Bad request' } } } }) + '\n'
+}
+
+function canceledJsonl(): string {
+    return JSON.stringify({ result: { type: 'canceled' } }) + '\n'
+}
+
 function toolUseJsonl(): string {
     return JSON.stringify({
         result: {
@@ -208,6 +216,22 @@ describe('Anthropic preset batch jobs', () => {
         expect(job.getStatus()).toEqual({ state: 'succeeded', message: 'Anthropic batch completed' })
     })
 
+    test('checks status before the first poll sleep', async () => {
+        let sleepCalls = 0
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse(successJsonl('Already done'))
+            return jsonResponse({ processing_status: 'ended' })
+        })
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, {
+            sleep: async () => { sleepCalls++ },
+        })
+
+        const result = await job.wait()
+
+        expect(result).toEqual({ type: 'success', result: 'Already done' })
+        expect(sleepCalls).toBe(0)
+    })
+
     test('parses tool_use JSONL results for batch follow-ups', async () => {
         const { fetchImpl } = captureFetch((call) => {
             if (call.url.endsWith('/results')) return textResponse(toolUseJsonl())
@@ -323,5 +347,81 @@ describe('Anthropic preset batch jobs', () => {
         ])
         expect(calls.some((call) => call.url.endsWith('/batch_123') && call.method === 'GET')).toBe(true)
         expect(logs[1].response).toContain('expired')
+    })
+
+    test('formats errored JSONL result without undefined type prefix', async () => {
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse(erroredJsonl())
+            return jsonResponse({ processing_status: 'ended' })
+        })
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, { sleep: async () => {} })
+
+        const result = await job.wait()
+
+        expect(result).toEqual({ type: 'fail', result: 'Bad request' })
+        expect(job.getStatus()).toEqual({ state: 'failed', message: 'Bad request' })
+    })
+
+    test('returns canceled result from canceled JSONL result', async () => {
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse(canceledJsonl())
+            return jsonResponse({ processing_status: 'ended' })
+        })
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, { sleep: async () => {} })
+
+        const result = await job.wait()
+
+        expect(result).toEqual({ type: 'canceled', result: 'Anthropic batch canceled' })
+        expect(job.getStatus()).toEqual({ state: 'canceled', message: 'Anthropic batch canceled' })
+    })
+
+    test('fails when results JSONL contains no batch result', async () => {
+        const { fetchImpl } = captureFetch((call) => {
+            if (call.url.endsWith('/results')) return textResponse('{"not_result":true}\n')
+            return jsonResponse({ processing_status: 'ended' })
+        })
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, { sleep: async () => {} })
+
+        const result = await job.wait()
+
+        expect(result).toEqual({ type: 'fail', result: 'No Anthropic batch result found' })
+    })
+
+    test('fails when timeout is exceeded', async () => {
+        let nowCalls = 0
+        const { fetchImpl, calls } = captureFetch(() => jsonResponse({ processing_status: 'in_progress' }))
+        const job = new AnthropicBatchJob('custom-1', prepared(), 'batch_123', fetchImpl, {
+            timeoutMs: 10,
+            now: () => nowCalls++ < 2 ? 0 : 20,
+            sleep: async () => {},
+        })
+
+        const result = await job.wait()
+
+        expect(result).toEqual({ type: 'fail', result: 'Anthropic batch request timed out' })
+        expect(calls).toHaveLength(0)
+    })
+
+    test('surfaces submit failures', async () => {
+        const transport = await submitAnthropicBatchJob({
+            prepared: prepared(),
+            fetchImpl: async () => { throw new Error('network down') },
+            customId: 'custom-1',
+        })
+        expect(transport).toEqual({ ok: false, error: 'network down' })
+
+        const http = await submitAnthropicBatchJob({
+            prepared: prepared(),
+            fetchImpl: async () => textResponse('bad key', 401),
+            customId: 'custom-1',
+        })
+        expect(http).toEqual({ ok: false, error: 'bad key' })
+
+        const missingId = await submitAnthropicBatchJob({
+            prepared: prepared(),
+            fetchImpl: async () => jsonResponse({ id: '' }),
+            customId: 'custom-1',
+        })
+        expect(missingId).toEqual({ ok: false, error: 'No batch id returned from Anthropic batch request' })
     })
 })
