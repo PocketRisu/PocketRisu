@@ -13,6 +13,7 @@ import {
     resolvePresetMaxOutputTokens,
     resolveChatMaxResponseTokens,
     applyPromptPresetParams,
+    presetSupportsVision,
 } from './modelPresetBinding'
 import { emptyModelBinding } from 'src/ts/preset/types'
 
@@ -278,5 +279,46 @@ describe('applyPromptPresetParams — per-chat prompt-preset sampling override',
             schema: [{ key: 'apiKey', mapsTo: { target: 'auth', path: 'apiKey' } }],
         })
         expect(applyPromptPresetParams(preset, onChat, 'model')).toBe(preset)
+    })
+})
+
+describe('presetSupportsVision — ModelPreset image input gate', () => {
+    function visionPreset(opts: {
+        adapterKind?: 'openai-compatible' | 'anthropic-messages' | 'google-gemini' | 'other'
+        capabilities?: string[]
+        imageInput?: boolean
+    }) {
+        return {
+            id: 'p-main',
+            name: 'Main',
+            profileSnapshot: {
+                adapterKind: opts.adapterKind,
+                capabilities: opts.capabilities,
+            },
+            imageInput: opts.imageInput,
+        } as any
+    }
+
+    test('accepts vision-capable adapters with declared vision capability', () => {
+        expect(presetSupportsVision(visionPreset({
+            adapterKind: 'openai-compatible',
+            capabilities: ['vision'],
+        }))).toBe(true)
+    })
+
+    test('accepts imageInput opt-in for vision-capable adapters without declared vision', () => {
+        expect(presetSupportsVision(visionPreset({
+            adapterKind: 'google-gemini',
+            capabilities: ['streaming'],
+            imageInput: true,
+        }))).toBe(true)
+    })
+
+    test('rejects adapters that do not implement image wire', () => {
+        expect(presetSupportsVision(visionPreset({
+            adapterKind: 'other' as any,
+            capabilities: ['vision'],
+            imageInput: true,
+        }))).toBe(false)
     })
 })

@@ -23,7 +23,7 @@ import { runInlayScreen } from "./inlayScreen";
 import { runImageEmbedding } from "./transformers";
 import { runLuaEditTrigger } from "./scriptings";
 import { getModelInfo, LLMFlags } from "../model/modellist";
-import { resolveChatModelBinding, resolvePresetMaxOutputTokens } from "./request/modelPresetBinding";
+import { resolveChatModelBinding, resolvePresetMaxOutputTokens, presetSupportsVision } from "./request/modelPresetBinding";
 import { hypaMemoryV3 } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
@@ -259,6 +259,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     // global db.maxResponse (the "[채팅 봇]" max response size), overridden below
     // when this chat is bound to a ModelPreset.
     let maxResponseTokens = DBState.db.maxResponse
+    let presetVisionCapable = false
     // When this chat is bound to a ModelPreset, use the preset's own input
     // budget (preset.maxContext, default 65000) instead of the global
     // db.maxContext — clamped to the model's context window when known.
@@ -277,6 +278,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             // first message fail with a false "too much token" error.
             const presetOut = resolvePresetMaxOutputTokens(mainBinding.preset)
             if (presetOut !== undefined) maxResponseTokens = presetOut
+            presetVisionCapable = presetSupportsVision(mainBinding.preset)
         }
     }
 
@@ -845,7 +847,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 const inlayName = inlay.replace('{{inlayed::', '').replace('{{inlay::', '').replace('}}', '').replace('{{inlayeddata::', '')
                 const inlayData = await getInlayAsset(inlayName)
                 if(inlayData?.type === 'image'){
-                    if(modelinfo.flags.includes(LLMFlags.hasImageInput)){
+                    if(modelinfo.flags.includes(LLMFlags.hasImageInput) || presetVisionCapable){
                         multimodal.push({
                             type: 'image',
                             base64: inlayData.data,
