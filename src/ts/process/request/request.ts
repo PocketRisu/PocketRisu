@@ -710,7 +710,12 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     const tools = (supportsTools && arg.tools && arg.tools.length > 0)
         ? arg.tools.map(toAdapterToolDef)
         : undefined
-
+    
+    // Vision gate: send attached images when the adapter implements image wire AND
+    // either the profile declares the 'vision' capability OR the user opted in via
+    // the preset's imageInput toggle (for profiles like ollama / openai-compatible
+    // whose snapshot does not declare 'vision'). Additive — both branches default
+    // off, so OFF is byte-identical to the prior text-only behavior.
     const supportsVision = presetSupportsVision(preset)
 
     // Gemini context caching: MAIN chat requests on the google-gemini adapter
