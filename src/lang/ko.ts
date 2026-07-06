@@ -1010,6 +1010,7 @@ export const languageKorean = {
   autoFillRequestURL: "요청 URL 자동 채우기",
   useBackendChatJobs: "채팅 생성을 서버에서 실행",
   useBackendMultiagent: "MultiAgent 파이프라인을 서버에서 실행",
+  useBackendMultiagentDisabledTooltip: "채팅 생성을 서버에서 실행 옵션이 켜져 있을 때만 사용할 수 있습니다",
   backendMultiagent: {
     sectionName: "백엔드 MultiAgent",
     description: "서버 측 MultiAgent 파이프라인의 네이티브 설정입니다. 플러그인 설치가 필요 없습니다 — 여기에 API 키만 입력하면 서버가 내장 에이전트 프롬프트로 파이프라인을 실행합니다. 프롬프트를 비워두면 서버 기본값을 사용합니다.",
@@ -1143,6 +1144,7 @@ export const languageKorean = {
   textAreaTextSize: "입력 텍스트 크기",
   sideBarSize: "사이드바 크기",
   embedding: "임베딩",
+  embeddingBackendNote: "완전한 백엔드 처리를 위해서는 OpenAI 또는 OpenAI 호환(Custom) 임베딩을 사용해야 합니다.",
   syntax: "문법",
   run: "실행",
   noMessage: "무언가 입력하여 채팅을 시작하세요.",

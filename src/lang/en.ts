@@ -927,6 +927,7 @@ export const languageEnglish = {
     forcePlainFetch: "Force Plain Fetch",
     useBackendChatJobs: "Run Chat Generation on Server",
     useBackendMultiagent: "Run MultiAgent Pipeline on Server",
+    useBackendMultiagentDisabledTooltip: "Only available when Run Chat Generation on Server is enabled",
     backendMultiagent: {
         sectionName: "Backend MultiAgent",
         description: "Native config for the server-side MultiAgent pipeline. No plugin install required — set an API key here and the backend runs the pipeline using its built-in agent prompts. Leave a prompt blank to use the server default.",
@@ -1051,6 +1052,7 @@ export const languageEnglish = {
     textAreaTextSize: "Input text size",
     sideBarSize: "Sidebar Size",
     embedding: "Embedding",
+    embeddingBackendNote: "Use OpenAI or an OpenAI-compatible (Custom) embedding for full backend processing.",
     syntax: "Syntax",
     run: "Run",
     noMessage: "Type something to start the chat.",
