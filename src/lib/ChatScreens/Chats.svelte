@@ -79,6 +79,11 @@
     let cachedUserImageKey: string | null = null;
     let cachedUserImage: Promise<string | null> | null = null;
     let hashes: Set<number> = new Set();
+    // Separate from `hashes` above (real messages) so updateChatBody()'s own
+    // diff never sweeps up the synthetic status row, and so the synthetic
+    // row's own lightweight effect (see updateSyntheticStatusRow) can run
+    // independently of the expensive full message diff.
+    let syntheticHashes: Set<number> = new Set();
     let mountInstances: Map<number, any> = new Map();
     let mountProps: Map<number, any> = new Map();
 
@@ -213,38 +218,6 @@
 
         }
 
-        // Detailed-mode synthetic status row: a live pipeline entry for this
-        // room that hasn't produced a real message yet (covers Hypa +
-        // MultiAgent, which have no chat-log row of their own). Appended after
-        // the last real message (bottom-most / newest position). Once the real
-        // placeholder message appears with a matching chatId, this stops being
-        // in currentHashes and the existing toRemove diffing below unmounts it
-        // automatically — Chat.svelte then anchors the same stepper inside
-        // that real row instead. See RequestStatusInline.svelte.
-        if(DBState.db.requestStatusDisplayMode === 'detailed'){
-            const pipelineRoomId = getCurrentPipelineRoomId();
-            for(const [statusId, entry] of get(requestStatuses)){
-                if(!entry.steps?.length || isTerminalPhase(entry.phase)) continue;
-                if(entry.roomId !== pipelineRoomId) continue;
-                if(messages.some((m) => m.chatId === statusId)) continue;
-                const syntheticHash = hashCode(`synthetic-status:${statusId}`);
-                currentHashes.add(syntheticHash);
-                if(!hashes.has(syntheticHash)){
-                    const b = document.createElement('div');
-                    b.setAttribute('x-hashed', syntheticHash.toString());
-                    b.setAttribute('data-role', 'char');
-                    b.classList.add('chat-message-container');
-                    const reactiveProps = $state({ id: statusId });
-                    const inst = mount(RequestStatusInline, {
-                        target: b,
-                        props: reactiveProps,
-                    });
-                    mountInstances.set(syntheticHash, inst);
-                    mountProps.set(syntheticHash, reactiveProps);
-                    chatBody.prepend(b);
-                }
-            }
-        }
 
         //@ts-expect-error Set<T> requires type arg, and Set.difference needs 'esnext' lib (polyfilled by Core-js)
         const toRemove:Set = hashes.difference(currentHashes);
@@ -264,9 +237,68 @@
         hashes = currentHashes;
     };
 
+    // Detailed-mode synthetic status row: a live pipeline entry for this room
+    // that hasn't produced a real message yet (covers Hypa + MultiAgent, which
+    // have no chat-log row of their own). Appended after the last real message
+    // (bottom-most / newest position). Once the real placeholder message
+    // appears with a matching chatId, this stops qualifying and gets torn
+    // down here — Chat.svelte then anchors the same stepper inside that real
+    // row instead. See RequestStatusInline.svelte.
+    //
+    // Deliberately its OWN function/effect, separate from updateChatBody():
+    // requestStatuses ticks (~every 400ms while any entry is live, including
+    // plain tokPerSec/stall recomputes) would otherwise re-run updateChatBody's
+    // full O(messages) hash/image/character diff on every tick for EVERY user
+    // regardless of display mode — a real perf regression (UI jank during any
+    // live generation). This function only does the cheap synthetic-row check.
+    const updateSyntheticStatusRow = () => {
+        if(!chatBody) return;
+        const currentHashes: Set<number> = new Set();
+        if(DBState.db.requestStatusDisplayMode === 'detailed'){
+            const pipelineRoomId = getCurrentPipelineRoomId();
+            for(const [statusId, entry] of get(requestStatuses)){
+                if(!entry.steps?.length || isTerminalPhase(entry.phase)) continue;
+                if(entry.roomId !== pipelineRoomId) continue;
+                if(messages.some((m) => m.chatId === statusId)) continue;
+                const syntheticHash = hashCode(`synthetic-status:${statusId}`);
+                currentHashes.add(syntheticHash);
+                if(!syntheticHashes.has(syntheticHash)){
+                    const b = document.createElement('div');
+                    b.setAttribute('x-hashed', syntheticHash.toString());
+                    b.setAttribute('data-role', 'char');
+                    b.classList.add('chat-message-container');
+                    const reactiveProps = $state({ id: statusId });
+                    const inst = mount(RequestStatusInline, {
+                        target: b,
+                        props: reactiveProps,
+                    });
+                    mountInstances.set(syntheticHash, inst);
+                    mountProps.set(syntheticHash, reactiveProps);
+                    chatBody.prepend(b);
+                }
+            }
+        }
+
+        for(const hash of syntheticHashes){
+            if(currentHashes.has(hash)) continue;
+            const inst = mountInstances.get(hash);
+            if(inst){
+                unmount(inst);
+                mountInstances.delete(hash);
+                mountProps.delete(hash);
+            }
+            const element = chatBody.querySelector(`[x-hashed="${hash}"]`);
+            if(element){
+                chatBody.removeChild(element);
+            }
+        }
+
+        syntheticHashes = currentHashes;
+    };
     onDestroy(() => {
         console.log('Unmounting Chats');
         hashes.clear();
+        syntheticHashes.clear();
         mountInstances.forEach((inst) => {
             unmount(inst);
         });
@@ -413,7 +445,6 @@
 
     $effect(() => {
         void $ReloadChatPointer; // Make $effect track ReloadChatPointer changes
-        void $requestStatuses; // Make $effect track detailed-mode pipeline updates
         const wasAtBottom = checkIfAtBottom();
         updateChatBody()
 
@@ -431,6 +462,14 @@
         }
         previousLength = messages.length;
         previousChatRoomId = currentChatRoomId;
+    })
+
+    // Deliberately separate from the effect above: reacts to requestStatuses
+    // (ticks ~every 400ms while any entry is live) without re-running the
+    // expensive full message diff — see updateSyntheticStatusRow's own comment.
+    $effect(() => {
+        void $requestStatuses;
+        updateSyntheticStatusRow();
     })
 
 </script>
