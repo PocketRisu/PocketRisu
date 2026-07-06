@@ -41,7 +41,6 @@
         messageGenerationInfo?: MessageGenerationInfo|null;
         rerollIcon?: boolean|'dynamic'|'force';
         role?: string;
-        totalLength?: number;
         onReroll?: () => void;
         onNextSwipe?: () => void;
         unReroll?: () => void;
@@ -65,7 +64,6 @@
         rerollIcon = false,
         messageGenerationInfo = null,
         role = null,
-        totalLength = 0,
         onReroll = () => {},
         onNextSwipe = () => {},
         unReroll = () => {},
@@ -395,7 +393,6 @@
         </div>
     {:else}
         {@const chatReloadPointer = $ReloadGUIPointer + ($ReloadChatPointer[idx] ?? 0)}
-        {@const totalLengthPointer = (idx > totalLength - 6) ? totalLength : 0}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <span class="text chat-width chattext prose minw-0"
@@ -409,7 +406,7 @@
             style:font-size="{0.875 * (DBState.db.zoomsize / 100)}rem"
             style:line-height="{(DBState.db.lineHeight ?? 1.25) * (DBState.db.zoomsize / 100)}rem"
         >
-            {#key `${totalLengthPointer}|${chatReloadPointer}`}
+            {#key chatReloadPointer}
                 <ChatBody
                     {character}
                     {firstMessage}

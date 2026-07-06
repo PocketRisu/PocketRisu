@@ -60,3 +60,19 @@ export function checkCondition(item: SettingItem, ctx: SettingContext): boolean 
     if (!item.condition) return true;
     return item.condition(ctx);
 }
+
+/**
+ * Check if item should render disabled (still visible) based on disabledCondition
+ */
+export function isItemDisabled(item: SettingItem, ctx: SettingContext): boolean {
+    if (!item.disabledCondition) return false;
+    return item.disabledCondition(ctx);
+}
+
+/**
+ * Resolve the hover tooltip text shown while an item is disabled
+ */
+export function getDisabledTooltip(item: SettingItem): string | undefined {
+    if (!item.disabledTooltipKey) return undefined;
+    return language[item.disabledTooltipKey];
+}

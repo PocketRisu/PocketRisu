@@ -52,6 +52,16 @@
     // fresh object each tick made every ChatBody's markdown derived re-run (all
     // messages blank→re-parse during streaming — a real heat/flicker bug).
     let cachedSimpleChar: ReturnType<typeof createSimpleCharacter> | null = null;
+    // Same idea for the avatar images: getCharImage() is async and returns a
+    // NEW Promise object on every call even when the resolved image is
+    // identical, so re-issuing it every streaming tick reassigns `img` on
+    // every visible message and retriggers Chat.svelte's `{#await img}`
+    // placeholder — a per-tick avatar flicker. Only recompute when the
+    // underlying image location (or the hide-images setting) actually changes.
+    let cachedCharImageKey: string | null = null;
+    let cachedCharImage: ReturnType<typeof getCharImage> | null = null;
+    let cachedUserImageKey: string | null = null;
+    let cachedUserImage: ReturnType<typeof getCharImage> | null = null;
     let hashes: Set<number> = new Set();
     let mountInstances: Map<number, any> = new Map();
     let mountProps: Map<number, any> = new Map();
@@ -77,8 +87,18 @@
 
         let nextHash = 0;
         let currentHashes: Set<number> = new Set();
-        const charImage = getCharImage(currentCharacter.image, 'css')
-        const userImage = getCharImage(userIcon, 'css')
+        const charImageKey = `${currentCharacter.image}::${DBState.db.hideAllImages}`;
+        if (charImageKey !== cachedCharImageKey) {
+            cachedCharImageKey = charImageKey;
+            cachedCharImage = getCharImage(currentCharacter.image, 'css');
+        }
+        const charImage = cachedCharImage;
+        const userImageKey = `${userIcon}::${DBState.db.hideAllImages}`;
+        if (userImageKey !== cachedUserImageKey) {
+            cachedUserImageKey = userImageKey;
+            cachedUserImage = getCharImage(userIcon, 'css');
+        }
+        const userImage = cachedUserImage;
         // Only swap the reference when the snapshot's CONTENT actually changes,
         // so streaming ticks don't churn `character` for every message.
         const candidateSimpleChar = createSimpleCharacter(currentCharacter);
@@ -128,7 +148,6 @@
                 message: message.data ?? '',
                 isLastMemory: false,
                 idx: i,
-                totalLength: messages.length,
                 img: message.role === 'user' ? userImage : charImage,
                 onReroll: onReroll,
                 onNextSwipe: i === lastRealCharIdx ? onNextSwipe : () => {},

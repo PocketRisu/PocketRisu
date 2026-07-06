@@ -218,7 +218,8 @@ export const advancedSettingsItems: SettingItem[] = [
     {
         id: 'adv.backendMultiagent', type: 'check', labelKey: 'useBackendMultiagent', bindKey: 'useBackendMultiagent',
         helpKey: 'useBackendMultiagent', showExperimental: true,
-        condition: (ctx) => ctx.db.useBackendChatJobs,
+        disabledCondition: (ctx) => !ctx.db.useBackendChatJobs,
+        disabledTooltipKey: 'useBackendMultiagentDisabledTooltip',
     },
     {
         type: 'custom', id: 'adv.backendMultiagentConfig', componentId: 'MultiagentBackendSettings',

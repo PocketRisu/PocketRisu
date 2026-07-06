@@ -1229,6 +1229,8 @@
             <OptionInput value="voyageContext3">Voyage Context 3</OptionInput>
         </SelectInput>
 
+        <p class="text-textcolor2 text-sm mt-2 mb-4">{language.embeddingBackendNote}</p>
+
         {#if DBState.db.hypaModel === 'openai3small' || DBState.db.hypaModel === 'openai3large' || DBState.db.hypaModel === 'ada'}
             <span class="text-textcolor">OpenAI API Key <Help key="embeddingOpenAIKey"/></span>
             <TextInput className="mt-2" marginBottom bind:value={DBState.db.supaMemoryKey}/>

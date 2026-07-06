@@ -8,6 +8,10 @@
 import type { Database } from '../storage/database.svelte';
 import type { CustomComponentId, CustomComponentProps } from './customComponents';
 import type { LLMModel } from '../model/types';
+import type { languageEnglish } from '../../lang/en';
+
+/** Top-level language keys whose value is a plain string (as opposed to a nested section) */
+type LanguageStringKey = { [K in keyof typeof languageEnglish]: typeof languageEnglish[K] extends string ? K : never }[keyof typeof languageEnglish];
 
 /**
  * Context passed to condition functions for visibility checks
@@ -161,6 +165,15 @@ export interface SettingItem {
      * @param ctx - Contains db, modelInfo, and subModelInfo
      */
     condition?: (ctx: SettingContext) => boolean;
+
+    /**
+     * Condition function for disabling the control while keeping it visible.
+     * Return true to render disabled (item stays in the list, unlike `condition`).
+     */
+    disabledCondition?: (ctx: SettingContext) => boolean;
+
+    /** Flat language key (top-level, like labelKey) for the disabled-state hover tooltip */
+    disabledTooltipKey?: LanguageStringKey;
     
     /** Type-specific options */
     options?: SettingOptions;
