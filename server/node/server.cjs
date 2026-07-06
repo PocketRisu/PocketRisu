@@ -36,6 +36,9 @@ const {
     startChatJob, getChatJob, subscribeToJob, cancelChatJob,
     getPersistedResult, listPersistedResults, acknowledgeResult,
 } = require('./chatJob.cjs');
+const {
+    startFetchJob, waitFetchJob, ackFetchJob, cancelFetchJob,
+} = require('./fetchJob.cjs');
 const { spawn, execSync } = require('child_process');
 const os = require('os');
 const { Readable, Transform } = require('stream');
@@ -3106,6 +3109,67 @@ app.post('/api/chat-job/:jobId/cancel', async (req, res, next) => {
             return;
         }
         res.json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// --- Backend fetch relay endpoints (see fetchJob.cjs) ---
+// Non-streaming request relay: the server performs the outbound request and
+// holds the buffered response until the client picks it up, so a suspended
+// webview (screen off) can still recover the result after it resumes.
+app.post('/api/fetch-job/start', async (req, res, next) => {
+    if (!await checkAuth(req, res)) { return; }
+    try {
+        const { jobId, url, method, headers, body, timeoutMs } = req.body || {};
+        if (!jobId || !url) {
+            res.status(400).json({ error: 'jobId and url required' });
+            return;
+        }
+        const outboundHeaders = (headers && typeof headers === 'object') ? { ...headers } : {};
+        if (!outboundHeaders['x-forwarded-for']) {
+            outboundHeaders['x-forwarded-for'] = req.ip;
+        }
+        let snapshot;
+        try {
+            snapshot = startFetchJob({ jobId, url, method, headers: outboundHeaders, body, timeoutMs });
+        } catch (startError) {
+            res.status(400).json({ error: startError?.message || `${startError}` });
+            return;
+        }
+        res.json(snapshot);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get('/api/fetch-job/:jobId', async (req, res, next) => {
+    if (!await checkAuth(req, res)) { return; }
+    try {
+        const snapshot = await waitFetchJob(req.params.jobId, req.query.wait ? Number(req.query.wait) : 0);
+        if (!snapshot) {
+            res.status(404).json({ error: 'Job not found' });
+            return;
+        }
+        res.json(snapshot);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post('/api/fetch-job/:jobId/ack', async (req, res, next) => {
+    if (!await checkAuth(req, res)) { return; }
+    try {
+        res.json({ success: ackFetchJob(req.params.jobId) });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.post('/api/fetch-job/:jobId/cancel', async (req, res, next) => {
+    if (!await checkAuth(req, res)) { return; }
+    try {
+        res.json({ success: cancelFetchJob(req.params.jobId) });
     } catch (error) {
         next(error);
     }

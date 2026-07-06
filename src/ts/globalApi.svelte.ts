@@ -1275,6 +1275,14 @@ export async function globalFetch(url: string, arg: GlobalFetchArgs = {}): Promi
             }
         }
 
+        // Backend relay: with backend chat jobs enabled, proxied requests are
+        // executed by the server as pickup-able jobs (see fetchWithBackendRelay)
+        // so a webview suspension (screen off) can't kill them mid-flight. The
+        // relay gets the caller's original signal — the request timeout is
+        // enforced server-side, where the clock keeps running during suspension.
+        // __NODE__ guard: /api/fetch-job only exists on the node server build.
+        const useBackendRelay = !!db.useBackendChatJobs && !!(globalThis as any).__NODE__
+
         const timeoutSignal = buildTimeoutSignal(arg.abortSignal, arg.requestTimeoutMs)
         const requestArg = timeoutSignal.signal === arg.abortSignal
             ? arg
@@ -1282,7 +1290,9 @@ export async function globalFetch(url: string, arg: GlobalFetchArgs = {}): Promi
 
         try {
             if (useLocalNetworkRoute) {
-                return await fetchWithProxy(url, requestArg);
+                return useBackendRelay
+                    ? await fetchWithBackendRelay(url, arg)
+                    : await fetchWithProxy(url, requestArg);
             }
 
             if (forcePlainFetch) {
@@ -1292,7 +1302,9 @@ export async function globalFetch(url: string, arg: GlobalFetchArgs = {}): Promi
             if (window.userScriptFetch && !arg.plainFetchDeforce) {
                 return await fetchWithUSFetch(url, requestArg);
             }
-            return await fetchWithProxy(url, requestArg);
+            return useBackendRelay
+                ? await fetchWithBackendRelay(url, arg)
+                : await fetchWithProxy(url, requestArg);
         } finally {
             timeoutSignal.cleanup()
         }
@@ -1430,9 +1442,165 @@ async function fetchWithProxy(url: string, arg: GlobalFetchArgs): Promise<Global
     }
 }
 
+const BACKEND_RELAY_POLL_WAIT_MS = 25000;
+const BACKEND_RELAY_RETRY_DELAY_MS = 1000;
+const BACKEND_RELAY_MAX_RESTARTS = 2;
+// Network-level failures (fetch throws) retry generously: they are exactly the
+// webview-suspension signature this relay exists for. HTTP-level failures come
+// from a reachable server (auth failure, crash loop) and won't heal by waiting.
+const BACKEND_RELAY_MAX_NETWORK_RETRIES = 600;
+const BACKEND_RELAY_MAX_HTTP_RETRIES = 3;
+
+/**
+ * Performs a fetch request through the backend fetch relay (/api/fetch-job).
+ *
+ * Unlike fetchWithProxy — where the response only exists inside the in-flight
+ * browser fetch — the server buffers the response until we pick it up, and
+ * `start` is idempotent on the client-generated jobId. If the webview is
+ * suspended mid-request (screen off / app backgrounded), polling resumes when
+ * the page wakes and the stored result is still there. Used for all proxied
+ * requests when `useBackendChatJobs` is enabled — notably the HypaMemory
+ * embedding and summarization calls that run before the main chat job starts.
+ */
+async function fetchWithBackendRelay(url: string, arg: GlobalFetchArgs): Promise<GlobalFetchResult> {
+    const jobId = uuidv4();
+    const signal = arg.abortSignal;
+
+    const abortedResult = (): GlobalFetchResult => ({ ok: false, data: 'aborted', headers: {}, status: 400 });
+    const cancelJob = () => {
+        forageStorage.authenticatedFetch(`/api/fetch-job/${jobId}/cancel`, { method: 'POST' }).catch(() => {});
+    };
+
+    try {
+        const contentType = arg.body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json';
+        const headers: { [key: string]: string } = { 'Content-Type': contentType, ...(arg.headers ?? {}) };
+        if (arg.useRisuToken) {
+            headers['x-risu-tk'] = 'use';
+        }
+        if (DBState?.db?.requestLocation) {
+            headers['risu-location'] = DBState.db.requestLocation;
+        }
+
+        const method = arg.method ?? 'POST';
+        const body = method === 'GET'
+            ? undefined
+            : (arg.body instanceof URLSearchParams ? arg.body.toString() : JSON.stringify(arg.body));
+
+        const startPayload = JSON.stringify({ jobId, url, method, headers, body, timeoutMs: arg.requestTimeoutMs });
+
+        let started = false;
+        let restarts = 0;
+        let networkRetries = 0;
+        let httpRetries = 0;
+
+        while (true) {
+            if (signal?.aborted) {
+                cancelJob();
+                return abortedResult();
+            }
+            try {
+                if (!started) {
+                    const startRes = await forageStorage.authenticatedFetch('/api/fetch-job/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: startPayload,
+                        signal: signal ?? undefined,
+                    });
+                    if (!startRes.ok) {
+                        const text = await startRes.text().catch(() => '');
+                        addFetchLogInGlobalFetch(`Backend relay start failed: ${startRes.status} ${text}`, false, url, arg, startRes.status);
+                        return { ok: false, data: `Backend relay start failed: ${startRes.status} ${text}`, headers: {}, status: startRes.status };
+                    }
+                    started = true;
+                    continue;
+                }
+
+                const pollRes = await forageStorage.authenticatedFetch(`/api/fetch-job/${jobId}?wait=${BACKEND_RELAY_POLL_WAIT_MS}`, {
+                    signal: signal ?? undefined,
+                });
+                if (pollRes.status === 404) {
+                    // Job lost (server restart or GC). Restarting is safe — `start`
+                    // is idempotent on jobId — but bound it so a flapping server
+                    // can't re-send the upstream request forever.
+                    if (restarts >= BACKEND_RELAY_MAX_RESTARTS) {
+                        addFetchLogInGlobalFetch('Backend relay job lost', false, url, arg);
+                        return { ok: false, data: 'Backend relay job lost', headers: {}, status: 400 };
+                    }
+                    restarts++;
+                    started = false;
+                    continue;
+                }
+                if (!pollRes.ok) {
+                    if (httpRetries >= BACKEND_RELAY_MAX_HTTP_RETRIES) {
+                        const text = await pollRes.text().catch(() => '');
+                        const message = `Backend relay poll failed: ${pollRes.status} ${text}`;
+                        addFetchLogInGlobalFetch(message, false, url, arg, pollRes.status);
+                        return { ok: false, data: message, headers: {}, status: pollRes.status };
+                    }
+                    httpRetries++;
+                    await sleep(BACKEND_RELAY_RETRY_DELAY_MS);
+                    continue;
+                }
+                httpRetries = 0;
+                networkRetries = 0;
+
+                const snapshot = await pollRes.json();
+                if (snapshot.status === 'running' || snapshot.status === 'pending') {
+                    continue;
+                }
+                if (snapshot.status !== 'done' || !snapshot.response) {
+                    const message = snapshot.error || 'Backend relay job failed';
+                    addFetchLogInGlobalFetch(message, false, url, arg);
+                    return { ok: false, data: message, headers: {}, status: 400 };
+                }
+
+                void forageStorage.authenticatedFetch(`/api/fetch-job/${jobId}/ack`, { method: 'POST' }).catch(() => {});
+
+                const responseStatus: number = snapshot.response.status ?? 0;
+                const responseHeaders: { [key: string]: string } = snapshot.response.headers ?? {};
+                const bodyBytes = new Uint8Array(Buffer.from(snapshot.response.bodyB64 ?? '', 'base64'));
+                const isSuccess = responseStatus >= 200 && responseStatus < 300;
+
+                if (arg.rawResponse) {
+                    addFetchLogInGlobalFetch('Uint8Array Response', isSuccess, url, arg, responseStatus);
+                    return { ok: isSuccess, data: bodyBytes, headers: responseHeaders, status: responseStatus };
+                }
+
+                const text = new TextDecoder().decode(bodyBytes);
+                try {
+                    const data = JSON.parse(text);
+                    addFetchLogInGlobalFetch(data, isSuccess, url, arg, responseStatus);
+                    return { ok: isSuccess, data, headers: responseHeaders, status: responseStatus };
+                } catch {
+                    const errorMsg = text.startsWith('<!DOCTYPE') ? 'Responded HTML. Is your URL, API key, and password correct?' : text;
+                    addFetchLogInGlobalFetch(text, false, url, arg, responseStatus);
+                    return { ok: false, data: errorMsg, headers: responseHeaders, status: responseStatus };
+                }
+            } catch (error) {
+                if (signal?.aborted) {
+                    cancelJob();
+                    return abortedResult();
+                }
+                // Transient failure — network drop or the webview waking from
+                // suspension. The job keeps running server-side; retry shortly.
+                // Retries only tick while the page is awake, so this bound is
+                // ~10 minutes of on-screen unreachability, not suspension time.
+                if (networkRetries >= BACKEND_RELAY_MAX_NETWORK_RETRIES) {
+                    addFetchLogInGlobalFetch(`Backend relay unreachable: ${error}`, false, url, arg);
+                    return { ok: false, data: `Backend relay unreachable: ${error}`, headers: {}, status: 400 };
+                }
+                networkRetries++;
+                await sleep(BACKEND_RELAY_RETRY_DELAY_MS);
+            }
+        }
+    } catch (error) {
+        return { ok: false, data: `${error}`, headers: {}, status: 400 };
+    }
+}
+
 /**
  * Regular expression to match backslashes.
- * 
+ *
  * @constant {RegExp}
  */
 const re = /\\/g;
