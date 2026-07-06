@@ -824,17 +824,28 @@ import { isMobile } from 'src/ts/platform'
                 showNewMessageButton = false;
             }
         }}>
-            <!-- fixedChatTextarea ON  → floating overlay (h-0 sticky anchor + the
-                 composer translated up to hover above the bottom edge).
+            <!-- fixedChatTextarea ON  → floating overlay (h-0 anchor + the composer
+                 translated up to hover above the bottom edge). Desktop anchors via
+                 `sticky` (works fine there). Mobile devices (isMobile — a UA check,
+                 independent of the opt-in "beta mobile GUI" layout most mobile/PWA
+                 users never enable) anchor via `fixed` instead: on mobile browsers
+                 and PWA standalone shells, `position: sticky`'s pinning depends on
+                 the scroll container's height resolving correctly, which is
+                 unreliable there (browser-chrome show/hide, PWA viewport quirks,
+                 or — when the beta mobile GUI IS enabled — MobileBody's nested
+                 scroller). `fixed` anchors to the viewport directly instead, so it
+                 doesn't depend on any ancestor scroll container resolving right.
                  fixedChatTextarea OFF → in-flow composer that sits at the end of
                  the message list and scrolls with it. -->
             <div
                     class={DBState.db.fixedChatTextarea
-                        ? "sticky right-0 bottom-0 z-[29] h-0 w-full overflow-visible pointer-events-none"
+                        ? (isMobile
+                            ? "fixed inset-x-0 bottom-0 z-[29] h-0 w-full overflow-visible pointer-events-none"
+                            : "sticky right-0 bottom-0 z-[29] h-0 w-full overflow-visible pointer-events-none")
                         : "w-full"}
             >
               <div bind:clientHeight={composerOverlayHeight} class={DBState.db.fixedChatTextarea
-                        ? "pointer-events-auto mx-auto w-full max-w-3xl px-2 pb-4 -translate-y-full"
+                        ? `pointer-events-auto mx-auto w-full max-w-3xl px-2 -translate-y-full ${isMobile ? 'rs-composer-safe-bottom' : 'pb-4'}`
                         : "pointer-events-auto mx-auto w-full max-w-3xl px-2 pt-2 pb-2"}>
                 <!-- "plugin-compat-items-stretch" is a compat hook (not a Tailwind class):
                      plugins that locate the composer via div[class*="items-stretch"] (e.g. gemini-cache-keeper)
@@ -1306,5 +1317,12 @@ import { isMobile } from 'src/ts/platform'
        ml-auto to avoid a double gap splitting the timer away from the buttons */
     :global(.plugin-compat-items-stretch:has(#gck-cache-timer) .composer-expand-btn) {
         margin-left: 0;
+    }
+
+    /* Mobile fixed composer: pad for the home-indicator/notch safe area (PWA
+       standalone can render under it) while keeping at least the desktop 1rem
+       (pb-4) gap on devices with no inset. */
+    .rs-composer-safe-bottom {
+        padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
     }
 </style>
