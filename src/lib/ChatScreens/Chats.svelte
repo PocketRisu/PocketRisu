@@ -3,6 +3,8 @@
     import isEqual from 'lodash/isEqual';
     import { mount, onDestroy, unmount } from 'svelte';
     import Chat from './Chat.svelte';
+    import RequestStatusInline from '../UI/GUI/RequestStatusInline.svelte';
+    import { requestStatuses, isTerminalPhase } from 'src/ts/status/requestStatus';
     import { getCharImage } from 'src/ts/characters';
     import { createSimpleCharacter, DBState, selectedCharID, ReloadChatPointer } from 'src/ts/stores.svelte';
     import { chatFoldedStateMessageIndex } from 'src/ts/globalApi.svelte';
@@ -15,6 +17,20 @@
         const char = DBState.db.characters[charId];
         if (!char) return null;
         return char.chats?.[char.chatPage]?.id ?? null;
+    };
+
+    // Mirrors sendChat()'s roomId fallback exactly (currentChat.id ||
+    // chatPage.toString()) — deliberately separate from getCurrentChatRoomId()
+    // above, which other code already depends on returning null (not a
+    // chatPage fallback) for the per-message hash. Chat.id is optional, so
+    // without this dedicated fallback, a live pipeline entry's roomId could
+    // never match here for chats that predate the `.id` field.
+    const getCurrentPipelineRoomId = () => {
+        const charId = get(selectedCharID);
+        if (charId < 0) return null;
+        const char = DBState.db.characters[charId];
+        if (!char) return null;
+        return char.chats?.[char.chatPage]?.id || char.chatPage.toString();
     };
 
     let {
@@ -59,9 +75,9 @@
     // placeholder — a per-tick avatar flicker. Only recompute when the
     // underlying image location (or the hide-images setting) actually changes.
     let cachedCharImageKey: string | null = null;
-    let cachedCharImage: ReturnType<typeof getCharImage> | null = null;
+    let cachedCharImage: Promise<string | null> | null = null;
     let cachedUserImageKey: string | null = null;
-    let cachedUserImage: ReturnType<typeof getCharImage> | null = null;
+    let cachedUserImage: Promise<string | null> | null = null;
     let hashes: Set<number> = new Set();
     let mountInstances: Map<number, any> = new Map();
     let mountProps: Map<number, any> = new Map();
@@ -148,6 +164,7 @@
                 message: message.data ?? '',
                 isLastMemory: false,
                 idx: i,
+                chatId: message.chatId,
                 img: message.role === 'user' ? userImage : charImage,
                 onReroll: onReroll,
                 onNextSwipe: i === lastRealCharIdx ? onNextSwipe : () => {},
@@ -194,6 +211,39 @@
             }
             nextHash = currentHash;
 
+        }
+
+        // Detailed-mode synthetic status row: a live pipeline entry for this
+        // room that hasn't produced a real message yet (covers Hypa +
+        // MultiAgent, which have no chat-log row of their own). Appended after
+        // the last real message (bottom-most / newest position). Once the real
+        // placeholder message appears with a matching chatId, this stops being
+        // in currentHashes and the existing toRemove diffing below unmounts it
+        // automatically — Chat.svelte then anchors the same stepper inside
+        // that real row instead. See RequestStatusInline.svelte.
+        if(DBState.db.requestStatusDisplayMode === 'detailed'){
+            const pipelineRoomId = getCurrentPipelineRoomId();
+            for(const [statusId, entry] of get(requestStatuses)){
+                if(!entry.steps?.length || isTerminalPhase(entry.phase)) continue;
+                if(entry.roomId !== pipelineRoomId) continue;
+                if(messages.some((m) => m.chatId === statusId)) continue;
+                const syntheticHash = hashCode(`synthetic-status:${statusId}`);
+                currentHashes.add(syntheticHash);
+                if(!hashes.has(syntheticHash)){
+                    const b = document.createElement('div');
+                    b.setAttribute('x-hashed', syntheticHash.toString());
+                    b.setAttribute('data-role', 'char');
+                    b.classList.add('chat-message-container');
+                    const reactiveProps = $state({ id: statusId });
+                    const inst = mount(RequestStatusInline, {
+                        target: b,
+                        props: reactiveProps,
+                    });
+                    mountInstances.set(syntheticHash, inst);
+                    mountProps.set(syntheticHash, reactiveProps);
+                    chatBody.prepend(b);
+                }
+            }
         }
 
         //@ts-expect-error Set<T> requires type arg, and Set.difference needs 'esnext' lib (polyfilled by Core-js)
@@ -363,6 +413,7 @@
 
     $effect(() => {
         void $ReloadChatPointer; // Make $effect track ReloadChatPointer changes
+        void $requestStatuses; // Make $effect track detailed-mode pipeline updates
         const wasAtBottom = checkIfAtBottom();
         updateChatBody()
 

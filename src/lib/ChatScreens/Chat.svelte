@@ -21,6 +21,8 @@
     import { HideIconStore, ReloadGUIPointer, selIdState } from "../../ts/stores.svelte"
     import AutoresizeArea from "../UI/GUI/TextAreaResizable.svelte"
     import ChatBody from './ChatBody.svelte'
+    import RequestStatusInline from '../UI/GUI/RequestStatusInline.svelte'
+    import { requestStatuses, isTerminalPhase } from 'src/ts/status/requestStatus'
     import PopupButton from "../UI/PopupButton.svelte";
     import PartialEditController from './PartialEditController.svelte';
 
@@ -41,6 +43,7 @@
         messageGenerationInfo?: MessageGenerationInfo|null;
         rerollIcon?: boolean|'dynamic'|'force';
         role?: string;
+        chatId?: string;
         onReroll?: () => void;
         onNextSwipe?: () => void;
         unReroll?: () => void;
@@ -64,6 +67,7 @@
         rerollIcon = false,
         messageGenerationInfo = null,
         role = null,
+        chatId = undefined,
         onReroll = () => {},
         onNextSwipe = () => {},
         unReroll = () => {},
@@ -93,6 +97,17 @@
             cbsConditions: getCbsCondition()
         })
     })
+
+    // 'detailed' request-status mode: show the pipeline stepper inline while
+    // this message's backing request is live. Disappears the instant the
+    // entry goes terminal (see RequestStatusInline.svelte).
+    let inlineStatusEntry = $derived(chatId ? $requestStatuses.get(chatId) : undefined)
+    let showInlineRequestStatus = $derived(
+        DBState.db.requestStatusDisplayMode === 'detailed'
+        && !!chatId
+        && !!inlineStatusEntry?.steps?.length
+        && !isTerminalPhase(inlineStatusEntry.phase)
+    )
 
     async function rm(){
         const messages = DBState.db.characters[selIdState.selId].chats[DBState.db.characters[selIdState.selId].chatPage].message
@@ -406,6 +421,9 @@
             style:font-size="{0.875 * (DBState.db.zoomsize / 100)}rem"
             style:line-height="{(DBState.db.lineHeight ?? 1.25) * (DBState.db.zoomsize / 100)}rem"
         >
+            {#if showInlineRequestStatus && chatId}
+                <RequestStatusInline id={chatId} />
+            {/if}
             {#key chatReloadPointer}
                 <ChatBody
                     {character}

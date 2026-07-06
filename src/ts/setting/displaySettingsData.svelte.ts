@@ -266,7 +266,18 @@ export const displayOtherHomeItems: SettingItem[] = [
 ];
 
 export const displayOtherChatItems: SettingItem[] = [
-    { id: 'display.showRequestStatus', type: 'check', labelKey: 'showRequestStatus', helpKey: 'showRequestStatus', bindKey: 'showRequestStatus', keywords: ['request', 'status', 'toast', 'token', 'thinking'] },
+    {
+        id: 'display.requestStatusDisplayMode', type: 'select', labelKey: 'requestStatusDisplayMode',
+        helpKey: 'requestStatusDisplayMode', bindKey: 'requestStatusDisplayMode',
+        options: {
+            selectOptions: [
+                { value: 'modal', labelKey: 'requestStatusModeModal' },
+                { value: 'detailed', labelKey: 'requestStatusModeDetailed' },
+                { value: 'none', labelKey: 'requestStatusModeNone' },
+            ],
+        },
+        keywords: ['request', 'status', 'toast', 'modal', 'detailed', 'inline', 'stepper', 'token', 'thinking'],
+    },
     { id: 'display.customBackground', type: 'custom', componentId: 'CustomBackgroundToggle', keywords: ['custom', 'background'] },
     { id: 'display.hideAllImages', type: 'check', labelKey: 'hideAllImages', helpKey: 'hideAllImagesDesc', bindKey: 'hideAllImages', keywords: ['images', 'hide'] },
     { id: 'display.useAdditionalAssetsPreview', type: 'check', labelKey: 'useAdditionalAssetsPreview', helpKey: 'useAdditionalAssetsPreview', bindKey: 'useAdditionalAssetsPreview', keywords: ['additional', 'assets', 'preview'] },

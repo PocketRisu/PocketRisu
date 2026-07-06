@@ -35,9 +35,31 @@ export interface StatusBadge {
     tone?: 'info' | 'success' | 'warn'
 }
 
+// Ordered pipeline steps (Hypa memory / MultiAgent sub-agents / generation) for
+// the "detailed" inline renderer. Deliberately separate from `badges`: badges
+// are unordered free-form annotations (their `addBadge` reorders on update,
+// which is fine for toast chips but wrong for a stable checklist), while steps
+// need a fixed order established once by `initSteps` and are updated in place.
+export type PipelineStepStatus = 'pending' | 'active' | 'done' | 'error' | 'skipped'
+
+export interface PipelineStep {
+    key: string                            // 'hypa' | 'ma-worldbuilding' | 'ma-plot' | 'ma-character' | 'generation'
+    label: string
+    status: PipelineStepStatus
+}
+
 export interface RequestStatusEntry {
     id: string                             // per-request key = generationId (issued upstream; we only consume)
+    // Historically doubled as "current chat/room id" for the backend job path and
+    // "this request's own generationId" for the plain model-preset path — those
+    // are NOT the same value, so it is unsafe as a room-scoping key. Use `roomId`
+    // for "which open chat does this belong to" and `id === message.chatId` for
+    // "which persisted message does this belong to".
     chatId?: string
+    // Stable chat-room identity, set by the publisher when known. Used by the
+    // detailed inline renderer to scope a synthetic (pre-placeholder) status row
+    // to the currently open chat.
+    roomId?: string
     kind: RequestKind                      // chip: main / translate / memory / emotion / sub
     label: string                          // model / preset name
     phase: RequestPhase
@@ -49,6 +71,10 @@ export interface RequestStatusEntry {
     endedAt?: number                       // set by endStatus; freezes total elapsed time
     retryAttempt?: number
     badges: StatusBadge[]
+    // Ordered pipeline steps for the detailed inline renderer. Undefined/empty
+    // for requests that don't participate in a multi-step pipeline (translate,
+    // emotion, sub, aux memory calls) — those simply render nothing inline.
+    steps?: PipelineStep[]
     error?: string
     // Accumulated raw text per kind. The render tick tokenizes these with the
     // injected tokenizer (native, language-accurate) — NOT a char/N estimate —
@@ -175,16 +201,41 @@ export interface StartStatusInit {
     kind: RequestKind
     label: string
     chatId?: string
+    roomId?: string
     phase?: RequestPhase
     now: number
 }
 
+// Create a fresh entry, or — when `id` already names a LIVE (non-terminal)
+// entry — patch only the switchable fields (kind/label/chatId/roomId/phase)
+// and preserve everything already accumulated on it (steps/badges/text/
+// startedAt/tokens). This lets a multi-leg pipeline (e.g. Hypa memory ->
+// MultiAgent -> main generation) share ONE entry/id across legs: the caller
+// that starts the pipeline calls startStatus() once up front, and each
+// downstream leg's own startStatus() call (unchanged call sites) just joins
+// that entry instead of resetting it. A terminal entry for the same id (a
+// restarted/retried request reusing an id) still gets a fully fresh entry,
+// matching the previous unconditional-overwrite behavior.
 export function startStatus(id: string, init: StartStatusInit): void {
     requestStatuses.update((m) => {
         const next = new Map(m)
+        const existing = m.get(id)
+        if (existing && !isTerminalPhase(existing.phase)) {
+            next.set(id, {
+                ...existing,
+                kind: init.kind,
+                label: init.label,
+                chatId: init.chatId ?? existing.chatId,
+                roomId: init.roomId ?? existing.roomId,
+                phase: init.phase ?? existing.phase,
+                lastChunkAt: init.now,
+            })
+            return next
+        }
         next.set(id, {
             id,
             chatId: init.chatId,
+            roomId: init.roomId,
             kind: init.kind,
             label: init.label,
             phase: init.phase ?? 'connecting',
@@ -266,6 +317,88 @@ export function addBadge(id: string, badge: StatusBadge): void {
     })
 }
 
+// --- ordered pipeline steps (detailed inline renderer) --------------------
+//
+// Separate from `badges` on purpose: badges are unordered free-form
+// annotations whose `addBadge` update moves an entry to the end of the array
+// (fine for toast chips, wrong for a stable checklist). Steps keep the order
+// `initSteps` established and are always updated in place by key.
+
+// Seed the full ordered step list, all 'pending'. Called once, up front, by
+// whichever caller knows the pipeline shape for this id (today: sendChat()).
+// No-op on an unknown or terminal id.
+export function initSteps(id: string, steps: { key: string, label: string }[], now: number): void {
+    update(id, (e) => {
+        if (isTerminalPhase(e.phase)) return e
+        return {
+            ...e,
+            steps: steps.map((s) => ({ key: s.key, label: s.label, status: 'pending' as PipelineStepStatus })),
+            lastChunkAt: now,
+        }
+    })
+}
+
+// Update one step's status in place (order never changes). `onlyIf` guards
+// against clobbering a status set by a race (e.g. don't force 'active' over
+// an already-'done' step). No-op if the id/step is unknown or the entry is
+// terminal.
+export function setStepStatus(
+    id: string,
+    key: string,
+    status: PipelineStepStatus,
+    opts: { now?: number, onlyIf?: PipelineStepStatus[] } = {},
+): void {
+    update(id, (e) => {
+        if (isTerminalPhase(e.phase) || !e.steps) return e
+        const idx = e.steps.findIndex((s) => s.key === key)
+        if (idx === -1) return e
+        if (opts.onlyIf && !opts.onlyIf.includes(e.steps[idx].status)) return e
+        const steps = e.steps.slice()
+        steps[idx] = { ...steps[idx], status }
+        return { ...e, steps, lastChunkAt: opts.now ?? e.lastChunkAt }
+    })
+}
+
+// Self-heal predicted-but-never-started steps: mark every still-'pending' key
+// in `keys` as 'skipped'. Used when a predicted step (e.g. a MultiAgent
+// sub-agent guessed from toggles alone) turns out not to run this turn —
+// invalid config, disabled agent, or a backend-job fallback to the plain
+// client path — so the checklist never gets stuck showing it as pending.
+export function setPendingStepsSkipped(id: string, keys: string[], now?: number): void {
+    update(id, (e) => {
+        if (isTerminalPhase(e.phase) || !e.steps) return e
+        const targets = new Set(keys)
+        let changed = false
+        const steps = e.steps.map((s) => {
+            if (targets.has(s.key) && s.status === 'pending') {
+                changed = true
+                return { ...s, status: 'skipped' as PipelineStepStatus }
+            }
+            return s
+        })
+        if (!changed) return e
+        return { ...e, steps, lastChunkAt: now ?? e.lastChunkAt }
+    })
+}
+
+// Resolve the 'generation' step (if present) against the request's final
+// outcome. A pending generation step (the request never reached the
+// generation leg — e.g. it failed during Hypa) is left untouched: it wasn't
+// active, so it isn't the thing that failed.
+function finalizeGenerationStep(steps: PipelineStep[], outcome: 'done' | 'failed' | 'aborted'): PipelineStep[] | null {
+    const idx = steps.findIndex((s) => s.key === 'generation')
+    if (idx === -1) return null
+    const current = steps[idx]
+    if (outcome === 'done') {
+        if (current.status === 'done' || current.status === 'error' || current.status === 'skipped') return null
+    } else if (current.status !== 'active') {
+        return null
+    }
+    const next = steps.slice()
+    next[idx] = { ...current, status: outcome === 'done' ? 'done' : 'error' }
+    return next
+}
+
 export interface EndStatusUsage {
     thinkingTokens?: number
     responseTokens?: number
@@ -287,6 +420,7 @@ export function endStatus(
         // per-tick tokenization may be up to one tick stale, so flag a final
         // recount of the accumulated text below.
         needFinalCount = opts.usage?.responseTokens === undefined && (!!e.thinkingText || !!e.responseText)
+        const nextSteps = e.steps && finalizeGenerationStep(e.steps, outcome)
         return {
             ...e,
             phase: outcome,
@@ -295,6 +429,7 @@ export function endStatus(
             responseTokens: opts.usage?.responseTokens ?? e.responseTokens,
             error: opts.error ?? e.error,
             tokPerSec: 0,
+            ...(nextSteps ? { steps: nextSteps } : {}),
         }
     })
     if (needFinalCount) void finalRecount(id)

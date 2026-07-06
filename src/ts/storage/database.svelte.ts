@@ -397,9 +397,18 @@ export function setDatabase(data:Database){
     data.inlayImagePriority ??= true
     data.enableBlockPartialEdit ??= false
     data.enableDragPartialEdit ??= false
-    // Concrete default so the settings toggle (reads !!value) and the runtime
-    // gate (statusEnabled) agree. Default on — see request-status-toast-infra.md.
-    data.showRequestStatus ??= true
+    // Migrate the old boolean toggle into the 3-way display mode (none/modal/
+    // detailed). `showRequestStatus` no longer exists on Database — read it via
+    // a narrow cast since this only runs once against whatever shape was
+    // actually persisted, which predates the type change.
+    {
+        const legacy = data as Database & LegacyRequestStatusData
+        const validModes = ['none', 'modal', 'detailed']
+        if (!validModes.includes(legacy.requestStatusDisplayMode as string)) {
+            data.requestStatusDisplayMode = legacy.showRequestStatus === false ? 'none' : 'modal'
+        }
+        delete legacy.showRequestStatus
+    }
     if(!data.formatingOrder.includes('personaPrompt')){
         data.formatingOrder.splice(data.formatingOrder.indexOf('main'),0,'personaPrompt')
     }
@@ -1066,6 +1075,16 @@ export function createDefaultBackendMultiagentConfig(): BackendMultiagentConfig 
     }
 }
 
+// Display mode for the request-status indicator: 'none' shows nothing (and
+// producers publish no entries at all), 'modal' is the floating toast,
+// 'detailed' is the inline pipeline stepper in the chat area.
+export type RequestStatusDisplayMode = 'none' | 'modal' | 'detailed'
+
+// Shape of a legacy-persisted save that may still carry the removed
+// `showRequestStatus` boolean pre-migration. Narrow, migration-only escape
+// hatch — `showRequestStatus` is not a real Database field anymore.
+type LegacyRequestStatusData = { showRequestStatus?: boolean, requestStatusDisplayMode?: unknown }
+
 export interface Database{
     characters: character[],
     apiType: string
@@ -1458,9 +1477,9 @@ export interface Database{
     localActivationInGlobalLorebook: boolean
     showFolderName: boolean
     automaticCachePoint: boolean
-    // Show the floating request-status toast (phase / thinking+response tokens /
-    // tok/s / stall) for model-preset requests. Memory-only UI feature; default on.
-    showRequestStatus: boolean
+    // Request-status indicator display mode: none / floating modal toast /
+    // inline pipeline stepper in the chat area. Memory-only UI feature.
+    requestStatusDisplayMode: RequestStatusDisplayMode
     chatCompression: boolean
     claudeRetrivalCaching: boolean
     outputImageModal: boolean

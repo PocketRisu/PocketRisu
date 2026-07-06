@@ -25,9 +25,10 @@ import { runImageEmbedding } from "./transformers";
 import { runLuaEditTrigger } from "./scriptings";
 import { getModelInfo, LLMFlags } from "../model/modellist";
 import { resolveChatModelBinding, resolvePresetMaxOutputTokens } from "./request/modelPresetBinding";
-import { hypaMemoryV3 } from "./memory/hypav3";
+import { hypaMemoryV3, type HypaV3Result } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
+import { startStatus, initSteps, setStepStatus, setPendingStepsSkipped, endStatus } from "../status/requestStatus";
 
 export interface OpenAIChat{
     role: 'system'|'user'|'assistant'|'function'
@@ -60,6 +61,13 @@ export const recoveryAbortController = writable<AbortController | null>(null)
 export let requestTokenParts:{[key:string]:requestTokenPart[]} = {}
 export let previewFormated:OpenAIChat[] = []
 export let previewBody:string = ''
+
+// Request-status publish wrapper (same shape as request.ts/backendJob.ts's
+// local safeStatus helpers): status reporting must never throw into or break
+// the actual chat-send pipeline.
+function safeRequestStatus(fn: () => void): void {
+    try { fn() } catch (e) { console.error('[sendChat] status publish failed', e) }
+}
 
 export async function sendChat(chatProcessIndex = -1,arg:{
     chatAdditonalTokens?:number,
@@ -952,12 +960,63 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         currentTokens += await tokenizer.tokenizeChat(chat)
     }
     
-    if((currentChat.supaMemory ?? nowChatroom.supaMemory) && DBState.db.hypaV3){
+    // Minted here (before Hypa/MultiAgent) rather than right before the final
+    // request, so a single id can represent the whole turn's pipeline for the
+    // detailed inline status view. `roomId` is separate from any `chatId` a
+    // status entry may carry — see requestStatus.ts's RequestStatusEntry doc.
+    const hypaWillRun = !!((currentChat.supaMemory ?? nowChatroom.supaMemory) && DBState.db.hypaV3)
+    const generationId = v4()
+    const roomId = currentChat.id || selectedChat.toString()
+    // Only seed the early pipeline entry in 'detailed' mode: 'modal' must stay
+    // pixel-identical to today (its toast is created later, by request.ts /
+    // backendJob.ts, exactly as before). Preview runs never reach a real
+    // generation, so they never get a status entry either.
+    const detailedRequestStatus = DBState.db.requestStatusDisplayMode === 'detailed' && !arg.preview && !arg.previewPrompt
+    if(detailedRequestStatus){
+        const steps: { key: string, label: string }[] = []
+        if(hypaWillRun){
+            steps.push({ key: 'hypa', label: language.requestStatus.stepHypa })
+        }
+        if(DBState.db.useBackendChatJobs && DBState.db.useBackendMultiagent){
+            steps.push({ key: 'ma-worldbuilding', label: language.requestStatus.agentWorldbuilding })
+            steps.push({ key: 'ma-plot', label: language.requestStatus.agentPlot })
+            steps.push({ key: 'ma-character', label: language.requestStatus.agentCharacter })
+        }
+        steps.push({ key: 'generation', label: language.requestStatus.stepGeneration })
+        safeRequestStatus(() => {
+            startStatus(generationId, {
+                kind: hypaWillRun ? 'memory' : 'main',
+                label: getGenerationModelString(),
+                chatId: generationId,
+                roomId,
+                phase: 'connecting',
+                now: Date.now(),
+            })
+            initSteps(generationId, steps, Date.now())
+        })
+    }
+
+    if(hypaWillRun){
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
         chatProcessStage.set(2)
         stageTimings.stage2Start = Date.now()
         console.log("Current chat's hypaV3 Data: ", currentChat.hypaV3Data)
-        const sp = await hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+        if(detailedRequestStatus){
+            safeRequestStatus(() => setStepStatus(generationId, 'hypa', 'active', { now: Date.now() }))
+        }
+        let sp: HypaV3Result
+        try{
+            sp = await hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+        }
+        catch(e){
+            if(detailedRequestStatus){
+                safeRequestStatus(() => {
+                    setStepStatus(generationId, 'hypa', 'error', { now: Date.now() })
+                    endStatus(generationId, 'failed', { now: Date.now(), error: e instanceof Error ? e.message : String(e) })
+                })
+            }
+            throw e
+        }
         if(sp.error){
             // Save new summary
             if (sp.memory) {
@@ -965,6 +1024,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                 DBState.db.characters[selectedChar].chats[selectedChat].hypaV3Data = currentChat.hypaV3Data
             }
             console.log(sp)
+            if(detailedRequestStatus){
+                safeRequestStatus(() => {
+                    setStepStatus(generationId, 'hypa', 'error', { now: Date.now() })
+                    endStatus(generationId, 'failed', { now: Date.now(), error: sp.error })
+                })
+            }
             throwError(sp.error)
             return false
         }
@@ -977,11 +1042,17 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         console.log("[Expected to be updated] chat's HypaV3Data: ", currentChat.hypaV3Data)
         stageTimings.stage2Duration = Date.now() - stageTimings.stage2Start
         chatProcessStage.set(1)
+        if(detailedRequestStatus){
+            safeRequestStatus(() => setStepStatus(generationId, 'hypa', 'done', { now: Date.now() }))
+        }
     }
     else{
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
         while(currentTokens > maxContextTokens){
             if(chats.length <= 1){
+                if(detailedRequestStatus){
+                    safeRequestStatus(() => endStatus(generationId, 'failed', { now: Date.now(), error: language.errors.toomuchtoken }))
+                }
                 throwError(language.errors.toomuchtoken + "\n\nRequired Tokens: " + currentTokens)
 
                 return false
@@ -1350,6 +1421,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         let pointer = 0
         while(inputTokens > maxContextTokens){
             if(pointer >= formated.length){
+                if(detailedRequestStatus){
+                    safeRequestStatus(() => endStatus(generationId, 'failed', { now: Date.now(), error: language.errors.toomuchtoken }))
+                }
                 throwError(language.errors.toomuchtoken + "\n\nAt token rechecking. Required Tokens: " + inputTokens)
                 return false
             }
@@ -1369,7 +1443,6 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if(inputTokens + outputTokens > maxContextTokens){
         outputTokens = maxContextTokens - inputTokens
     }
-    const generationId = v4()
     const generationModel = getGenerationModelString()
 
     generationInfo = {
@@ -1425,9 +1498,11 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     let resendChat = false
     
     if(abortSignal.aborted === true){
+        safeRequestStatus(() => endStatus(generationId, 'aborted', { now: Date.now() }))
         return false
     }
     if(req.type === 'fail'){
+        safeRequestStatus(() => endStatus(generationId, 'failed', { now: Date.now(), error: req.result }))
         throwError(req.result)
         return false
     }

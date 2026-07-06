@@ -25,7 +25,7 @@ export function createNewCharacter() {
     return db.characters.length - 1
 }
 
-export async function getCharImage(loc:string, type:'plain'|'css'|'contain'|'lgcss') {
+export async function getCharImage(loc:string, type:'plain'|'css'|'contain'|'lgcss'):Promise<string|null> {
     const db = getDatabase()
     
     // Return placeholder when hideAllImages is enabled

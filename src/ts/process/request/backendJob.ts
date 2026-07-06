@@ -5,21 +5,42 @@ import { resolveChatModelBinding, buildModelPresetCredential } from "./modelPres
 import { getModelPresetBackendExecutionSupport } from "../../preset/backendExecutionSupport";
 import type { ModelPreset } from "../../preset/types";
 import { v4 as uuidv4 } from "uuid";
-import { startStatus, setKind, markPhase, appendText, addBadge, endStatus, type StatusBadge } from "../../status/requestStatus";
+import {
+    startStatus, setKind, markPhase, appendText, addBadge, endStatus, setStepStatus, setPendingStepsSkipped,
+    type StatusBadge, type PipelineStepStatus,
+} from "../../status/requestStatus";
 import { language } from "../../../lang";
 const MULTIAGENT_VAULT_KEY = 'risu_multiagent_lite_config_vault_v1';
 
-// Request-status indicator bridge (gated by db.showRequestStatus). Wrapped so
-// status reporting can never throw into the backend stream path.
+// Request-status indicator bridge (gated by db.requestStatusDisplayMode).
+// Wrapped so status reporting can never throw into the backend stream path.
 interface BackendStatusInfo {
     genId: string;
     label: string;
     chatId?: string;
+    // Stable chat-room id, distinct from `chatId` above (which — in this
+    // backend-job path — already happens to BE the room id, but the plain
+    // model-preset path's `chatId` is the generationId instead; `roomId` is
+    // the field renderers should rely on for "which open chat is this").
+    roomId?: string;
 }
+
+const AGENT_STATUS_TO_STEP: Record<string, PipelineStepStatus> = {
+    start: 'active',
+    done: 'done',
+    error: 'error',
+    skipped: 'skipped',
+};
+
+// The 3 MultiAgent sub-agent names/step keys, fixed by the server-side
+// pipeline (server/node/multiagent.cjs). Used both to predict step keys and to
+// self-heal any that never actually started (invalid config, disabled agent).
+const MULTIAGENT_AGENT_NAMES = ['worldbuilding', 'plot', 'character'];
+const MULTIAGENT_STEP_KEYS = MULTIAGENT_AGENT_NAMES.map((name) => `ma-${name}`);
 
 function backendStatusEnabled(): boolean {
     try {
-        return getDatabase()?.showRequestStatus !== false;
+        return getDatabase()?.requestStatusDisplayMode !== 'none';
     } catch {
         return false;
     }
@@ -275,6 +296,7 @@ export async function requestChatDataBackend(
                 ? binding.preset.name
                 : (descriptorResponse.model || ''),
             chatId: target.chatId,
+            roomId: target.chatId,
         }
         : null;
 
@@ -309,6 +331,7 @@ function createBackendJobStream(
                     kind: 'main',
                     label: status.label,
                     chatId: status.chatId,
+                    roomId: status.roomId,
                     phase: 'connecting',
                     now: Date.now(),
                 }));
@@ -385,19 +408,40 @@ function createBackendJobStream(
                     if (data.phase === 'multiagent') {
                         safeStatus(() => { setKind(status.genId, 'multiagent', Date.now()); markPhase(status.genId, 'thinking', Date.now()); });
                     } else if (data.phase === 'main') {
-                        safeStatus(() => { setKind(status.genId, 'main', Date.now()); markPhase(status.genId, 'connecting', Date.now()); });
+                        safeStatus(() => {
+                            // Self-heal: MultiAgent was predicted from toggles but
+                            // never actually ran this turn (invalid config, no
+                            // agents-init ever arrived) — don't leave those steps
+                            // stuck pending.
+                            setPendingStepsSkipped(status.genId, MULTIAGENT_STEP_KEYS, Date.now());
+                            setStepStatus(status.genId, 'generation', 'active', { now: Date.now(), onlyIf: ['pending'] });
+                            setKind(status.genId, 'main', Date.now());
+                            markPhase(status.genId, 'connecting', Date.now());
+                        });
                     }
                     return;
                 }
-                // Per-agent MultiAgent progress → status-indicator badges.
+                // Per-agent MultiAgent progress → status-indicator badges + steps.
                 if (data.type === 'agent') {
                     if (!status || statusEnded) return;
                     if (data.phase === 'agents-init' && Array.isArray(data.agents)) {
                         for (const name of data.agents) {
                             safeStatus(() => addBadge(status.genId, multiagentAgentBadge(name, 'start')));
                         }
+                        // Agents the server won't run (disabled individually) are
+                        // omitted from this list — skip their predicted steps now
+                        // rather than waiting for 'main' to self-heal them.
+                        const active = new Set(data.agents);
+                        const omitted = MULTIAGENT_AGENT_NAMES.filter((name) => !active.has(name)).map((name) => `ma-${name}`);
+                        if (omitted.length > 0) {
+                            safeStatus(() => setPendingStepsSkipped(status.genId, omitted, Date.now()));
+                        }
                     } else if (typeof data.agent === 'string') {
                         safeStatus(() => addBadge(status.genId, multiagentAgentBadge(data.agent, data.status)));
+                        const stepStatus = AGENT_STATUS_TO_STEP[data.status];
+                        if (stepStatus) {
+                            safeStatus(() => setStepStatus(status.genId, `ma-${data.agent}`, stepStatus, { now: Date.now() }));
+                        }
                     }
                     return;
                 }

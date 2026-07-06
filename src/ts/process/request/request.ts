@@ -37,7 +37,7 @@ import { resolveChatModelBinding, buildModelPresetCredential, applyPromptPresetP
 import { expandAdapterMessages, toAdapterMessage, toolResponseText } from "./modelPresetMessages";
 import { isLocalNetworkUrl } from "src/ts/network/localNetwork";
 import {
-    startStatus, appendText, endStatus, setStatusTokenCounter, addBadge,
+    startStatus, appendText, endStatus, setStatusTokenCounter, addBadge, setStepStatus, setPendingStepsSkipped,
     type RequestKind,
 } from "src/ts/status/requestStatus";
 
@@ -582,8 +582,8 @@ function describeModelPresetError(err: unknown): Record<string, unknown> {
 // Thin, harmless bridge from the preset request pipeline to the request-status
 // channel (src/ts/status/requestStatus). Every call is wrapped so status
 // reporting can NEVER break a request (P0: status display must not throw into
-// the request path). Gated by db.showRequestStatus so the whole feature is a
-// no-op when off — and the classic path is never touched regardless.
+// the request path). Gated by db.requestStatusDisplayMode so the whole feature
+// is a no-op when set to 'none' — and the classic path is never touched regardless.
 //
 // Token counts during streaming use a cheap char-based estimate (no per-chunk
 // tokenizer cost — mobile-friendly), reconciled against the authoritative
@@ -591,7 +591,7 @@ function describeModelPresetError(err: unknown): Record<string, unknown> {
 
 function statusEnabled(): boolean {
     try {
-        return getDatabase()?.showRequestStatus !== false
+        return getDatabase()?.requestStatusDisplayMode !== 'none'
     } catch {
         return false
     }
@@ -689,7 +689,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     // here purely for the status channel — it's memory-only and never persisted.
     // Uses uuid v4 (crypto.getRandomValues, available over plain HTTP) NOT
     // crypto.randomUUID (secure-context only — would throw on remote HTTP and
-    // break the aux request before the try). Reporting is gated by db.showRequestStatus.
+    // break the aux request before the try). Reporting is gated by db.requestStatusDisplayMode.
     const genId = arg.chatId ?? `aux-${uuidv4()}`
     const statusKind = toRequestKind(mode)
     const reportStatus = statusEnabled() && !!genId
@@ -830,7 +830,17 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
         const useStreaming = resolvePresetStreaming(preset, arg)
         const options: AdapterChatOptions = { messages, abortSignal: abortSignal ?? undefined, fetchImpl, generationId: genId, cache }
         if (reportStatus) {
-            safeStatus(() => startStatus(genId, { kind: statusKind, label: preset.name, chatId: arg.chatId, phase: 'connecting', now: Date.now() }))
+            safeStatus(() => {
+                startStatus(genId, { kind: statusKind, label: preset.name, chatId: arg.chatId, phase: 'connecting', now: Date.now() })
+                if (statusKind === 'main') {
+                    // This path has no backend MultiAgent phase — if sendChat()
+                    // predicted MultiAgent steps from toggles (e.g. the backend job
+                    // fell back to this plain path), they never got a chance to
+                    // run. Skip them so the detailed checklist doesn't get stuck.
+                    setPendingStepsSkipped(genId, ['ma-worldbuilding', 'ma-plot', 'ma-character'], Date.now())
+                    setStepStatus(genId, 'generation', 'active', { now: Date.now(), onlyIf: ['pending'] })
+                }
+            })
         }
         if(useStreaming){
             const gen = streamModelPreset(kind, preset, options, credential)

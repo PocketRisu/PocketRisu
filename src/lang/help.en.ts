@@ -400,8 +400,8 @@ export const helpEn = {
             "Start the Recently Uploaded section on the home screen collapsed. While collapsed it skips the RisuRealm fetch, speeding up initial load. You can expand it any time from the home screen.",
         showFolderNameInIcon:
             "Show folder names on folder icons in the character grid. Makes large folder collections easier to scan.",
-        showRequestStatus:
-            "Show a floating toast during model-preset requests with the live phase (connecting / thinking / responding / stalled), thinking and response token counts, and tokens-per-second. Memory-only; turning it off stops the display entirely.",
+        requestStatusDisplayMode:
+            "Controls how request progress is shown. Modal: a floating toast with the live phase (connecting / thinking / responding / stalled), token counts, and tokens-per-second. Detailed output: an inline checklist in the chat area showing Hypa memory / MultiAgent / generation steps as they run, which disappears once the reply is complete. None: no display at all. Memory-only; doesn't affect the request itself.",
         customBackground: "A custom image used as the chat background.",
         playMessageOnTranslateEnd:
             "Play a separate notification sound when translation finishes. Useful when automatic translation is enabled and you want an audible completion cue.",

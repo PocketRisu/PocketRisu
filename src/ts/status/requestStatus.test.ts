@@ -6,11 +6,14 @@ import {
     clearStatus,
     computeTokPerSec,
     endStatus,
+    initSteps,
     isTerminalPhase,
     markPhase,
     recomputeEntry,
     requestStatuses,
+    setPendingStepsSkipped,
     setStatusTokenCounter,
+    setStepStatus,
     startStatus,
     startStatusTimer,
     stopStatusTimer,
@@ -222,6 +225,9 @@ describe('publish API', () => {
         expect(() => appendText('nope', { response: 'x' }, 0)).not.toThrow()
         expect(() => addBadge('nope', { key: 'k', text: 't' })).not.toThrow()
         expect(() => endStatus('nope', 'failed', { now: 0 })).not.toThrow()
+        expect(() => initSteps('nope', [{ key: 'a', label: 'A' }], 0)).not.toThrow()
+        expect(() => setStepStatus('nope', 'a', 'active')).not.toThrow()
+        expect(() => setPendingStepsSkipped('nope', ['a'], 0)).not.toThrow()
         expect(get(requestStatuses).size).toBe(0)
     })
 
@@ -229,6 +235,126 @@ describe('publish API', () => {
         startStatus('g1', { kind: 'main', label: 'x', now: 0 })
         clearStatus('g1')
         expect(get(requestStatuses).has('g1')).toBe(false)
+    })
+})
+
+describe('startStatus idempotency across pipeline legs', () => {
+    it('patches a live entry instead of resetting accumulated state', () => {
+        startStatus('g1', { kind: 'memory', label: 'Hypa', phase: 'thinking', now: 100 })
+        initSteps('g1', [{ key: 'hypa', label: 'Hypa' }, { key: 'generation', label: 'Generation' }], 100)
+        addBadge('g1', { key: 'cache', text: 'hit 1k' })
+        setStepStatus('g1', 'hypa', 'done', { now: 150 })
+
+        startStatus('g1', { kind: 'main', label: 'Preset', phase: 'connecting', now: 200 })
+        const e = get(requestStatuses).get('g1')!
+        expect(e.startedAt).toBe(100)
+        expect(e.lastChunkAt).toBe(200)
+        expect(e.kind).toBe('main')
+        expect(e.label).toBe('Preset')
+        expect(e.badges).toHaveLength(1)
+        expect(e.steps?.map((s) => [s.key, s.status])).toEqual([['hypa', 'done'], ['generation', 'pending']])
+    })
+
+    it('still creates a fresh entry when the previous one is terminal', () => {
+        startStatus('g1', { kind: 'main', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'generation', label: 'Generation' }], 0)
+        appendText('g1', { response: 'hi' }, 10)
+        endStatus('g1', 'done', { now: 20 })
+
+        startStatus('g1', { kind: 'main', label: 'y', now: 100 })
+        const e = get(requestStatuses).get('g1')!
+        expect(e.startedAt).toBe(100)
+        expect(e.responseText).toBe('')
+        expect(e.steps).toBeUndefined()
+        expect(e.badges).toEqual([])
+    })
+
+    it('sets roomId on fresh create and preserves it across a live patch', () => {
+        startStatus('g1', { kind: 'memory', label: 'Hypa', roomId: 'room-1', now: 0 })
+        startStatus('g1', { kind: 'main', label: 'Preset', now: 10 })
+        expect(get(requestStatuses).get('g1')!.roomId).toBe('room-1')
+    })
+})
+
+describe('pipeline steps', () => {
+    it('initSteps seeds the full list as pending, in the given order', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [
+            { key: 'hypa', label: 'Hypa' },
+            { key: 'ma-worldbuilding', label: 'World' },
+            { key: 'generation', label: 'Generation' },
+        ], 0)
+        const e = get(requestStatuses).get('g1')!
+        expect(e.steps).toEqual([
+            { key: 'hypa', label: 'Hypa', status: 'pending' },
+            { key: 'ma-worldbuilding', label: 'World', status: 'pending' },
+            { key: 'generation', label: 'Generation', status: 'pending' },
+        ])
+    })
+
+    it('setStepStatus updates one step in place without reordering', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }, { key: 'c', label: 'C' }], 0)
+        setStepStatus('g1', 'b', 'active', { now: 10 })
+        const e = get(requestStatuses).get('g1')!
+        expect(e.steps?.map((s) => s.key)).toEqual(['a', 'b', 'c'])
+        expect(e.steps?.find((s) => s.key === 'b')?.status).toBe('active')
+        expect(e.lastChunkAt).toBe(10)
+    })
+
+    it('setStepStatus onlyIf guards against clobbering an unexpected status', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'a', label: 'A' }], 0)
+        setStepStatus('g1', 'a', 'done', { now: 10 })
+        setStepStatus('g1', 'a', 'active', { now: 20, onlyIf: ['pending'] })
+        expect(get(requestStatuses).get('g1')!.steps?.[0].status).toBe('done')
+    })
+
+    it('setStepStatus no-ops on a terminal entry or unknown step key', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'a', label: 'A' }], 0)
+        setStepStatus('g1', 'nope', 'active', { now: 10 })
+        expect(get(requestStatuses).get('g1')!.steps?.[0].status).toBe('pending')
+        endStatus('g1', 'done', { now: 20 })
+        setStepStatus('g1', 'a', 'active', { now: 30 })
+        expect(get(requestStatuses).get('g1')!.steps?.[0].status).toBe('pending')
+    })
+
+    it('setPendingStepsSkipped only skips still-pending keys among the given set', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [
+            { key: 'ma-worldbuilding', label: 'World' },
+            { key: 'ma-plot', label: 'Plot' },
+            { key: 'ma-character', label: 'Character' },
+        ], 0)
+        setStepStatus('g1', 'ma-worldbuilding', 'done', { now: 10 })
+        setPendingStepsSkipped('g1', ['ma-worldbuilding', 'ma-plot', 'ma-character'], 20)
+        const e = get(requestStatuses).get('g1')!
+        expect(e.steps?.map((s) => s.status)).toEqual(['done', 'skipped', 'skipped'])
+    })
+
+    it('endStatus marks an active generation step done on success, error on failure', () => {
+        startStatus('g1', { kind: 'main', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'generation', label: 'Generation' }], 0)
+        setStepStatus('g1', 'generation', 'active', { now: 10 })
+        endStatus('g1', 'done', { now: 20 })
+        expect(get(requestStatuses).get('g1')!.steps?.[0].status).toBe('done')
+
+        startStatus('g2', { kind: 'main', label: 'x', now: 0 })
+        initSteps('g2', [{ key: 'generation', label: 'Generation' }], 0)
+        setStepStatus('g2', 'generation', 'active', { now: 10 })
+        endStatus('g2', 'failed', { now: 20 })
+        expect(get(requestStatuses).get('g2')!.steps?.[0].status).toBe('error')
+    })
+
+    it('endStatus leaves a still-pending generation step untouched (failed before generation)', () => {
+        startStatus('g1', { kind: 'memory', label: 'x', now: 0 })
+        initSteps('g1', [{ key: 'hypa', label: 'Hypa' }, { key: 'generation', label: 'Generation' }], 0)
+        setStepStatus('g1', 'hypa', 'error', { now: 10 })
+        endStatus('g1', 'failed', { now: 20 })
+        const e = get(requestStatuses).get('g1')!
+        expect(e.steps?.find((s) => s.key === 'hypa')?.status).toBe('error')
+        expect(e.steps?.find((s) => s.key === 'generation')?.status).toBe('pending')
     })
 })
 
