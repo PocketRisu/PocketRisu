@@ -29,6 +29,7 @@ import { hypaMemoryV3, type HypaV3Result } from "./memory/hypav3";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { startStatus, initSteps, setStepStatus, setPendingStepsSkipped, endStatus } from "../status/requestStatus";
+import { startGenerationKeepAlive, stopGenerationKeepAlive } from "./generationKeepAlive";
 
 export interface OpenAIChat{
     role: 'system'|'user'|'assistant'|'function'
@@ -55,6 +56,15 @@ export interface requestTokenPart{
 }
 
 export const doingChat = writable(false)
+// Keep the tab exempt from background freezing for the whole generation, so
+// the pipeline (memory embedding → summarization → chat job) keeps advancing
+// while the screen is off. Subscribing here runs the start synchronously
+// inside the send click's doingChat.set(true), preserving the user-gesture
+// context that audio autoplay requires.
+doingChat.subscribe((active) => {
+    if (active) startGenerationKeepAlive()
+    else stopGenerationKeepAlive()
+})
 export const chatProcessStage = writable(0)
 export const abortChat = writable(false)
 export const recoveryAbortController = writable<AbortController | null>(null)
