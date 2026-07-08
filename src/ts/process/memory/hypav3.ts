@@ -100,8 +100,8 @@ export interface HypaV3Result {
 }
 
 const logPrefix = "[HypaV3]";
-const memoryPromptTag = "Past Events Summary";
-const summarySeparator = "\n\n";
+export const memoryPromptTag = "Past Events Summary";
+export const summarySeparator = "\n\n";
 
 function splitBySeparator(text: string, separator: string): string[] {
     try {
@@ -1673,7 +1673,7 @@ function isSubset(subset: Set<string>, superset: Set<string>): boolean {
     return true;
 }
 
-function wrapWithXml(tag: string, content: string): string {
+export function wrapWithXml(tag: string, content: string): string {
     return `<${tag}>\n${content}\n</${tag}>`;
 }
 
@@ -1681,8 +1681,10 @@ function sanitizeSummaryContent(content: string): string {
     return content.replace(inlayTokenRegex, "[Image]");
 }
 
-export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolean = false): Promise<string> {
-    const db = getDatabase();
+// Builds the summarization request messages exactly as summarize() sends
+// them. Exported so the backend-memory planner (hypav3Backend.ts) can produce
+// byte-identical request descriptors for server-side execution.
+export function buildSummarizationFormated(oaiMessages: OpenAIChat[], isResummarize: boolean = false): OpenAIChat[] {
     const settings = getCurrentHypaV3Preset().settings;
 
     const strMessages = oaiMessages
@@ -1695,7 +1697,7 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
             ? "[Summarize the ongoing role story, It must also remove redundancy and unnecessary text and content from the output.]"
             : settings.summarizationPrompt;
 
-    const formated: OpenAIChat[] = parseChatML(
+    return parseChatML(
         summarizationPrompt.replaceAll("{{slot}}", strMessages)
     ) ?? [
             {
@@ -1707,6 +1709,13 @@ export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolea
                 content: summarizationPrompt,
             },
         ];
+}
+
+export async function summarize(oaiMessages: OpenAIChat[], isResummarize: boolean = false): Promise<string> {
+    const db = getDatabase();
+    const settings = getCurrentHypaV3Preset().settings;
+
+    const formated: OpenAIChat[] = buildSummarizationFormated(oaiMessages, isResummarize);
 
     // API
     if (settings.summarizationModel === "subModel") {

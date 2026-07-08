@@ -74,6 +74,9 @@ export interface requestDataArgument{
     forceLocalNetwork?: boolean
     backendJob?: boolean
     skipBeforeRequestHooks?: boolean
+    // Server-side HypaV3 memory pipeline plan (hypav3Backend.ts). Consumed by
+    // requestChatDataBackend only; ignored by the normal request path.
+    hypaBackendPipeline?: import("../memory/hypaBackendTypes").HypaBackendPipeline
 }
 
 export interface RequestDataArgumentExtended extends requestDataArgument{

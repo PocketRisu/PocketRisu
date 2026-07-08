@@ -15,6 +15,7 @@ const nodeCrypto = require('crypto');
 const { logger } = require('./logs.cjs');
 const { kvGet, kvSet, kvDel, kvList } = require('./db.cjs');
 const { runMultiagentPipeline } = require('./multiagent.cjs');
+const { runHypaMemoryPipeline, spliceMemoryText } = require('./hypaMemoryCore.cjs');
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 const JOB_TIMEOUT_MS = 10 * 60 * 1000;          // 10 minutes
@@ -65,6 +66,9 @@ function snapshotJob(job) {
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
         target: job.target,
+        // Updated HypaV3 memory data produced by the server-side memory
+        // pipeline; the client persists it into the chat on pickup/recovery.
+        updatedMemory: job.updatedMemory ?? null,
     };
 }
 
@@ -282,6 +286,30 @@ async function runJob(job) {
     }, PARTIAL_FLUSH_INTERVAL_MS);
 
     try {
+        // Server-side HypaV3 memory pipeline: summarization + embedding +
+        // memory-prompt assembly run here, before the main generation, so the
+        // whole turn is server-owned the moment the job starts. Memory failure
+        // fails the job — generating without memory would silently lose
+        // context, matching the client-side pipeline which aborts on error.
+        const mem = job.descriptor.memory;
+        if (mem) {
+            logger.info(`[ChatJob] Running memory pipeline for job ${job.id}: ${Array.isArray(mem.summarizationTasks) ? mem.summarizationTasks.length : 0} summarization task(s)`);
+            pushEvent(job, { type: 'phase', phase: 'memory' });
+            const onMemoryProgress = (ev) => {
+                try { pushEvent(job, { type: 'memory-progress', ...ev }); } catch { /* ignore */ }
+            };
+            const memoryResult = await runHypaMemoryPipeline(mem, {
+                signal: job.abortController.signal,
+                onProgress: onMemoryProgress,
+            });
+            spliceMemoryText(job.descriptor.body, mem.placeholder, memoryResult.memoryText);
+            job.updatedMemory = memoryResult.updatedMemory;
+            // Live clients persist the updated memory immediately; suspended
+            // ones get it from the snapshot on reconnect/recovery.
+            pushEvent(job, { type: 'memory-data', data: memoryResult.updatedMemory });
+            logger.info(`[ChatJob] Memory pipeline finished for job ${job.id}`);
+        }
+
         const ma = job.descriptor.multiagent;
         const msgs = job.descriptor.body?.messages;
         const hasApiKey = Boolean(ma?.apiKey);
@@ -361,6 +389,7 @@ function getChatJob(jobId) {
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
         target: job.target,
+        updatedMemory: job.updatedMemory ?? null,
     };
 }
 
