@@ -410,7 +410,7 @@
         {@const chatReloadPointer = $ReloadGUIPointer + ($ReloadChatPointer[idx] ?? 0)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <span class="text chat-width chattext prose minw-0"
+        <div class="text chat-width chattext prose minw-0"
             class:prose-invert={$ColorSchemeTypeStore === 'dark'}
             bind:this={bodyRoot}
             onclick={() => {
@@ -450,7 +450,7 @@
                     on:save={handlePartialEditSave}
                 />
             {/if}
-        </span>
+        </div>
     {/if}
 {/snippet}
 
