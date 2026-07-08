@@ -86,18 +86,26 @@ export class HypaProcesser{
 
     async embedDocuments(texts: string[]): Promise<VectorArray[]> {
         const subPrompts = chunkArray(texts,50);
-    
-        const embeddings: VectorArray[] = [];
-    
-        for (let i = 0; i < subPrompts.length; i += 1) {
-          const input = subPrompts[i];
-    
-          const data = await this.getEmbeds(input, 'document')
 
-          embeddings.push(...data);
-        }
-    
-        return embeddings;
+        // Issue chunk requests concurrently (bounded) instead of one-by-one:
+        // with the backend relay this puts every chunk in flight server-side
+        // up front, so backgrounding the app mid-embedding doesn't leave
+        // later chunks waiting for the webview to wake up between requests.
+        // Local (in-browser) models stay sequential — they share one wasm/GPU
+        // pipeline and gain nothing from concurrent calls.
+        const isLocalModel = Object.keys(localModels.models).includes(this.model);
+        const maxConcurrent = isLocalModel ? 1 : 4;
+        const results: VectorArray[][] = new Array(subPrompts.length);
+        let nextIndex = 0;
+        const workers = Array.from({ length: Math.min(maxConcurrent, subPrompts.length) }, async () => {
+            while (nextIndex < subPrompts.length) {
+                const index = nextIndex++;
+                results[index] = await this.getEmbeds(subPrompts[index], 'document');
+            }
+        });
+        await Promise.all(workers);
+
+        return results.flat();
     }
     
     

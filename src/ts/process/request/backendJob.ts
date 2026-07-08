@@ -136,6 +136,10 @@ interface ChatJobDescriptor {
     body: Record<string, any>;
     headers: Record<string, string>;
     multiagent?: Record<string, any>;
+    // Server-side HypaV3 memory pipeline (see hypaMemoryCore.cjs). When set,
+    // body.messages contains a placeholder the server replaces with the
+    // assembled memory prompt before the main generation.
+    memory?: Record<string, any>;
 }
 
 type ChatJobState = 'pending' | 'running' | 'done' | 'error' | 'cancelled';
@@ -149,6 +153,24 @@ interface ChatJobStatus {
     finishReason: string | null;
     target: ChatJobTarget;
     updatedAt?: number;
+    updatedMemory?: any;
+}
+
+// Persists HypaV3 memory data produced by the server-side memory pipeline
+// into the job's target chat. Idempotent — later applications simply
+// overwrite with the same object.
+function applyUpdatedMemoryToTarget(target: ChatJobTarget, updatedMemory: any) {
+    if (!updatedMemory || !target) return;
+    try {
+        const db = getDatabase();
+        const char = db.characters?.find((c) => c.chaId === target.chaId);
+        if (!char) return;
+        const chat = char.chats?.find((c) => c.id === target.chatId) ?? char.chats?.[target.chatIndex];
+        if (!chat) return;
+        chat.hypaV3Data = updatedMemory;
+    } catch (error) {
+        console.error('[BackendJob] Failed to apply updated memory', error);
+    }
 }
 
 const STREAM_RENDER_INTERVAL_MS = 40;
@@ -202,8 +224,19 @@ export async function requestChatDataBackend(
     abortSignal: AbortSignal = null
 ): Promise<requestDataResponse> {
     const db = getDatabase();
-    if (!db.useBackendChatJobs) {
+    // A planned server-side memory pipeline means body.messages contains a
+    // placeholder only the server resolves — never fall back to a foreground
+    // request with it, or the placeholder would be sent to the model as-is.
+    const memoryPipeline = arg.hypaBackendPipeline;
+    const memoryGuardedFallback = async (reason: string): Promise<requestDataResponse> => {
+        if (memoryPipeline) {
+            return { type: 'fail', result: `Backend memory pipeline cannot run: ${reason}` };
+        }
         return await requestChatData(arg, model, abortSignal);
+    };
+
+    if (!db.useBackendChatJobs) {
+        return await memoryGuardedFallback('backend chat jobs disabled');
     }
 
     const binding = resolveChatModelBinding(getCurrentChat(), model);
@@ -218,7 +251,7 @@ export async function requestChatDataBackend(
                 adapterKind: binding.preset.profileSnapshot.adapterKind,
                 reason: support.code,
             });
-            return await requestChatData(arg, model, abortSignal);
+            return await memoryGuardedFallback('model preset uses foreground execution');
         }
 
         descriptorResponse = await requestChatData(
@@ -227,7 +260,12 @@ export async function requestChatDataBackend(
             abortSignal
         );
         descriptor = parseDescriptor(descriptorResponse);
-        if (!descriptor) return descriptorResponse;
+        if (!descriptor) {
+            if (memoryPipeline) {
+                return { type: 'fail', result: 'Backend memory pipeline cannot run: descriptor build failed' };
+            }
+            return descriptorResponse;
+        }
 
         const caps = binding.preset.profileSnapshot.capabilities;
         descriptor.body.stream = !caps || caps.includes('streaming');
@@ -238,7 +276,16 @@ export async function requestChatDataBackend(
             abortSignal
         );
         descriptor = parseDescriptor(descriptorResponse);
-        if (!descriptor) return descriptorResponse;
+        if (!descriptor) {
+            if (memoryPipeline) {
+                return { type: 'fail', result: 'Backend memory pipeline cannot run: descriptor build failed' };
+            }
+            return descriptorResponse;
+        }
+    }
+
+    if (memoryPipeline) {
+        descriptor.memory = memoryPipeline as unknown as Record<string, any>;
     }
 
     if (db.useBackendMultiagent) {
@@ -405,7 +452,9 @@ function createBackendJobStream(
                 // the server-side MultiAgent pipeline and main prompt generation.
                 if (data.type === 'phase') {
                     if (!status || statusEnded) return;
-                    if (data.phase === 'multiagent') {
+                    if (data.phase === 'memory') {
+                        safeStatus(() => { setKind(status.genId, 'memory', Date.now()); markPhase(status.genId, 'thinking', Date.now()); });
+                    } else if (data.phase === 'multiagent') {
                         safeStatus(() => { setKind(status.genId, 'multiagent', Date.now()); markPhase(status.genId, 'thinking', Date.now()); });
                     } else if (data.phase === 'main') {
                         safeStatus(() => {
@@ -443,6 +492,16 @@ function createBackendJobStream(
                             safeStatus(() => setStepStatus(status.genId, `ma-${data.agent}`, stepStatus, { now: Date.now() }));
                         }
                     }
+                    return;
+                }
+                // Server-side memory pipeline produced updated HypaV3 data —
+                // persist it into the target chat as soon as it exists so a
+                // later disconnect can't lose the new summaries.
+                if (data.type === 'memory-data') {
+                    applyUpdatedMemoryToTarget(target, data.data);
+                    return;
+                }
+                if (data.type === 'memory-progress') {
                     return;
                 }
                 if (data.type === 'chunk' && typeof data.text === 'string') {
@@ -530,6 +589,7 @@ function createBackendJobStream(
                             fail('Backend job not found', false);
                             return;
                         }
+                        if (jobStatus.updatedMemory) { applyUpdatedMemoryToTarget(target, jobStatus.updatedMemory); }
                         if (typeof jobStatus.text === 'string') { queueText(jobStatus.text, true); reportStatusText(jobStatus.text); }
                         if (jobStatus.status === 'done') {
                             close(true);
@@ -574,6 +634,7 @@ interface RecoveredResult {
     error: string | null;
     updatedAt?: number;
     target: ChatJobTarget;
+    updatedMemory?: any;
 }
 
 function upsertRecoveredMessage(char: character, chat: Chat, result: RecoveredResult) {
@@ -657,6 +718,12 @@ export async function applyPendingBackendChatResults(char: character, chat: Chat
     let applied = 0;
     for (const result of results) {
         if (!result?.target || !result.jobId) continue;
+
+        // Memory data from the server-side pipeline survives refreshes via the
+        // persisted job result; re-apply it whenever we see it.
+        if (result.updatedMemory) {
+            applyUpdatedMemoryToTarget(result.target, result.updatedMemory);
+        }
 
         if (result.status === 'pending' || result.status === 'running') {
             if (upsertRecoveredMessage(char, chat, result)) {

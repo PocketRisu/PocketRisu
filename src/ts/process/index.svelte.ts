@@ -26,6 +26,8 @@ import { runLuaEditTrigger } from "./scriptings";
 import { getModelInfo, LLMFlags } from "../model/modellist";
 import { resolveChatModelBinding, resolvePresetMaxOutputTokens } from "./request/modelPresetBinding";
 import { hypaMemoryV3, type HypaV3Result } from "./memory/hypav3";
+import { planHypaMemoryV3Backend } from "./memory/hypav3Backend";
+import type { HypaBackendPipeline } from "./memory/hypaBackendTypes";
 import { getModuleAssets, getModuleToggles } from "./modules";
 import { readImage } from "../globalApi.svelte";
 import { startStatus, initSteps, setStepStatus, setPendingStepsSkipped, endStatus } from "../status/requestStatus";
@@ -996,6 +998,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         })
     }
 
+    let hypaBackendPipeline: HypaBackendPipeline | null = null
     if(hypaWillRun){
         stageTimings.stage1Duration = Date.now() - stageTimings.stage1Start
         chatProcessStage.set(2)
@@ -1006,7 +1009,18 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         }
         let sp: HypaV3Result
         try{
-            sp = await hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+            // Backend chat jobs: defer the memory step's network work
+            // (summarization + embeddings) to the server so the whole turn is
+            // server-owned from the moment the job starts. Falls back to the
+            // normal in-app path whenever the plan isn't applicable.
+            const backendPlan = await planHypaMemoryV3Backend(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+            if(backendPlan){
+                sp = backendPlan
+                hypaBackendPipeline = backendPlan.pipeline
+            }
+            else{
+                sp = await hypaMemoryV3(chats, currentTokens, maxContextTokens, currentChat, nowChatroom, tokenizer)
+            }
         }
         catch(e){
             if(detailedRequestStatus){
@@ -1480,6 +1494,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
+        hypaBackendPipeline: hypaBackendPipeline ?? undefined,
     }, 'model', abortSignal)
 
     console.log(req)
