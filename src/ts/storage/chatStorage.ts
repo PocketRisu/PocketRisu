@@ -101,7 +101,53 @@ export const hydrationInFlight = new Set<string>()
 export const hydrationJustApplied = new Set<string>()
 
 /** Track in-flight hydration promises to avoid duplicate fetches */
-const hydrationPromises = new Map<string, Promise<Chat | null>>()
+const hydrationPromises = new Map<string, Map<Chat[], Promise<Chat | null>>>()
+const hydrationInFlightCounts = new Map<string, number>()
+const hydrationJustAppliedCounts = new Map<string, number>()
+
+function acquireHydrationState(set: Set<string>, counts: Map<string, number>, key: string): void {
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+    set.add(key)
+}
+
+function releaseHydrationState(set: Set<string>, counts: Map<string, number>, key: string): void {
+    const remaining = (counts.get(key) ?? 1) - 1
+    if (remaining > 0) {
+        counts.set(key, remaining)
+        return
+    }
+    counts.delete(key)
+    set.delete(key)
+}
+
+/**
+ * Yield briefly so the loading overlay can paint. Background tabs may suspend
+ * requestAnimationFrame indefinitely, so always keep a short timer fallback.
+ */
+function yieldForHydrationPaint(): Promise<void> {
+    return new Promise(resolve => {
+        let settled = false
+        const finish = () => {
+            if (settled) return
+            settled = true
+            clearTimeout(timeout)
+            resolve()
+        }
+        const timeout = setTimeout(finish, 50)
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(finish)
+        }
+    })
+}
+
+function isValidHydratedChat(value: unknown, expectedChatId: string): value is Chat {
+    if (!value || typeof value !== 'object') return false
+    const chat = value as Partial<Chat> & { _stub?: boolean, _placeholder?: boolean }
+    return chat.id === expectedChatId
+        && Array.isArray(chat.message)
+        && chat._stub !== true
+        && chat._placeholder !== true
+}
 
 // ── Server fetch/save ───────────────────────────────────────────────────────
 
@@ -144,15 +190,20 @@ export async function ensureChatHydrated(
     const key = chatKey(chaId, chatId)
 
     // Deduplicate concurrent hydration for the same chat
-    const existing = hydrationPromises.get(key)
+    let promisesForKey = hydrationPromises.get(key)
+    const existing = promisesForKey?.get(chats)
     if (existing) return existing
 
     const promise = (async () => {
-        hydrationInFlight.add(key)
+        acquireHydrationState(hydrationInFlight, hydrationInFlightCounts, key)
         try {
             const full = await fetchChatFromServer(chaId, index, chatId)
             if (!full) {
                 console.error(`[chatStorage] hydrate failed: chat not found on server (${key})`)
+                return null
+            }
+            if (!isValidHydratedChat(full, chatId)) {
+                console.error(`[chatStorage] hydrate failed: invalid chat payload (${key})`)
                 return null
             }
 
@@ -166,26 +217,50 @@ export async function ensureChatHydrated(
             if (!currentSlot?._placeholder) {
                 return currentSlot
             }
+            if (currentSlot !== slot) {
+                console.warn(`[chatStorage] hydrate skipped: chat slot replaced before apply (${key})`)
+                return null
+            }
 
             // Yield one frame so loading overlay dismissal paints before heavy DOM work
-            await new Promise<void>(r => requestAnimationFrame(() => r()))
+            await yieldForHydrationPaint()
+
+            // The chat may be deleted, rerolled, or replaced while yielding.
+            const applyIndex = chats.findIndex(chat => chat?.id === chatId)
+            if (applyIndex === -1) {
+                console.warn(`[chatStorage] hydrate skipped: chat removed before apply (${key})`)
+                return null
+            }
+            if (chats[applyIndex] !== slot || !slot._placeholder) {
+                console.warn(`[chatStorage] hydrate skipped: chat slot replaced before apply (${key})`)
+                return null
+            }
 
             // Apply to memory — mark JustApplied to suppress the reactive write-back
-            hydrationJustApplied.add(key)
-            chats[currentIndex] = full
+            acquireHydrationState(hydrationJustApplied, hydrationJustAppliedCounts, key)
+            try {
+                chats[applyIndex] = full
 
-            // Wait one tick so Svelte reactivity settles before allowing dirty tracking
-            await tick()
-            hydrationJustApplied.delete(key)
+                // Wait one tick so Svelte reactivity settles before allowing dirty tracking
+                await tick()
+            } finally {
+                releaseHydrationState(hydrationJustApplied, hydrationJustAppliedCounts, key)
+            }
 
             return full
         } finally {
-            hydrationInFlight.delete(key)
-            hydrationPromises.delete(key)
+            releaseHydrationState(hydrationInFlight, hydrationInFlightCounts, key)
+            const activeForKey = hydrationPromises.get(key)
+            activeForKey?.delete(chats)
+            if (activeForKey?.size === 0) hydrationPromises.delete(key)
         }
     })()
 
-    hydrationPromises.set(key, promise)
+    if (!promisesForKey) {
+        promisesForKey = new Map()
+        hydrationPromises.set(key, promisesForKey)
+    }
+    promisesForKey.set(chats, promise)
     return promise
 }
 

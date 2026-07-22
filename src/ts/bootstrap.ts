@@ -45,20 +45,65 @@ export async function loadData() {
                 await forageStorage.Init()
 
                 LoadingStatusState.text = "Loading Local Save File..."
-                let gotStorage: Uint8Array = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
-                LoadingStatusState.text = "Decoding Local Save File..."
-                if (checkNullish(gotStorage)) {
+                const startupLoad = await forageStorage.loadDatabaseForStartup()
+                let gotStorage: Uint8Array | null = startupLoad.bytes
+                let decodedFromCache = startupLoad.decoded
+                let databaseLoaded = false
+                if (checkNullish(gotStorage) && checkNullish(decodedFromCache)) {
                     createdFreshDatabase = true
                     gotStorage = encodeRisuSaveLegacy({})
                     await forageStorage.setItem('database/database.bin', gotStorage)
                 }
                 try {
-                    const decoded = await decodeRisuSave(gotStorage)
-                    setPatchSyncBaseline(safeStructuredClone(decoded))
+                    LoadingStatusState.text = decodedFromCache
+                        ? "Loading Cached Save..."
+                        : "Decoding Local Save File..."
+                    const decoded = decodedFromCache ?? await decodeRisuSave(gotStorage!)
+                    const syncBaseline = safeStructuredClone(decoded)
+                    setPatchSyncBaseline(syncBaseline)
                     console.log(decoded)
                     setDatabase(decoded)
+                    databaseLoaded = true
+                    if (gotStorage && !createdFreshDatabase) {
+                        // Do not block first paint on a large IndexedDB write.
+                        // Cache the canonical pre-setDatabase baseline because
+                        // setDatabase fills runtime defaults in-place.
+                        forageStorage.scheduleStartupDatabaseCache(
+                            gotStorage,
+                            syncBaseline,
+                            forageStorage.getDbEtag(),
+                        )
+                    }
                 } catch (error) {
                     console.error(error)
+                    // A cache hit is only an accelerator. If decoding/applying
+                    // it fails, clear it and retry the authoritative server
+                    // body once before considering backup files.
+                    if (startupLoad.fromCache) {
+                        try {
+                            LoadingStatusState.text = "Refreshing Local Save Cache..."
+                            await forageStorage.invalidateStartupDatabaseCache()
+                            gotStorage = await forageStorage.getItemFresh('database/database.bin') as unknown as Uint8Array
+                            decodedFromCache = null
+                            const decoded = await decodeRisuSave(gotStorage)
+                            const syncBaseline = safeStructuredClone(decoded)
+                            setPatchSyncBaseline(syncBaseline)
+                            setDatabase(decoded)
+                            databaseLoaded = true
+                            forageStorage.scheduleStartupDatabaseCache(
+                                gotStorage,
+                                syncBaseline,
+                                forageStorage.getDbEtag(),
+                            )
+                        } catch (refreshError) {
+                            console.error(refreshError)
+                        }
+                    }
+
+                    if (databaseLoaded) {
+                        // Fresh server retry recovered the startup path.
+                    }
+                    else {
                     const backups = await getDbBackups()
                     let backupLoaded = false
                     for (const backup of backups) {
@@ -74,6 +119,7 @@ export async function loadData() {
                     }
                     if (!backupLoaded) {
                         throw "Forage: Your save file is corrupted"
+                    }
                     }
                 }
 
@@ -108,10 +154,6 @@ export async function loadData() {
                     changeLanguage(mappedLanguage)
                 }
             }
-            LoadingStatusState.text = "Loading Plugins..."
-            try {
-                await loadPlugins()
-            } catch (error) { }
             try {
                 //@ts-expect-error navigator.standalone is iOS Safari non-standard property, not in Navigator interface
                 const isInStandaloneMode = (window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone) || document.referrer.includes('android-app://');
@@ -132,6 +174,14 @@ export async function loadData() {
                     char.chats = convertStubsToPlaceholders(char.chats)
                 }
             }
+
+            // Plugins must never observe the server-only raw stub shape. Runtime
+            // code understands placeholders and hydrates them on demand, while
+            // a plugin touching a raw stub can mistake it for an empty chat.
+            LoadingStatusState.text = "Loading Plugins..."
+            try {
+                await loadPlugins()
+            } catch (error) { }
 
             const db = getDatabase();
 

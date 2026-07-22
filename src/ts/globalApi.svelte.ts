@@ -11,10 +11,10 @@ import { alertConfirm, alertError, alertMd, alertNormalWait, alertSelect, alertT
 import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
-import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
-import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat } from "./storage/chatStorage";
+import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, normalizeJSON, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
+import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat, convertStubsToPlaceholders } from "./storage/chatStorage";
 import { AutoStorage } from "./storage/autoStorage";
-import { ConflictError, type PersistWarning } from "./storage/nodeStorage";
+import { ConflictError, type PatchItemResult, type PersistWarning } from "./storage/nodeStorage";
 import { supportsPatchSync } from "./platform";
 import { updateAnimationSpeed } from "./gui/animation";
 import { updateColorScheme, updateTextThemeAndCSS } from "./gui/colorscheme";
@@ -27,6 +27,7 @@ import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import { isLocalNetworkUrl } from "./network/localNetwork";
 import { decodeProxyJobWsChunk, formatProxyStreamErrorMessage, parseProxyJobWsEvent } from "./network/proxyJobWs";
+import { findTrackedDeletionConflict, jsonValuesEqual, mergeThreeWayValue, mergeTrackedChanges } from "./storage/conflictRebase";
 
 export const forageStorage = new AutoStorage()
 
@@ -251,7 +252,23 @@ export let requiresFullEncoderReload = $state({
 let requestImmediateSaveImpl: ((options?: {
     forceFullWrite?: boolean
 }) => Promise<void> | void) = () => {}
+let requestChatSaveImpl: ((chaId: string, chatId: string) => Promise<void> | void) = () => {}
+const pendingExplicitChats = new Map<string, [string, string]>()
+const pendingExplicitCharacters = new Set<string>()
+let markChatDirtyImpl = (chaId: string, chatId: string) => {
+    if (chaId && chatId) pendingExplicitChats.set(`${chaId}|${chatId}`, [chaId, chatId])
+}
+let markCharacterDirtyImpl = (chaId: string) => {
+    if (chaId) pendingExplicitCharacters.add(chaId)
+}
 let patchSyncBaseline: Database | null = null
+
+class ManualSaveConflictError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'ManualSaveConflictError'
+    }
+}
 
 // Surfaces server-side persist failures (Stage 1 visibility — see issues.md).
 // The same failure is re-attached on every patch response until cleared, so we
@@ -360,6 +377,19 @@ export function requestImmediateSave(options?: {
     return requestImmediateSaveImpl(options)
 }
 
+/** Explicit dirty hook for async plugin APIs that mutate an inactive chat. */
+export function requestChatSave(chaId: string, chatId: string) {
+    return requestChatSaveImpl(chaId, chatId)
+}
+
+export function markChatDirty(chaId: string, chatId: string): void {
+    markChatDirtyImpl(chaId, chatId)
+}
+
+export function markCharacterDirty(chaId: string): void {
+    markCharacterDirtyImpl(chaId)
+}
+
 export function setPatchSyncBaseline(data: Database | null) {
     patchSyncBaseline = data ? safeStructuredClone(data) as Database : null
 }
@@ -415,16 +445,63 @@ export async function saveDb() {
         pluginCustomStorage: false
     }
 
+    function queueTrackedChat(chaId: string, chatId: string) {
+        if (!chaId || !chatId) return
+        if (
+            changeTracker.chat[0]?.[0] !== chaId ||
+            changeTracker.chat[0]?.[1] !== chatId
+        ) {
+            changeTracker.chat.unshift([chaId, chatId])
+        }
+    }
+
+    function queueTrackedCharacter(chaId: string) {
+        if (!chaId) return
+        changeTracker.character = [chaId, ...changeTracker.character.filter((id) => id !== chaId)]
+    }
+
+    for (const [chaId, chatId] of pendingExplicitChats.values()) {
+        queueTrackedChat(chaId, chatId)
+    }
+    for (const chaId of pendingExplicitCharacters) {
+        queueTrackedCharacter(chaId)
+    }
+    if (pendingExplicitChats.size > 0 || pendingExplicitCharacters.size > 0) {
+        changed = true
+    }
+    pendingExplicitChats.clear()
+    pendingExplicitCharacters.clear()
+    markChatDirtyImpl = (chaId, chatId) => {
+        queueTrackedChat(chaId, chatId)
+        changed = true
+    }
+    markCharacterDirtyImpl = (chaId) => {
+        queueTrackedCharacter(chaId)
+        changed = true
+    }
+
     let encoder = new RisuSaveEncoder()
     await encoder.init(getDatabase(), {
         compression: false
     })
 
+    const toServerDatabaseShape = (database: Database): Database => {
+        const cloned = normalizeJSON(safeStructuredClone(database)) as Database
+        cloned.characters = (cloned.characters ?? []).map((character) => ({
+            ...character,
+            chats: (character.chats ?? []).map(chatToStub),
+        })) as any
+        return cloned
+    }
+
+    let lastConfirmedServerDb = patchSyncBaseline
+        ? normalizeJSON(safeStructuredClone(patchSyncBaseline)) as Database
+        : toServerDatabaseShape(getDatabase())
     let patcher = new RisuSavePatcher()
     if (supportsPatchSync) {
-        await patcher.init(patchSyncBaseline ?? getDatabase())
-        patchSyncBaseline = null
+        await patcher.init(lastConfirmedServerDb)
     }
+    patchSyncBaseline = null
 
     function hasTrackedChanges(toSave: toSaveType) {
         return !!(
@@ -440,8 +517,12 @@ export async function saveDb() {
 
     function takeTrackedChanges() {
         const toSave = safeStructuredClone(changeTracker)
-        changeTracker.character = changeTracker.character.length === 0 ? [] : [changeTracker.character[0]]
-        changeTracker.chat = changeTracker.chat.length === 0 ? [] : [changeTracker.chat[0]]
+        // These entries belong to this save attempt. Mutations that happen
+        // while it is in flight are observed by the effects below and queued
+        // again. Retaining the first entry made unrelated saves repeatedly
+        // upload the same active character/chat.
+        changeTracker.character = []
+        changeTracker.chat = []
         changeTracker.root = false
         changeTracker.botPreset = false
         changeTracker.modules = false
@@ -473,6 +554,8 @@ export async function saveDb() {
         let didInitPluginStorageEffect = false
         let didInitGeneralEffect = false
         let trackedActiveChatKey = ''
+        const streamingCheckpointAt = new Map<string, number>()
+        const STREAMING_CHECKPOINT_INTERVAL_MS = 10_000
 
         const debounceTime = 500; // 500 milliseconds
         let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -490,12 +573,24 @@ export async function saveDb() {
             }, debounceTime);
         }
 
+        function queueActiveChatForSave() {
+            const activeChar = DBState?.db?.characters?.[selIdState]
+            const activeChat = activeChar?.chats?.[activeChar?.chatPage]
+            if (!activeChar?.chaId || !activeChat?.id || activeChat._placeholder) return
+            if (isHydrating(activeChar.chaId, activeChat.id)) return
+            queueTrackedChat(activeChar.chaId, activeChat.id)
+        }
+
         // Start a best-effort save immediately when the page is hidden/unloaded.
         function flushImmediate() {
             if (saveTimeout) {
                 clearTimeout(saveTimeout);
                 saveTimeout = null;
             }
+            // Streaming normally checkpoints every ten seconds. Keep the chat
+            // dirty between checkpoints so pagehide cannot omit the final
+            // partial response merely because the throttle window is active.
+            queueActiveChatForSave()
             changed = true;
             void triggerSave({
                 skipBroadcast: true,
@@ -503,8 +598,18 @@ export async function saveDb() {
             void flushServerDbKeepalive()
         }
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') flushImmediate();
+            if (document.visibilityState === 'hidden') {
+                flushImmediate()
+            }
+            else if (hasTrackedChanges(changeTracker)) {
+                // Resume a bounded/paused retry when the browser becomes
+                // active again, even if no new mutation occurred.
+                changed = true
+            }
         });
+        window.addEventListener('online', () => {
+            if (hasTrackedChanges(changeTracker)) changed = true
+        })
         window.addEventListener('pagehide', flushImmediate);
 
         $effect(() => {
@@ -630,12 +735,26 @@ export async function saveDb() {
                 return
             }
 
-            if (
-                changeTracker.chat[0]?.[0] !== activeChaId ||
-                changeTracker.chat[0]?.[1] !== activeChatId
-            ) {
-                changeTracker.chat.unshift([activeChaId, activeChatId])
+            // Do not upload an ever-growing response for every streamed token.
+            // A periodic checkpoint still preserves partial output if the page
+            // closes mid-generation, and the isStreaming -> false transition
+            // always schedules the final state immediately.
+            if (activeChat.isStreaming === true) {
+                // Record dirtiness immediately, but throttle the actual network
+                // save. A pagehide flush can then persist the latest tokens.
+                queueTrackedChat(activeChaId, activeChatId)
+                const now = Date.now()
+                const lastCheckpoint = streamingCheckpointAt.get(activeKey) ?? 0
+                if (now - lastCheckpoint < STREAMING_CHECKPOINT_INTERVAL_MS) {
+                    return
+                }
+                streamingCheckpointAt.set(activeKey, now)
             }
+            else {
+                streamingCheckpointAt.delete(activeKey)
+            }
+
+            queueTrackedChat(activeChaId, activeChatId)
             saveTimeoutExecute()
         })
     })
@@ -709,58 +828,91 @@ export async function saveDb() {
         }
     }
 
-    async function rebaseTrackedLocalChangesOnLatestServerDb(conflictEtag: string | null, db: Database, toSave: toSaveType) {
-        forageStorage.setDbEtag(conflictEtag ?? null)
-        const latestData = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
+    async function rebaseTrackedLocalChangesOnLatestServerDb(db: Database, toSave: toSaveType) {
+        // patchItem/full-write conflict handlers roll the patcher back before
+        // entering here, so this is the common ancestor shared by local and
+        // remote state. It must be captured before the network await.
+        const previousServerBaseline = supportsPatchSync
+            ? patcher.baselineSnapshot() as Database
+            : safeStructuredClone(lastConfirmedServerDb) as Database
+        // A conflict ETag describes the server state, not the local baseline.
+        // Force a canonical read instead of making a conditional cache read
+        // with an ETag for bytes we do not own locally.
+        const latestData = await forageStorage.getItemFresh('database/database.bin') as unknown as Uint8Array
         if (latestData && latestData.length > 0) {
-            const latestDb = await decodeRisuSave(latestData) as Database
-            const mergedDb = safeStructuredClone(latestDb) as Database
-            const localDb = safeStructuredClone(db) as Database
+            const latestDb = normalizeJSON(await decodeRisuSave(latestData)) as Database
+            const latestServerBaseline = safeStructuredClone(latestDb) as Database
+            const localDb = normalizeJSON(safeStructuredClone(db)) as Database
+            const pendingDuringSave = safeStructuredClone(changeTracker)
+            const retryChanges = mergeTrackedChanges(toSave, pendingDuringSave)
 
-            for (const key in localDb) {
-                if (
-                    key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
-                    key !== 'plugins' && key !== 'pluginCustomStorage'
-                ) {
-                    mergedDb[key] = safeStructuredClone(localDb[key])
-                }
+            // A remote deletion racing a tracked local edit is not safely
+            // auto-mergeable. Keep the live local object untouched and stop
+            // this retry cycle instead of either reviving the deletion or
+            // silently discarding the edit.
+            const deletionConflict = findTrackedDeletionConflict(
+                previousServerBaseline,
+                localDb,
+                latestDb,
+                retryChanges,
+                chatToStub,
+            )
+            if (deletionConflict) {
+                const subject = deletionConflict.scope === 'character'
+                    ? `Character ${deletionConflict.charId}`
+                    : `Chat ${deletionConflict.chatId}`
+                throw new ManualSaveConflictError(
+                    `${subject} was deleted on another session while it had local edits. ` +
+                    'Local data was kept in this tab; copy or export it before reloading.'
+                )
             }
+            const mergedDb = mergeThreeWayValue(
+                previousServerBaseline,
+                localDb,
+                latestDb,
+            ) as Database
 
-            if (toSave.botPreset) {
-                mergedDb.botPresets = safeStructuredClone(localDb.botPresets)
-                mergedDb.botPresetsId = localDb.botPresetsId
-            }
-            if (toSave.modules) {
-                mergedDb.modules = safeStructuredClone(localDb.modules)
-            }
+            // The merge can preserve an edit whose reactive effect had not run
+            // before setDatabase. Ensure the retry covers every coarse block
+            // that now differs from the new server baseline.
+            retryChanges.root = retryChanges.root || Object.keys(mergedDb).some((key) => (
+                key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
+                !jsonValuesEqual(mergedDb[key], latestDb[key])
+            ))
+            retryChanges.botPreset = retryChanges.botPreset ||
+                !jsonValuesEqual(mergedDb.botPresets, latestDb.botPresets)
+            retryChanges.modules = retryChanges.modules ||
+                !jsonValuesEqual(mergedDb.modules, latestDb.modules)
+            retryChanges.plugins = retryChanges.plugins ||
+                !jsonValuesEqual(mergedDb.plugins, latestDb.plugins)
+            retryChanges.pluginCustomStorage = retryChanges.pluginCustomStorage ||
+                !jsonValuesEqual(mergedDb.pluginCustomStorage, latestDb.pluginCustomStorage)
 
-            const trackedCharIds = new Set<string>(toSave.character.filter(Boolean))
-            for (const trackedChat of toSave.chat) {
-                if (trackedChat?.[0]) {
-                    trackedCharIds.add(trackedChat[0])
-                }
-            }
             const mergedCharacters = Array.isArray(mergedDb.characters) ? mergedDb.characters : []
-            const localCharacters = Array.isArray(localDb.characters) ? localDb.characters : []
-
-            for (const charId of trackedCharIds) {
-                const localChar = localCharacters.find((char) => char?.chaId === charId)
-                const mergedIndex = mergedCharacters.findIndex((char) => char?.chaId === charId)
-                if (localChar) {
-                    const clonedLocalChar = safeStructuredClone(localChar)
-                    if (mergedIndex >= 0) {
-                        mergedCharacters[mergedIndex] = clonedLocalChar
-                    }
-                    else {
-                        mergedCharacters.push(clonedLocalChar)
-                    }
-                }
-                else if (mergedIndex >= 0) {
-                    mergedCharacters.splice(mergedIndex, 1)
+            const latestCharacters = Array.isArray(latestDb.characters) ? latestDb.characters : []
+            const latestById = new Map(latestCharacters.map((char) => [char?.chaId, char]))
+            const mergedById = new Map(mergedCharacters.map((char) => [char?.chaId, char]))
+            for (const charId of new Set([...latestById.keys(), ...mergedById.keys()])) {
+                if (!charId) continue
+                const latestChar = latestById.get(charId)
+                const mergedChar = mergedById.get(charId)
+                const latestStubbed = latestChar
+                    ? { ...latestChar, chats: (latestChar.chats ?? []).map(chatToStub) }
+                    : undefined
+                const mergedStubbed = mergedChar
+                    ? { ...mergedChar, chats: (mergedChar.chats ?? []).map(chatToStub) }
+                    : undefined
+                if (!jsonValuesEqual(latestStubbed, mergedStubbed)) {
+                    retryChanges.character.push(charId)
                 }
             }
-            mergedDb.characters = mergedCharacters
-            const mergedBaseline = safeStructuredClone(mergedDb) as Database
+            retryChanges.character = [...new Set(retryChanges.character)]
+
+            // Runtime and plugins must see either real chats or placeholders,
+            // never the raw server-only stub representation.
+            for (const character of mergedDb.characters) {
+                character.chats = convertStubsToPlaceholders(character.chats)
+            }
             setDatabase(mergedDb)
 
             encoder = new RisuSaveEncoder()
@@ -769,10 +921,17 @@ export async function saveDb() {
             })
             if (supportsPatchSync) {
                 patcher = new RisuSavePatcher()
-                await patcher.init(mergedBaseline)
+                // The server still owns latestServerBaseline. Initializing from
+                // merged local state would make the retry hash a state the
+                // server never accepted and cause an endless 409 loop.
+                await patcher.init(latestServerBaseline)
             }
+            lastConfirmedServerDb = latestServerBaseline
+            requeueTrackedChanges(retryChanges)
         }
-        requeueTrackedChanges(toSave)
+        else {
+            requeueTrackedChanges(toSave)
+        }
         changed = true
     }
 
@@ -832,7 +991,8 @@ export async function saveDb() {
         let newEtag: string | undefined
 
         if (supportsPatchSync && !options?.forceFullWrite) {
-            const patchData = await patcher.set(db, safeStructuredClone(toSave))
+            const preparedPatch = await patcher.set(db, safeStructuredClone(toSave))
+            const { rollback: rollbackPatchBaseline, ...patchData } = preparedPatch
             // Refuse to send patches that would corrupt server-side lazy chats.
             // chatToStub strips chats to metadata before diffing, so the only
             // way these ops appear is a baseline desync. Falling through to a
@@ -841,6 +1001,9 @@ export async function saveDb() {
             // breadcrumb for tracking down the unknown root cause.
             const dangerous = findDangerousChatOps(patchData.patch)
             if (dangerous.length > 0) {
+                // The patch was never accepted, so diagnostics and any full
+                // fallback must use the last server-confirmed baseline.
+                rollbackPatchBaseline()
                 // Always log a one-line summary so production environments
                 // see enough to file a bug report. The rich dump below is
                 // gated behind a localStorage flag — chronic loops would
@@ -993,11 +1156,24 @@ export async function saveDb() {
                 }
                 // Leave saved=false so the full-write path below kicks in.
             } else {
-                const patchResult = await forageStorage.patchItem('database/database.bin', patchData)
+                let patchResult: PatchItemResult
+                try {
+                    patchResult = await forageStorage.patchItem('database/database.bin', patchData)
+                }
+                catch (error) {
+                    rollbackPatchBaseline()
+                    throw error
+                }
                 saved = patchResult.success
-                if (patchResult.etag) {
+                if (!patchResult.success) {
+                    rollbackPatchBaseline()
+                }
+                if (patchResult.success && patchResult.etag) {
                     newEtag = patchResult.etag
                     forageStorage.setDbEtag(patchResult.etag)
+                }
+                if (patchResult.success) {
+                    lastConfirmedServerDb = patcher.baselineSnapshot() as Database
                 }
                 if (patchResult.persistWarning) {
                     showPersistWarningOnce(patchResult.persistWarning)
@@ -1008,6 +1184,17 @@ export async function saveDb() {
                 if (patchResult.chatGuardRejected) {
                     console.error('[Save] Server rejected patch — chat-internal field ops detected server-side')
                     showChatGuardToastThrottled('server')
+                }
+                else if (patchResult.validationRejected) {
+                    throw new Error(
+                        `Server rejected an invalid database update: ${patchResult.error ?? 'unknown invariant failure'}`
+                    )
+                }
+                else if (patchResult.conflict) {
+                    console.warn('[Save] Patch conflict detected, rebasing tracked changes on the latest server DB...')
+                    await rebaseTrackedLocalChangesOnLatestServerDb(db, toSave)
+                    await sleep(Math.min(500 * (savetrys + 1), 3000))
+                    return 'retry'
                 }
             }
         }
@@ -1021,17 +1208,19 @@ export async function saveDb() {
             } catch (conflictErr) {
                 if (conflictErr instanceof ConflictError) {
                     console.warn('[Save] Full-write conflict detected, rebasing tracked local changes on latest server DB...')
-                    await rebaseTrackedLocalChangesOnLatestServerDb(conflictErr.currentEtag ?? null, db, toSave)
+                    await rebaseTrackedLocalChangesOnLatestServerDb(db, toSave)
                     await sleep(Math.min(500 * (savetrys + 1), 3000))
                     return 'retry'
                 }
                 throw conflictErr
             }
 
-            // Re-init patcher from the data we just wrote so both sides
-            // share the same baseline (including setDatabase defaults).
+            // Re-init the confirmed baseline from the exact encoded data that
+            // was accepted. This also keeps conflict recovery safe when patch
+            // sync is disabled but ETag-protected full writes are enabled.
+            const decodedDb = normalizeJSON(await decodeRisuSave(dbData)) as Database
+            lastConfirmedServerDb = decodedDb
             if (supportsPatchSync) {
-                const decodedDb = await decodeRisuSave(dbData)
                 await patcher.init(decodedDb)
             }
         }
@@ -1051,7 +1240,18 @@ export async function saveDb() {
         skipBroadcast?: boolean
     }) {
         if (saveInFlight) {
-            return saveInFlight
+            // Mutations queued while a save is in flight belong to the next
+            // transaction. Chain that transaction explicitly; pagehide cannot
+            // otherwise consume the current promise and leave the final dirty
+            // chat stranded in changeTracker.
+            changed = true
+            const currentSave = saveInFlight
+            return currentSave.then(async () => {
+                if (changed || hasTrackedChanges(changeTracker)) {
+                    changed = false
+                    await triggerSave(options)
+                }
+            })
         }
 
         const toSave = takeTrackedChanges()
@@ -1065,16 +1265,55 @@ export async function saveDb() {
                 const result = await persistTrackedChanges(toSave, options)
                 if (result === 'saved') {
                     savetrys = 0
+                    deferredFailureRetries = 0
+                    if (deferredRecoveryTimer) {
+                        clearTimeout(deferredRecoveryTimer)
+                        deferredRecoveryTimer = null
+                    }
                 } else if (result === 'noop' && hasTrackedChanges(toSave)) {
                     requeueTrackedChanges(toSave)
                     changed = true
                 }
+                else if (result === 'retry') {
+                    savetrys += 1
+                    if (savetrys > 4) {
+                        // The rebased state is still dirty and remains in the
+                        // tracker, but deterministic 409s must not hammer the
+                        // server forever.
+                        changed = false
+                        alertError(new Error('Saving still conflicts after five rebases. Local edits were kept; reload or resolve the other active session before retrying.'))
+                        savetrys = 0
+                    }
+                    else {
+                        changed = true
+                    }
+                }
             } catch (error) {
                 requeueTrackedChanges(toSave)
+                if (error instanceof ManualSaveConflictError) {
+                    changed = false
+                    savetrys = 0
+                    alertError(error)
+                    return
+                }
                 savetrys += 1
                 if (savetrys > 4) {
                     alertError(error)
                     savetrys = 0
+                    // Keep the dirty tracker and allow a couple of low-rate
+                    // recovery cycles for transient outages without creating
+                    // an unbounded upload loop on a persistent failure.
+                    if (deferredFailureRetries < 2) {
+                        deferredFailureRetries += 1
+                        scheduleDeferredRecovery(30_000)
+                    }
+                    else {
+                        // Persistent server/network outages must not turn a
+                        // dirty in-memory tracker into a permanent silent stop.
+                        // Retry at a low rate to avoid repeated large uploads;
+                        // `online`/visibility events above wake it sooner.
+                        scheduleDeferredRecovery(5 * 60_000)
+                    }
                 }
                 else {
                     console.error(error)
@@ -1098,7 +1337,23 @@ export async function saveDb() {
         })
     }
 
+    requestChatSaveImpl = async (chaId, chatId) => {
+        queueTrackedChat(chaId, chatId)
+        changed = true
+        await tick()
+        await triggerSave()
+    }
+
     let savetrys = 0
+    let deferredFailureRetries = 0
+    let deferredRecoveryTimer: ReturnType<typeof setTimeout> | null = null
+    function scheduleDeferredRecovery(delayMs: number) {
+        if (deferredRecoveryTimer) clearTimeout(deferredRecoveryTimer)
+        deferredRecoveryTimer = setTimeout(() => {
+            deferredRecoveryTimer = null
+            if (hasTrackedChanges(changeTracker)) changed = true
+        }, delayMs)
+    }
     while (true) {
         if (!changed) {
             await sleep(200)

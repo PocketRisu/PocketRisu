@@ -873,6 +873,11 @@ export class RisuSavePatcher {
         return (rootHash >>> 0).toString(16);
     }
 
+    /** Return the last server-confirmed JSON baseline for conflict rebasing. */
+    baselineSnapshot(): any {
+        return normalizeJSON(this.lastSyncedDb)
+    }
+
     async init(data: any) {
         this.lastSyncedDb = normalizeJSON(data);
         if (!Array.isArray(this.lastSyncedDb.characters)) {
@@ -924,7 +929,54 @@ export class RisuSavePatcher {
         }
     }
 
-    async set(data: any, toSave: toSaveType): Promise<{ patch: any[]; expectedHash: string }> {
+    async set(data: any, toSave: toSaveType): Promise<{
+        patch: any[]
+        expectedHash: string
+        /** Restore the baseline when the server does not accept this patch. */
+        rollback: () => void
+    }> {
+        // set() historically advanced the local baseline before the server
+        // accepted the patch. A 409/network error therefore made the retry use
+        // a hash for data the server never stored, often cascading into an
+        // unsafe full-write fallback. Detach the mutable state cheaply (the
+        // method replaces array entries rather than mutating their children)
+        // and expose a rollback for the persistence layer.
+        const previousState = {
+            lastSyncedDb: this.lastSyncedDb,
+            hashBlocks: this.hashBlocks,
+            lastRootKeyJsons: this.lastRootKeyJsons,
+            lastCharJsons: this.lastCharJsons,
+            lastModuleJsons: this.lastModuleJsons,
+            moduleItemHashes: this.moduleItemHashes,
+        }
+        this.lastSyncedDb = {
+            ...this.lastSyncedDb,
+            characters: Array.isArray(this.lastSyncedDb?.characters)
+                ? [...this.lastSyncedDb.characters]
+                : [],
+            modules: Array.isArray(this.lastSyncedDb?.modules)
+                ? [...this.lastSyncedDb.modules]
+                : this.lastSyncedDb?.modules,
+        }
+        this.hashBlocks = { ...this.hashBlocks }
+        this.lastRootKeyJsons = new Map(this.lastRootKeyJsons)
+        this.lastCharJsons = new Map(this.lastCharJsons)
+        this.lastModuleJsons = new Map(this.lastModuleJsons)
+        this.moduleItemHashes = new Map(this.moduleItemHashes)
+
+        let canRollback = true
+        const rollback = () => {
+            if (!canRollback) return
+            canRollback = false
+            this.lastSyncedDb = previousState.lastSyncedDb
+            this.hashBlocks = previousState.hashBlocks
+            this.lastRootKeyJsons = previousState.lastRootKeyJsons
+            this.lastCharJsons = previousState.lastCharJsons
+            this.lastModuleJsons = previousState.lastModuleJsons
+            this.moduleItemHashes = previousState.moduleItemHashes
+        }
+
+        try {
         const { compare } = await import('fast-json-patch')
         const expectedHash: string = this.hash();
         const patch: any[] = []
@@ -1164,7 +1216,13 @@ export class RisuSavePatcher {
 
         return {
             patch,
-            expectedHash
+            expectedHash,
+            rollback,
+        }
+        }
+        catch (error) {
+            rollback()
+            throw error
         }
     }
 }

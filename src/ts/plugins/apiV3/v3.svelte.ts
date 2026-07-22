@@ -9,7 +9,7 @@ import { v4 } from "uuid";
 import { sleep } from "src/ts/util";
 import { alertConfirm, alertError, alertNormal } from "src/ts/alert";
 import { language } from "src/lang";
-import { checkCharOrder, forageStorage, getFetchLogs } from "src/ts/globalApi.svelte";
+import { checkCharOrder, forageStorage, getFetchLogs, markCharacterDirty, markChatDirty } from "src/ts/globalApi.svelte";
 import { changeColorScheme, updateColorScheme, updateTextThemeAndCSS, type ColorScheme } from "src/ts/gui/colorscheme";
 import { get } from "svelte/store";
 import { registerMCPModule, unregisterMCPModule } from "src/ts/process/mcp/pluginmcp";
@@ -17,6 +17,7 @@ import { getLLMCache, searchLLMCache } from "src/ts/translator/translator";
 import { hasher } from "src/ts/parser/parser.svelte";
 import { LLMFlags, LLMFormat, LLMProvider, LLMTokenizer, type LLMModel } from "src/ts/model/types";
 import { readPersistentJson, removePersistentKey, writePersistentJson } from "src/ts/storage/persistentKv";
+import { ensureChatHydrated, ensureCurrentChatReady } from "src/ts/storage/chatStorage";
 import { sendChat as processSendChat, doingChat } from "src/ts/process/index.svelte";
 import { getModelInfo } from "src/ts/model/modellist";
 import type { ModelModeExtended } from "src/ts/process/request/shared";
@@ -34,6 +35,7 @@ import {
     type AfterTTSResult,
     type TTSHookFn,
 } from "src/ts/process/ttsHooks";
+import { PluginChatAccess } from "./pluginChatAccess";
 
 /*
     V3 API for RisuAI Plugins
@@ -753,6 +755,74 @@ const authorizationHeaders = [
 const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
 
     const oldApis = getV2PluginAPIs();
+    const pluginChatAccess = new PluginChatAccess({
+        getDatabase: () => DBState.db,
+        hydrateChat: (chats, index, chaId) => ensureChatHydrated(chats as any, index, chaId) as any,
+        normalizeChat: (chat) => normalizeChat(chat as any) as any,
+        markChatDirty,
+        markCharacterDirty,
+    })
+
+    const getCurrentCharacterForPlugin = async () => {
+        const characterIndex = get(selectedCharID)
+        const character = await pluginChatAccess.getHydratedCharacterAt(characterIndex)
+        if (get(selectedCharID) !== characterIndex) {
+            throw new Error('The selected character changed while plugin data was loading')
+        }
+        return character ? $state.snapshot(character) : undefined
+    }
+
+    const setCurrentCharacterForPlugin = async (character: any) => {
+        const characterIndex = get(selectedCharID)
+        await pluginChatAccess.replaceCharacterAt(
+            characterIndex,
+            character,
+            () => get(selectedCharID) === characterIndex,
+        )
+    }
+
+    const preparePluginDatabaseWrite = async (newDb: any) => {
+        if (!newDb || typeof newDb !== 'object'
+            || !Object.prototype.hasOwnProperty.call(newDb, 'characters')) {
+            return null
+        }
+
+        const database = await pluginChatAccess.getHydratedDatabase()
+        if (database !== DBState.db) {
+            throw new Error('The plugin database target changed while chats were loading')
+        }
+
+        const previousCharacters = [...(database.characters ?? [])]
+        const nextCharacters = pluginChatAccess.validateCharacterCollection(newDb.characters)
+        return {
+            payload: { ...newDb, characters: nextCharacters },
+            previousCharacters,
+            nextCharacters,
+        }
+    }
+
+    const setPluginDatabaseLite = async (newDb: any) => {
+        const prepared = await preparePluginDatabaseWrite(newDb)
+        oldApis.setDatabaseLite(prepared?.payload ?? newDb)
+        if (prepared) {
+            pluginChatAccess.markCharacterCollectionDirty(
+                prepared.previousCharacters,
+                prepared.nextCharacters,
+            )
+        }
+    }
+
+    const setPluginDatabase = async (newDb: any) => {
+        const prepared = await preparePluginDatabaseWrite(newDb)
+        await oldApis.setDatabase(prepared?.payload ?? newDb)
+        if (prepared) {
+            pluginChatAccess.markCharacterCollectionDirty(
+                prepared.previousCharacters,
+                prepared.nextCharacters,
+            )
+        }
+    }
+
     return {
 
         //Old APIs from v2.1
@@ -789,8 +859,8 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
             return oldApis.nativeFetch(url, options);
         },
-        getChar: oldApis.getChar,
-        setChar: oldApis.setChar,
+        getChar: getCurrentCharacterForPlugin,
+        setChar: setCurrentCharacterForPlugin,
         addProvider: (name: string, func: (arg: PluginV2ProviderArgument, abortSignal?: AbortSignal) => Promise<{ success: boolean, content: string }>, options?: PluginV3ProviderOptions) => {
             console.warn(`[WARN] addProvider is a powerful API that can potentially be unsafe if used incorrectly. addProvider's functionality might be limited or changed in future updates to ensure security. please use other APIs if possible.`);
             let provs = get(customProviderStore)
@@ -842,8 +912,8 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             oldApis.addRisuReplacer(name, func as any);
         },
         removeRisuReplacer: oldApis.removeRisuReplacer,
-        setDatabaseLite: oldApis.setDatabaseLite,
-        setDatabase: oldApis.setDatabase,
+        setDatabaseLite: setPluginDatabaseLite,
+        setDatabase: setPluginDatabase,
         loadPlugins: oldApis.loadPlugins,
         readImage: oldApis.readImage,
         saveAsset: oldApis.saveAsset,
@@ -853,7 +923,10 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             if(!conf){
                 return null;
             }
-            const db = DBState.db
+            const shouldIncludeCharacters = includeOnly === 'all' || includeOnly.includes('characters')
+            const db = shouldIncludeCharacters
+                ? await pluginChatAccess.getHydratedDatabase()
+                : DBState.db
             let liteDB = {}
             for(const key of allowedDbKeys){
                 if(includeOnly !== 'all' && !includeOnly.includes(key)){
@@ -951,45 +1024,19 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
                 }
             }
         },
-        getCharacterFromIndex: (index:number) => {
-            const db = DBState.db
-            const charIds = Object.keys(db.characters);
-            const charId = charIds[index];
-            if(charId){
-                return $state.snapshot(db.characters[charId]);
-            }
-            return null;
+        getCharacterFromIndex: async (index:number) => {
+            const character = await pluginChatAccess.getHydratedCharacterAt(index)
+            return character ? $state.snapshot(character) : null
         },
-        setCharacterToIndex: (index:number, char:any) => {
-            const db = DBState.db
-            const charIds = Object.keys(db.characters);
-            const charId = charIds[index];
-            if(charId){
-                DBState.db.characters[charId] = char
-            }
+        setCharacterToIndex: async (index:number, char:any) => {
+            await pluginChatAccess.replaceCharacterAt(index, char)
         },
-        getChatFromIndex: (characterIndex:number, chatIndex:number) => {
-            const db = DBState.db
-            const charIds = Object.keys(db.characters);
-            const charId = charIds[characterIndex];
-            if(charId){
-                const chats = db.characters[charId].chats;
-                if(chats && chats[chatIndex]){
-                    return $state.snapshot(chats[chatIndex]);
-                }
-            }
-            return null;
+        getChatFromIndex: async (characterIndex:number, chatIndex:number) => {
+            const chat = await pluginChatAccess.getHydratedChatAt(characterIndex, chatIndex)
+            return chat ? $state.snapshot(chat) : null
         },
-        setChatToIndex: (characterIndex:number, chatIndex:number, chat:any) => {
-            const db = DBState.db
-            const charIds = Object.keys(db.characters);
-            const charId = charIds[characterIndex];
-            if(charId){
-                const chats = db.characters[charId].chats;
-                if(chats && chats[chatIndex]){
-                    DBState.db.characters[charId].chats[chatIndex] = normalizeChat(chat)
-                }
-            }
+        setChatToIndex: async (characterIndex:number, chatIndex:number, chat:any) => {
+            await pluginChatAccess.replaceChatAt(characterIndex, chatIndex, chat)
         },
         getCurrentCharacterIndex: () => {
             return get(selectedCharID)
@@ -999,21 +1046,30 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             const charId = get(selectedCharID)
             return db.characters[charId].chatPage
         },
-        getCurrentLorebookEntries: () => {
-            const charId = get(selectedCharID)
-            const char = DBState.db.characters[charId]
+        getCurrentLorebookEntries: async () => {
+            const characterIndex = get(selectedCharID)
+            const char = DBState.db.characters[characterIndex]
             if(!char){
                 return []
             }
             const page = char.chatPage
+            const expectedChatId = char.chats?.[page]?.id
+            const chat = await pluginChatAccess.getHydratedChatAt(characterIndex, page)
+            const currentCharacter = DBState.db.characters[characterIndex]
+            if (get(selectedCharID) !== characterIndex
+                || currentCharacter !== char
+                || currentCharacter.chatPage !== page
+                || currentCharacter.chats?.[page]?.id !== expectedChatId) {
+                throw new Error('The current lorebook target changed while plugin data was loading')
+            }
             const characterLore = char.globalLore ?? []
-            const chatLore = char.chats?.[page]?.localLore ?? []
+            const chatLore = chat?.localLore ?? []
             const moduleLore = getModuleLorebooks()
             return $state.snapshot(characterLore.concat(chatLore).concat(moduleLore))
         },
         //New names for character APIs, to match API naming conventions
-        getCharacter: oldApis.getChar,
-        setCharacter: oldApis.setChar,
+        getCharacter: getCurrentCharacterForPlugin,
+        setCharacter: setCurrentCharacterForPlugin,
 
         showContainer: (
             //more types may be added in future
@@ -1416,9 +1472,25 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
                 throw new Error("No character selected");
             }
 
-            const chat = char.chats[char.chatPage];
+            // Lazy-loaded chats are placeholders until their payload is fetched.
+            // Appending to the placeholder loses the message because the normal
+            // send path refuses to process an unhydrated chat. Hydrate first and
+            // only mutate the real chat after that succeeds.
+            const chatPage = char.chatPage;
+            const chat = await ensureCurrentChatReady(char.chats, chatPage, char.chaId);
             if(!chat){
-                throw new Error("No active chat found");
+                throw new Error("No active chat found or the chat could not be loaded");
+            }
+            if(
+                get(selectedCharID) !== charId ||
+                DBState.db.characters[charId] !== char ||
+                char.chatPage !== chatPage ||
+                char.chats[chatPage] !== chat
+            ){
+                throw new Error("The active chat changed while it was loading");
+            }
+            if(get(doingChat)){
+                throw new Error("A chat is already in progress");
             }
 
             if(message){

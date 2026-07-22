@@ -1076,3 +1076,29 @@ describe('fast-path — per-module granularity', () => {
         expect(liveHash).toBe(freshHash)
     })
 })
+
+describe('RisuSavePatcher.set acknowledgement boundary', () => {
+    test('rollback restores the previous hash and diff baseline after a rejected patch', async () => {
+        const db = dbWith([chr('a')])
+        const changed = clone(db)
+        changed.personaPrompt = 'changed after the initial sync'
+
+        const patcher = new RisuSavePatcher()
+        await patcher.init(clone(db))
+
+        const first = await patcher.set(clone(changed), { ...emptyToSave(), root: true })
+        expect(first.patch.length).toBeGreaterThan(0)
+
+        first.rollback()
+        first.rollback() // idempotent for catch/finally callers
+
+        const retry = await patcher.set(clone(changed), { ...emptyToSave(), root: true })
+        expect(retry.expectedHash).toBe(first.expectedHash)
+        expect(retry.patch).toEqual(first.patch)
+
+        // Leaving the second prepared patch in place represents a successful
+        // acknowledgement; the next identical save should then be a no-op.
+        const afterAcknowledgement = await patcher.set(clone(changed), { ...emptyToSave(), root: true })
+        expect(afterAcknowledgement.patch).toEqual([])
+    })
+})

@@ -1,17 +1,29 @@
-import { describe, test, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, test, expect, vi } from 'vitest'
+
+const storageMock = vi.hoisted(() => ({ realStorage: null as any }))
+const tickMock = vi.hoisted(() => vi.fn(async () => {}))
 
 // Stub out the heavy reactive modules so loading chatStorage.ts doesn't trigger
 // unrelated $effect chains that fail in a stripped-down test environment.
 // Mirror the production isChatStub semantics including the hybrid guard so
 // the chat-data-loss tests below exercise the real intent.
-vi.mock('../globalApi.svelte', () => ({ forageStorage: { realStorage: null } }))
+vi.mock('../globalApi.svelte', () => ({ forageStorage: storageMock }))
+vi.mock('svelte', () => ({ tick: tickMock }))
 vi.mock('./database.svelte', () => ({
     isChatStub: (chat: any) => chat
         && chat._stub === true
         && !Array.isArray(chat.message),
 }))
 
-const { chatToStub, stubToPlaceholder, convertStubsToPlaceholders, classifyChat } = await import('./chatStorage')
+const {
+    chatToStub,
+    stubToPlaceholder,
+    convertStubsToPlaceholders,
+    classifyChat,
+    ensureChatHydrated,
+    hydrationInFlight,
+    hydrationJustApplied,
+} = await import('./chatStorage')
 type Chat = any
 type ChatStub = any
 
@@ -213,5 +225,157 @@ describe('hybrid corruption (chat with _stub:true + message)', () => {
         expect('note' in stub).toBe(false)
         // Once stripped, the chat-data guard would see no chat-internal field
         // ops in a baseline-vs-current diff between two of these stubs.
+    })
+})
+
+describe('lazy chat hydration safety', () => {
+    const placeholder = (id = 'chat-1'): Chat => ({
+        message: [],
+        note: '',
+        name: 'placeholder',
+        localLore: [],
+        id,
+        fmIndex: -1,
+        _placeholder: true,
+    })
+    const fullChat = (id = 'chat-1'): Chat => ({
+        message: [{ role: 'user', data: 'hello' }],
+        note: '',
+        name: 'hydrated',
+        localLore: [],
+        id,
+        fmIndex: -1,
+    })
+
+    beforeEach(() => {
+        vi.useFakeTimers()
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+            callback(0)
+            return 1
+        })
+        tickMock.mockReset()
+        tickMock.mockResolvedValue(undefined)
+        hydrationInFlight.clear()
+        hydrationJustApplied.clear()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+        vi.unstubAllGlobals()
+        storageMock.realStorage = null
+    })
+
+    test('hydrates a valid matching chat payload', async () => {
+        const chats = [placeholder()]
+        const full = fullChat()
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockResolvedValue(full),
+        }
+
+        await expect(ensureChatHydrated(chats, 0, 'character-1')).resolves.toBe(full)
+        expect(chats[0]).toBe(full)
+        expect(hydrationInFlight.size).toBe(0)
+        expect(hydrationJustApplied.size).toBe(0)
+    })
+
+    test.each([
+        ['a mismatched id', fullChat('other-chat')],
+        ['a missing message array', { ...fullChat(), message: undefined }],
+        ['a server stub', { id: 'chat-1', name: 'stub', _stub: true }],
+    ])('rejects %s without replacing the placeholder', async (_label, payload) => {
+        const original = placeholder()
+        const chats = [original]
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockResolvedValue(payload),
+        }
+
+        await expect(ensureChatHydrated(chats, 0, 'character-1')).resolves.toBeNull()
+        expect(chats[0]).toBe(original)
+    })
+
+    test('uses the timer fallback when requestAnimationFrame never fires', async () => {
+        vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+        const chats = [placeholder()]
+        const full = fullChat()
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockResolvedValue(full),
+        }
+
+        const hydration = ensureChatHydrated(chats, 0, 'character-1')
+        await vi.advanceTimersByTimeAsync(49)
+        expect(chats[0]._placeholder).toBe(true)
+        await vi.advanceTimersByTimeAsync(1)
+
+        await expect(hydration).resolves.toBe(full)
+        expect(chats[0]).toBe(full)
+    })
+
+    test('always clears suppression flags when the Svelte tick rejects', async () => {
+        const chats = [placeholder()]
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockResolvedValue(fullChat()),
+        }
+        tickMock.mockRejectedValueOnce(new Error('tick failed'))
+
+        await expect(ensureChatHydrated(chats, 0, 'character-1')).rejects.toThrow('tick failed')
+        expect(hydrationInFlight.size).toBe(0)
+        expect(hydrationJustApplied.size).toBe(0)
+    })
+
+    test('does not apply an old response after the placeholder slot is replaced', async () => {
+        let resolveFetch!: (chat: Chat) => void
+        const fetchPromise = new Promise<Chat>(resolve => { resolveFetch = resolve })
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockReturnValue(fetchPromise),
+        }
+        const original = placeholder()
+        const replacement = placeholder()
+        const chats = [original]
+
+        const hydration = ensureChatHydrated(chats, 0, 'character-1')
+        chats[0] = replacement
+        resolveFetch(fullChat())
+
+        await expect(hydration).resolves.toBeNull()
+        expect(chats[0]).toBe(replacement)
+    })
+
+    test('rechecks deletion while waiting for the paint yield', async () => {
+        let frameCallback: FrameRequestCallback | undefined
+        vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+            frameCallback = callback
+            return 1
+        }))
+        const chats = [placeholder()]
+        storageMock.realStorage = {
+            fetchChatContent: vi.fn().mockResolvedValue(fullChat()),
+        }
+
+        const hydration = ensureChatHydrated(chats, 0, 'character-1')
+        for (let i = 0; i < 6 && !frameCallback; i++) await Promise.resolve()
+        expect(frameCallback).toBeTypeOf('function')
+        chats.splice(0, 1)
+        frameCallback!(0)
+
+        await expect(hydration).resolves.toBeNull()
+        expect(chats).toHaveLength(0)
+    })
+
+    test('deduplicates requests for one array but not a replacement database array', async () => {
+        const fetchChatContent = vi.fn().mockResolvedValue(fullChat())
+        storageMock.realStorage = { fetchChatContent }
+        const firstDatabaseChats = [placeholder()]
+        const replacementDatabaseChats = [placeholder()]
+
+        const first = ensureChatHydrated(firstDatabaseChats, 0, 'character-1')
+        const duplicate = ensureChatHydrated(firstDatabaseChats, 0, 'character-1')
+        const replacement = ensureChatHydrated(replacementDatabaseChats, 0, 'character-1')
+
+        await Promise.all([first, duplicate, replacement])
+        expect(fetchChatContent).toHaveBeenCalledTimes(2)
+        expect(firstDatabaseChats[0]._placeholder).toBeUndefined()
+        expect(replacementDatabaseChats[0]._placeholder).toBeUndefined()
+        expect(hydrationInFlight.size).toBe(0)
+        expect(hydrationJustApplied.size).toBe(0)
     })
 })
