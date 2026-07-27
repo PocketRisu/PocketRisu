@@ -939,3 +939,16 @@ img {
    overlay (the mobile floating composer, dropdown/select popovers, toasts) to
    #app instead of the viewport, which is exactly what those elements use
    `fixed` to avoid. Left out deliberately; don't reintroduce it here. */
+
+/* Modal scroll isolation.
+   The primary mechanism is the document-level lock in ts/gui/modalScroll.ts —
+   it is what actually stops the chat log from scrolling under an open modal,
+   since the chat log is a <div> and the browser skips a non-scrolling backdrop
+   when picking the scroll chain. This rule is the complementary half: on the
+   scrollers INSIDE a modal, `overscroll-behavior: contain` cancels the chain
+   (and the mobile rubber-band) natively, before the handler is reached.
+   Overlays opt in by carrying data-risu-modal-scroll on their backdrop. */
+[data-risu-modal-scroll],
+[data-risu-modal-scroll] * {
+  overscroll-behavior: contain;
+}

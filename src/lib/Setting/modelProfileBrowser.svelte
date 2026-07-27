@@ -255,7 +255,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="profile-browser-backdrop" data-risu-modal="" onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); }}} onclick={close}>
+<div class="profile-browser-backdrop" data-risu-modal-scroll data-risu-modal="" onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); }}} onclick={close}>
     <div class="profile-browser-panel risu-modal-panel break-any" onclick={(e) => e.stopPropagation()}>
         <div class="flex items-center text-textcolor mb-4 shrink-0">
             <h2 class="mt-0 mb-0">{language.selectProfile}</h2>
@@ -364,7 +364,7 @@
 
 <style>
     .profile-browser-backdrop {
-        position: absolute;
+        position: fixed;
         inset: 0;
         z-index: 40;
         display: flex;

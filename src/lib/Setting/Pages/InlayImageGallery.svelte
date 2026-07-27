@@ -537,7 +537,7 @@
 
 <!-- Fullscreen viewer -->
 {#if viewerOpen}
-  <div class="fixed inset-0 z-50 flex overflow-hidden" style="background: #09090b;">
+  <div class="fixed inset-0 z-50 flex overflow-hidden" style="background: #09090b;" data-risu-modal-scroll>
 
     <!-- Image panel -->
     <div class="flex-1 relative flex items-center justify-center min-w-0 overflow-hidden">

@@ -94,7 +94,7 @@
 
 <!-- Tag Manager Modal -->
 {#if tagManagerState.isOpen && tagManagerState.currentSummaryIndex >= 0}
-  <div class="fixed inset-0 z-50 p-4 bg-black/70 flex items-center justify-center">
+  <div class="fixed inset-0 z-50 p-4 bg-black/70 flex items-center justify-center" data-risu-modal-scroll>
     <div class="bg-zinc-900 rounded-lg p-6 w-full max-w-md">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-lg font-semibold text-zinc-300">

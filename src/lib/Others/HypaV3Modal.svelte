@@ -590,7 +590,7 @@
 </script>
 
 <!-- Modal Backdrop -->
-<div class="fixed inset-0 z-40 p-1 sm:p-2 bg-black/50">
+<div class="fixed inset-0 z-40 p-1 sm:p-2 bg-black/50" data-risu-modal-scroll>
   <!-- Modal Wrapper -->
   <div class="flex justify-center w-full h-full">
     <!-- Modal Window -->

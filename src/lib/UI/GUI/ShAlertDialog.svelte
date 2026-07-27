@@ -62,7 +62,7 @@
     const contentBase =
         'fixed left-1/2 top-1/2 w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 ' +
         'bg-darkbg border border-darkborderc rounded-md shadow-lg ' +
-        'p-4 flex flex-col gap-4 max-h-[90vh] overflow-y-auto outline-none ' +
+        'p-4 flex flex-col gap-4 max-h-[90vh] overflow-y-auto overscroll-contain outline-none ' +
         'data-[state=open]:animate-in data-[state=closed]:animate-out ' +
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ' +
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';

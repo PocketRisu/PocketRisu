@@ -13,6 +13,7 @@ import { updateAnimationSpeed } from "./gui/animation";
 import { updateColorScheme, updateTextThemeAndCSS } from "./gui/colorscheme";
 import { applyEarlyLanguage, changeLanguage, language } from "src/lang";
 import { startObserveDom } from "./observer.svelte";
+import { initModalScrollLock } from "./gui/modalScroll";
 import { updateGuisize } from "./gui/guisize";
 import { updateLorebooks } from "./characters";
 import { initMobileGesture } from "./hotkey";
@@ -163,6 +164,7 @@ export async function loadData() {
             loadedStore.set(true)
             selectedCharID.set(-1)
             startObserveDom()
+            initModalScrollLock()
             assignIds()
             registerModelDynamic()
             saveDb()

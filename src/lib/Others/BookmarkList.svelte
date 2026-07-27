@@ -115,7 +115,8 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-    class="fixed top-0 left-0 w-full h-full z-30 bg-black/50 flex justify-center items-center"
+    class="fixed inset-0 z-30 bg-black/50 flex justify-center items-center"
+    data-risu-modal-scroll
     onclick={(event) => {
         if (event.target === event.currentTarget) {
             close();

@@ -31,7 +31,7 @@
 </script>
 
 
-<div class="absolute w-full h-full z-40 bg-black/50 flex justify-center items-center">
+<div class="fixed inset-0 z-40 bg-black/50 flex justify-center items-center" data-risu-modal-scroll>
     <div class="bg-darkbg p-4 break-any rounded-md flex flex-col max-w-3xl w-full max-h-full overflow-y-auto">
         <div class="flex items-center text-textcolor">
             <h2 class="mt-0 mb-0 text-lg">{language.modules}</h2>

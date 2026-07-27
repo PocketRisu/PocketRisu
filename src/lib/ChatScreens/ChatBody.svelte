@@ -360,7 +360,7 @@
 {#if viewerSrc}
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onclick={() => { viewerSrc = '' }}>
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80" data-risu-modal-scroll onclick={() => { viewerSrc = '' }}>
     <img src={viewerSrc} alt="" class="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onclick={(e) => e.stopPropagation()} />
 </div>
 {/if}
