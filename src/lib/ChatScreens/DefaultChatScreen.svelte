@@ -808,7 +808,12 @@ import { isMobile } from 'src/ts/platform'
             class:no-chat-width-wide={DBState.db.theme === '' && DBState.db.nodeOnlyStandardChatWidth === 'wide'}
             class:no-chat-width-full={DBState.db.theme === '' && DBState.db.nodeOnlyStandardChatWidth === 'full'}
             onscroll={(e) => {
-            if (DBState.db.nodeOnlyScrollButtonType !== 'off') {
+            const chatTarget = e.target as HTMLElement;
+            // Chats.svelte marks its own auto-follow scrolls (streaming keeping
+            // the newest text in view, anchor drift correction). Those are not
+            // the user navigating, so they must not raise the scroll-nav.
+            const isAutoScroll = chatTarget.dataset.risuAutoscroll === '1';
+            if (!isAutoScroll && DBState.db.nodeOnlyScrollButtonType !== 'off') {
                 bumpScrollNav()
             }
             //@ts-expect-error scrollHeight/clientHeight/scrollTop don't exist on EventTarget, but target is HTMLElement here
@@ -816,7 +821,6 @@ import { isMobile } from 'src/ts/platform'
             if(scrolled < 100 && currentChat.length > loadPages){
                 loadPages += 15
             }
-            const chatTarget = e.target as HTMLElement;
             const chatsContainer = chatTarget.children[1] ?? chatTarget.children[0];
             const lastEl = chatsContainer?.firstElementChild;
             const isAtBottom = lastEl ? lastEl.getBoundingClientRect().top <= chatTarget.getBoundingClientRect().bottom + 100 : true;

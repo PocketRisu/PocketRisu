@@ -382,9 +382,20 @@
 
     function withSuppressedScroll(fn: () => void) {
         suppressScrollHandling = true;
+        // Marked on the shared scroll container so the OTHER scroll listener on
+        // it — DefaultChatScreen's, which owns the floating scroll-nav — can
+        // tell an auto-follow scroll from a real one. Without it, following a
+        // streaming reply re-triggered the nav's 1.5s show timer on every tick,
+        // so the overlay sat on top of the chat for the whole generation even
+        // though the user never scrolled.
+        const container = chatBody?.parentElement;
+        if (container) container.dataset.risuAutoscroll = '1';
         fn();
         // Release after the programmatic scroll event has been dispatched.
-        requestAnimationFrame(() => { suppressScrollHandling = false; });
+        requestAnimationFrame(() => {
+            suppressScrollHandling = false;
+            if (container) delete container.dataset.risuAutoscroll;
+        });
     }
 
     $effect(() => {
