@@ -105,6 +105,26 @@ export const selIdState = $state({
     selId: -1
 })
 
+// Number of replies currently streaming into a chat (a count, not a flag, so
+// overlapping generations — group chats, multi-agent — balance out).
+//
+// Deliberately in-memory and NOT `chat.isStreaming`: that field lives inside the
+// saved chat object, so a save landing mid-stream persists `true` and it stays
+// true forever after a reload. Anything that gates behaviour on "is a stream
+// running" must use this instead, which resets on reload and is cleared from a
+// `finally` block. See the save-tracking effect in globalApi.svelte.ts.
+export const streamingState = $state({
+    active: 0
+})
+
+export function beginStreamingSignal() {
+    streamingState.active += 1
+}
+
+export function endStreamingSignal() {
+    streamingState.active = Math.max(0, streamingState.active - 1)
+}
+
 
 CustomCSSStore.subscribe((css) => {
     console.log(css)

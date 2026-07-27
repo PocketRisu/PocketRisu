@@ -5,7 +5,7 @@ import { get } from "svelte/store";
 import streamSaver from 'streamsaver';
 import { setDatabase, type Database, defaultSdDataFunc, getDatabase, appVer, nodeOnlyVer, getCurrentCharacter, loadTogglesFromChat } from "./storage/database.svelte";
 
-import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, selIdState, ReloadGUIPointer, bodyIntercepterStore, loadingOverlayStore, chatDeselected } from "./stores.svelte";
+import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, selIdState, ReloadGUIPointer, bodyIntercepterStore, loadingOverlayStore, chatDeselected, streamingState } from "./stores.svelte";
 import { loadPlugins } from "./plugins/plugins.svelte";
 import { alertConfirm, alertError, alertMd, alertNormalWait, alertSelect, alertTOS, waitAlert, notifySuccess, notifyError } from "./alert";
 import { hasher } from "./parser/parser.svelte";
@@ -608,7 +608,18 @@ export async function saveDb() {
         $effect(() => {
             const activeChar = DBState?.db?.characters?.[selIdState]
             const activeChat = activeChar?.chats?.[activeChar?.chatPage]
-            if (activeChat) {
+            // Read first: this is the dependency that re-runs the effect (and
+            // restores full tracking) the moment the last stream finishes.
+            const streaming = streamingState.active > 0
+            if (activeChat && !streaming) {
+                // deepTouch subscribes to EVERY field of the chat, so this walk
+                // costs O(whole chat) per run. While a reply streams, the message
+                // body mutates ~20x/second and each mutation re-runs this effect:
+                // on a long chat that walk is the dominant per-tick cost and the
+                // main source of streaming stutter. It also buys nothing there —
+                // the chat is dirty by definition, and it is queued into
+                // changeTracker below (so a pagehide flush still saves it) while
+                // the debounce is left for the post-stream run to arm.
                 deepTouch(activeChat)
             }
 
@@ -637,7 +648,13 @@ export async function saveDb() {
             ) {
                 changeTracker.chat.unshift([activeChaId, activeChatId])
             }
-            saveTimeoutExecute()
+            // Don't arm the debounce mid-stream: it would land a save of a
+            // half-written reply. The run triggered by the stream ending arms it
+            // with the finished message instead; an early exit (tab close) still
+            // saves via flushImmediate, which uses the tracker updated above.
+            if (!streaming) {
+                saveTimeoutExecute()
+            }
         })
     })
 

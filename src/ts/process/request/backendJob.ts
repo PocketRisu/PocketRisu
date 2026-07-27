@@ -10,6 +10,7 @@ import {
     type StatusBadge, type PipelineStepStatus,
 } from "../../status/requestStatus";
 import { language } from "../../../lang";
+import { beginStreamingSignal, endStreamingSignal } from "../../stores.svelte";
 const MULTIAGENT_VAULT_KEY = 'risu_multiagent_lite_config_vault_v1';
 
 // Request-status indicator bridge (gated by db.requestStatusDisplayMode).
@@ -672,6 +673,7 @@ async function resumeBackendJobIntoChat(char: character, chat: Chat, result: Rec
     const abortController = new AbortController();
     recoveryAbortController.set(abortController);
     doingChat.set(true);
+    beginStreamingSignal();
 
     try {
         const stream = createBackendJobStream(result.jobId, result.target, abortController.signal);
@@ -682,9 +684,11 @@ async function resumeBackendJobIntoChat(char: character, chat: Chat, result: Rec
             const text = value?.[Object.keys(value)[0]];
             const message = chat.message[targetIndex];
             if (message?.role === 'char' && typeof text === 'string') {
+                // The message mutation itself drives Svelte 5 reactivity; the
+                // reloadKeys bump that used to sit here only re-invalidated the
+                // character save-tracking effect once per chunk (see the same
+                // note in the primary streaming loop in ../index.svelte.ts).
                 message.data = text;
-                // Drive Svelte 5 reactivity per chunk, mirroring the normal streaming path.
-                char.reloadKeys = (char.reloadKeys ?? 0) + 1;
             }
         }
     } catch (error) {
@@ -693,6 +697,7 @@ async function resumeBackendJobIntoChat(char: character, chat: Chat, result: Rec
         chat.isStreaming = false;
         resumingJobIds.delete(result.jobId);
         char.reloadKeys = (char.reloadKeys ?? 0) + 1;
+        endStreamingSignal();
         recoveryAbortController.set(null);
         doingChat.set(false);
     }

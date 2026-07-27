@@ -724,13 +724,14 @@ textarea,
   -webkit-user-select: text;
 }
 
-/* Contain paint for scrollable lists and chat messages to reduce repaints. */
-.scroll-container,
-.chat-scroll,
-.chat-message-container {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 56px;
-}
+/* NOTE: `content-visibility: auto` used to be set here on .chat-message-container.
+   It is actively harmful for this list: with a fixed `contain-intrinsic-size`
+   every off-screen message is laid out at a placeholder height and snaps to its
+   real height (often 10x larger) the moment it is scrolled near, which in a
+   `flex-col-reverse` chat log shifts everything below it. Chats.svelte's
+   ResizeObserver then "corrects" that shift, and the two fight each other —
+   the scroll jitter and streaming stutter users see. The chat log already
+   bounds its own DOM size via `loadPages`, so skipping was buying nothing. */
 
 /* Lazy-loaded images should fade in instead of popping. */
 img[loading="lazy"] {
@@ -931,8 +932,10 @@ img {
   height: auto;
 }
 
-/* Reduce paint cost for large static backgrounds. */
-body,
-#app {
-  contain: paint;
-}
+/* NOTE: `contain: paint` used to be set on body and #app "to reduce paint cost".
+   Both already fill the viewport, so nothing painted outside them anyway — but
+   paint containment makes an element a containing block for `position: fixed`
+   descendants and clips them to its box. That silently re-anchored every fixed
+   overlay (the mobile floating composer, dropdown/select popovers, toasts) to
+   #app instead of the viewport, which is exactly what those elements use
+   `fixed` to avoid. Left out deliberately; don't reintroduce it here. */

@@ -1,7 +1,7 @@
 import { get, writable } from "svelte/store";
 import { type character, type MessageGenerationInfo, type Chat, type MessagePresetInfo, changeToPreset, setCurrentChat, type Message, normalizeChat } from "../storage/database.svelte";
 import { DBState } from '../stores.svelte';
-import { CharEmotion, selectedCharID } from "../stores.svelte";
+import { CharEmotion, selectedCharID, beginStreamingSignal, endStreamingSignal } from "../stores.svelte";
 import { ChatTokenizer, tokenize, tokenizeNum } from "../tokenizer";
 import { language } from "../../lang";
 import { alertError, notifyError } from "../alert";
@@ -1549,6 +1549,9 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             void reader.cancel().catch(() => {})
         }
         abortSignal.addEventListener('abort', abortReader, { once: true })
+        // Paired with endStreamingSignal() in the finally below — nothing may
+        // throw between here and the try, or the counter would never unwind.
+        beginStreamingSignal()
         try {
             while(streamAborted === false){
                 let readed: ReadableStreamReadResult<{ [key: string]: string }>
@@ -1575,7 +1578,12 @@ export async function sendChat(chatProcessIndex = -1,arg:{
                     let result2 = await processScriptFull(nowChatroom, reformatContent(prefix + result), 'editoutput', msgIndex)
                     DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = result2.data
                     emoChanged = result2.emoChanged
-                    DBState.db.characters[selectedChar].reloadKeys += 1
+                    // No reloadKeys bump here on purpose. Nothing reads the field
+                    // (it is a legacy write-only "poke"), but writing it once per
+                    // chunk invalidates the character save-tracking effect, which
+                    // then deep-walks the whole character ~20x/second. The message
+                    // mutation above is what the UI and the chat save actually
+                    // track.
                 }
                 if(readed.done){
                     break
@@ -1586,6 +1594,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             abortSignal.removeEventListener('abort', abortReader)
             DBState.db.characters[selectedChar].chats[selectedChat].isStreaming = false
             DBState.db.characters[selectedChar].reloadKeys += 1
+            endStreamingSignal()
             void reader.cancel().catch(() => {})
         }
 
