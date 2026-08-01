@@ -8,6 +8,7 @@ import type { MCPClientLike } from "./internalmcp";
 import { sleep } from "src/ts/util";
 import { registeredCustomPluginMCPs } from "./pluginmcp";
 import { makeEncodedStorageKey, readPersistentJson, writePersistentJson } from "src/ts/storage/persistentKv";
+import { getMcpModulePresets } from "./presets";
 
 export type MCPToolWithURL = MCPTool & {
     mcpURL: string;
@@ -185,19 +186,7 @@ export async function callTool(methodName:string, args:any) {
 }
 
 export async function importMCPModule(){
-    const x = await alertInput('Please enter the URL of the MCP module to import:', [
-        ['internal:aiaccess', 'LLM Call Client (internal:aiaccess)'],
-        ['internal:risuai', 'Risu Access Client (internal:risuai)'],
-        ['internal:fs', 'File System Client (internal:fs)'],
-        ['internal:googlesearch', 'Google Search Client (internal:googlesearch)'],
-        ['internal:dice', 'Dice Tool Client (internal:dice)'],
-        ['internal:graphmem', 'Graph Memory Client (internal:graphmem)'],
-        ['https://mcp.paypal.com/sse', 'PayPal MCP (https://mcp.paypal.com/sse)'],
-        ['https://mcp.linear.app/sse', 'Linear MCP (https://mcp.linear.app/sse)'],
-        ['https://rag-mcp-2.whatsmcp.workers.dev/sse', 'OneContext MCP (https://rag-mcp-2.whatsmcp.workers.dev/sse)'],
-        ['https://browser.mcp.cloudflare.com/sse', 'Cloudflare Browser MCP (https://browser.mcp.cloudflare.com/sse)'],
-        ['https://mcp.deepwiki.com/mcp', 'DeepWiki MCP (https://mcp.deepwiki.com/mcp)'],
-    ])
+    const x = await alertInput('Please enter the URL of the MCP module to import:', getMcpModulePresets())
 
     if(
         !x.startsWith('http://localhost') &&
