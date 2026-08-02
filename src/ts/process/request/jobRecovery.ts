@@ -50,6 +50,11 @@ export interface ModelJobRecord {
     adapterKind?: string | null
     /** Model id, recorded at job creation (absent on jobs from older builds). */
     model?: string | null
+    /** User-facing preset label and live generation token estimates. */
+    modelLabel?: string | null
+    inputTokens?: number | null
+    outputTokens?: number | null
+    maxContext?: number | null
     /** origin+pathname of the provider endpoint — never the query string. */
     targetOrigin?: string | null
     createdAt?: number
@@ -279,13 +284,38 @@ async function claimJob(jobId: string): Promise<void> {
 
 // Message shape mirrors the live write path (index.svelte.ts streaming push):
 // data/saying/time/generationInfo, message-level chatId = generationId.
-function insertRecoveredMessage(loc: LocatedChat, job: ModelJobRecord, text: string): void {
+function recoveredGenerationInfo(job: ModelJobRecord, usage?: AdapterUsage): Message['generationInfo'] {
+    return {
+        generationId: job.generationId ?? undefined,
+        model: job.modelLabel ?? job.model ?? undefined,
+        modelId: job.model ?? undefined,
+        inputTokens: job.inputTokens ?? usage?.promptTokens,
+        outputTokens: job.outputTokens ?? usage?.completionTokens,
+        maxContext: job.maxContext ?? undefined,
+    }
+}
+
+function mergeRecoveredGenerationInfo(message: Message, job: ModelJobRecord, usage?: AdapterUsage): boolean {
+    const recovered = recoveredGenerationInfo(job, usage)
+    const current = message.generationInfo ?? {}
+    let changed = message.generationInfo === undefined
+    for (const [key, value] of Object.entries(recovered)) {
+        if (value !== undefined && current[key as keyof typeof current] === undefined) {
+            Object.assign(current, { [key]: value })
+            changed = true
+        }
+    }
+    if (changed) message.generationInfo = current
+    return changed
+}
+
+function insertRecoveredMessage(loc: LocatedChat, job: ModelJobRecord, text: string, usage?: AdapterUsage): void {
     const message: Message = {
         role: 'char',
         data: text,
         time: Date.now(),
         chatId: job.generationId ?? uuidv4(),
-        generationInfo: { generationId: job.generationId ?? undefined },
+        generationInfo: recoveredGenerationInfo(job, usage),
     }
     if (loc.char.chaId) message.saying = loc.char.chaId
     loc.chat.message.push(message)
@@ -314,7 +344,7 @@ function insertJobError(loc: LocatedChat, job: ModelJobRecord, error: string): b
         time: Date.now(),
     }
     if (loc.char.chaId) message.saying = loc.char.chaId
-    if (job.generationId) message.generationInfo = { generationId: job.generationId }
+    if (job.generationId || job.model || job.modelLabel) message.generationInfo = recoveredGenerationInfo(job)
     loc.chat.message.push(message)
     bumpReload(loc)
     return true
@@ -456,12 +486,14 @@ export async function recoverTerminalJob(job: ModelJobRecord): Promise<void> {
     let mutated = false
     if (result.ok === true) {
         if (existingIdx === -1) {
-            insertRecoveredMessage(loc, job, result.text)
+            insertRecoveredMessage(loc, job, result.text, result.usage)
             mutated = true
             diag(`recover ${job.id.slice(0, 8)}: inserted len=${result.text.length}`)
         } else {
             const before = loc.chat.message[existingIdx]?.data?.length ?? 0
-            mutated = fillPartialMessage(loc, existingIdx, result.text)
+            const metadataChanged = mergeRecoveredGenerationInfo(loc.chat.message[existingIdx], job, result.usage)
+            const textChanged = fillPartialMessage(loc, existingIdx, result.text)
+            mutated = metadataChanged || textChanged
             const after = loc.chat.message[existingIdx]?.data?.length ?? 0
             // Independent read-back through a FRESH proxied lookup: proves the
             // write is visible to the reactive graph, not only to our local

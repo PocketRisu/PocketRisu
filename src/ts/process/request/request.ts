@@ -4,7 +4,7 @@ import { globalFetch, fetchNative } from "../../globalApi.svelte";
 import { getModelInfo, LLMFlags, LLMFormat, type LLMModel } from "../../model/modellist";
 import { risuChatParser, risuEscape, risuUnescape } from "../../parser/parser.svelte";
 import { pluginProcess, pluginV2 } from "../../plugins/plugins.svelte";
-import { getCurrentCharacter, getCurrentChat, getDatabase, type character } from "../../storage/database.svelte";
+import { getCurrentCharacter, getCurrentChat, getDatabase, type character, type MessageGenerationInfo } from "../../storage/database.svelte";
 import { tokenizeNum, encodeWithTokenizer } from "../../tokenizer";
 import { v4 as uuidv4 } from "uuid";
 import { simplifySchema, sleep } from "../../util";
@@ -80,6 +80,9 @@ interface requestDataArgument{
     forceStreaming?: boolean
     blockPlugins?: boolean
     forceLocalNetwork?: boolean
+    /** Live message metadata persisted with a durable model job so a recovered
+     *  message has the same model and token details as the normal write path. */
+    generationInfo?: MessageGenerationInfo
     // Set when this request originates from a module's own LLM call (module
     // Lua/Python script or module trigger). Lets resolveChatModelBinding route
     // it to the ModelPreset bound to that module (db.moduleModelBindings).
@@ -115,6 +118,7 @@ export type requestDataResponse = {
     },
     failByServerError?: boolean
     model?: string
+    modelId?: string
 }|{
     type: "streaming",
     result: ReadableStream<StreamResponseChunk>,
@@ -122,6 +126,7 @@ export type requestDataResponse = {
         emotion?: string
     }
     model?: string
+    modelId?: string
 }|{
     type: "multiline",
     result: ['user'|'char',string][],
@@ -129,6 +134,7 @@ export type requestDataResponse = {
         emotion?: string
     }
     model?: string
+    modelId?: string
 }
 
 export interface StreamResponseChunk{[key:string]:string}
@@ -778,6 +784,10 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
             generationId: genId,
             adapterKind: kind,
             model: preset.profileSnapshot.modelId,
+            modelLabel: preset.name,
+            inputTokens: arg.generationInfo?.inputTokens,
+            outputTokens: arg.generationInfo?.outputTokens,
+            maxContext: arg.generationInfo?.maxContext,
             jobKind: arg.realChatId ? 'main' : 'aux',
             streaming: resolvePresetStreaming(preset, arg),
             timeoutMs: (getDatabase().localNetworkTimeoutSec ?? 600) * 1000,
@@ -875,7 +885,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
     try {
         arg.formated = reformater(safeStructuredClone(arg.formated), presetFlags)
     } catch (err) {
-        return { type: 'fail', result: err instanceof Error ? err.message : String(err), model: preset.name }
+        return { type: 'fail', result: err instanceof Error ? err.message : String(err), model: preset.name, modelId: preset.profileSnapshot.modelId }
     }
 
     // Expand `<tool_call>` history into structured tool turns ONLY on the active
@@ -905,9 +915,10 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
                 type: 'success',
                 result: JSON.stringify({ url: prepared.url, body: prepared.body, headers: prepared.headers }),
                 model: preset.name,
+                modelId: preset.profileSnapshot.modelId,
             }
         } catch (err) {
-            return { type: 'fail', result: err instanceof Error ? err.message : String(err), model: preset.name }
+            return { type: 'fail', result: err instanceof Error ? err.message : String(err), model: preset.name, modelId: preset.profileSnapshot.modelId }
         } finally {
             void logScope.close()
         }
@@ -923,7 +934,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
             // The tool loop issues one request per turn; each is its own log
             // entry and all of them flush together here.
             void logScope.close()
-            return { type: 'success', result, model: preset.name, toolExecuted: toolsExecuted }
+            return { type: 'success', result, model: preset.name, modelId: preset.profileSnapshot.modelId, toolExecuted: toolsExecuted }
         }
 
         const useStreaming = resolvePresetStreaming(preset, arg)
@@ -992,11 +1003,11 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
             // once instead of token-by-token.
             if(preset.decoupledStreaming){
                 const text = await collectStreamingText(stream)
-                return { type: 'success', result: text, model: preset.name }
+                return { type: 'success', result: text, model: preset.name, modelId: preset.profileSnapshot.modelId }
             }
             // endStatus fires from the pump's onFinish once the consumer drains
             // the stream — NOT here, because the stream outlives this return.
-            return { type: 'streaming', result: stream, model: preset.name }
+            return { type: 'streaming', result: stream, model: preset.name, modelId: preset.profileSnapshot.modelId }
         }
         const response = await sendModelPreset(kind, preset, options, credential)
         logScope.setUsage(toLogUsage(response.usage))
@@ -1016,7 +1027,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
                 })
             })
         }
-        return { type: 'success', result: formatPresetReasoning(response.reasoning) + response.text, model: preset.name }
+        return { type: 'success', result: formatPresetReasoning(response.reasoning) + response.text, model: preset.name, modelId: preset.profileSnapshot.modelId }
     } catch (err) {
         console.error('[ModelPreset] request failed', describeModelPresetError(err))
         // A throw before the stream started (or instead of it) means onFinish
@@ -1031,6 +1042,7 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
             type: 'fail',
             result: err instanceof Error ? err.message : String(err),
             model: preset.name,
+            modelId: preset.profileSnapshot.modelId,
         }
     }
 }

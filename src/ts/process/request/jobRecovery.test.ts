@@ -231,6 +231,54 @@ describe('recoverTerminalJob', () => {
         expect(claims()).toEqual(['/api/model-jobs/job-1/claim'])
     })
 
+    test('restores model and token metadata on a recovered message', async () => {
+        const { recovery } = await loadModules()
+        const chat = makeChat()
+        mocks.db.characters = [makeChar(chat)]
+        const journal = OPENAI_SSE.replace(
+            'data: [DONE]\n\n',
+            'data: {"choices":[],"usage":{"prompt_tokens":999,"completion_tokens":5}}\n\ndata: [DONE]\n\n',
+        )
+        setupServer({ journals: { 'job-1': journal } })
+
+        await recovery.recoverTerminalJob(makeJob({
+            model: 'provider/model-id',
+            modelLabel: 'My Preset',
+            inputTokens: 1234,
+            outputTokens: 512,
+            maxContext: 32768,
+        }) as any)
+
+        expect(chat.message[0].generationInfo).toEqual({
+            generationId: 'gen-1',
+            model: 'My Preset',
+            modelId: 'provider/model-id',
+            inputTokens: 1234,
+            outputTokens: 512,
+            maxContext: 32768,
+        })
+    })
+
+    test('uses provider usage for old jobs without persisted token estimates', async () => {
+        const { recovery } = await loadModules()
+        const chat = makeChat()
+        mocks.db.characters = [makeChar(chat)]
+        const journal = OPENAI_SSE.replace(
+            'data: [DONE]\n\n',
+            'data: {"choices":[],"usage":{"prompt_tokens":999,"completion_tokens":5}}\n\ndata: [DONE]\n\n',
+        )
+        setupServer({ journals: { 'job-1': journal } })
+
+        await recovery.recoverTerminalJob(makeJob({ model: 'provider/model-id' }) as any)
+
+        expect(chat.message[0].generationInfo).toMatchObject({
+            model: 'provider/model-id',
+            modelId: 'provider/model-id',
+            inputTokens: 999,
+            outputTokens: 5,
+        })
+    })
+
     test('idempotent: a complete message with this generationId is left untouched, claim only', async () => {
         const { recovery } = await loadModules()
         const chat = makeChat({ message: [{ role: 'char', data: 'Hello, and then some more', generationInfo: { generationId: 'gen-1' } }] })

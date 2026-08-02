@@ -53,6 +53,11 @@ export interface JobFetchOptions {
     /** Model id, persisted with the job so a recovered generation can be
      *  logged with the model it actually used. */
     model?: string
+    /** User-facing preset/model label stored for recovered message metadata. */
+    modelLabel?: string
+    inputTokens?: number
+    outputTokens?: number
+    maxContext?: number
     streaming: boolean
     /** 'main' = chat generation (recoverable at boot, per-chat guard).
      *  'aux' = pipeline side request (translate / memory / …) riding the job
@@ -103,6 +108,10 @@ export function makeJobFetch(opts: JobFetchOptions): typeof fetch {
                     generationId: opts.generationId,
                     adapterKind: opts.adapterKind,
                     model: opts.model,
+                    modelLabel: opts.modelLabel,
+                    inputTokens: opts.inputTokens,
+                    outputTokens: opts.outputTokens,
+                    maxContext: opts.maxContext,
                     kind: opts.jobKind ?? 'main',
                     streaming: opts.streaming,
                     timeoutMs: opts.timeoutMs,

@@ -157,7 +157,13 @@ describe('model-jobs', () => {
         upstream.hang = false
         const expected = upstream.chunks.join('')
 
-        const { status, json } = await createJob()
+        const { status, json } = await createJob({
+            model: 'provider/model-id',
+            modelLabel: 'My Preset',
+            inputTokens: 1234,
+            outputTokens: 512,
+            maxContext: 32768,
+        })
         expect(status).toBe(200)
         const jobId = json.jobId as string
         expect(jobId).toBeTruthy()
@@ -173,6 +179,13 @@ describe('model-jobs', () => {
         expect(meta.upstreamStatus).toBe(200)
         expect(meta.contentType).toBe('text/event-stream')
         expect(meta.bytes).toBe(Buffer.byteLength(expected))
+        expect(meta).toMatchObject({
+            model: 'provider/model-id',
+            modelLabel: 'My Preset',
+            inputTokens: 1234,
+            outputTokens: 512,
+            maxContext: 32768,
+        })
 
         // Header capture: upstream status + content-type mirrored on the stream.
         expect(streamRes.headers.get('x-model-job-upstream-status')).toBe('200')

@@ -165,9 +165,13 @@ function createModelJobs(opts = {}) {
             generation_id TEXT,
             adapter_kind TEXT,
             model TEXT,
+            model_label TEXT,
             target_origin TEXT,
             kind TEXT NOT NULL DEFAULT 'main',
             streaming INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            max_context INTEGER,
             status TEXT NOT NULL,
             upstream_status INTEGER,
             content_type TEXT,
@@ -194,6 +198,18 @@ function createModelJobs(opts = {}) {
     try {
         db.exec(`ALTER TABLE model_jobs ADD COLUMN target_origin TEXT`);
     } catch { /* column already present */ }
+    try {
+        db.exec(`ALTER TABLE model_jobs ADD COLUMN model_label TEXT`);
+    } catch { /* column already present */ }
+    try {
+        db.exec(`ALTER TABLE model_jobs ADD COLUMN input_tokens INTEGER`);
+    } catch { /* column already present */ }
+    try {
+        db.exec(`ALTER TABLE model_jobs ADD COLUMN output_tokens INTEGER`);
+    } catch { /* column already present */ }
+    try {
+        db.exec(`ALTER TABLE model_jobs ADD COLUMN max_context INTEGER`);
+    } catch { /* column already present */ }
 
     // Resumable sends: one tombstone per chat marking "a send was started here
     // and has not concluded". Holds NO pipeline state — the send's durable
@@ -210,8 +226,8 @@ function createModelJobs(opts = {}) {
     `);
 
     const stmtInsert = db.prepare(`
-        INSERT INTO model_jobs (id, chat_id, generation_id, adapter_kind, model, target_origin, kind, streaming, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)
+        INSERT INTO model_jobs (id, chat_id, generation_id, adapter_kind, model, model_label, target_origin, kind, streaming, input_tokens, output_tokens, max_context, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)
     `);
     const stmtGet = db.prepare(`SELECT * FROM model_jobs WHERE id = ?`);
     const stmtRunningForChat = db.prepare(`SELECT id FROM model_jobs WHERE chat_id = ? AND status = 'running' AND kind = 'main' LIMIT 1`);
@@ -305,6 +321,7 @@ function createModelJobs(opts = {}) {
             generationId: row.generation_id,
             adapterKind: row.adapter_kind,
             model: row.model ?? undefined,
+            modelLabel: row.model_label ?? undefined,
             targetOrigin: row.target_origin ?? undefined,
             kind: row.kind,
             streaming: !!row.streaming,
@@ -315,6 +332,9 @@ function createModelJobs(opts = {}) {
             createdAt: row.created_at,
             endedAt: row.ended_at ?? undefined,
             bytes: active ? active.bytesWritten : row.bytes,
+            inputTokens: row.input_tokens ?? undefined,
+            outputTokens: row.output_tokens ?? undefined,
+            maxContext: row.max_context ?? undefined,
             claimed: !!row.claimed
         };
     }
@@ -502,9 +522,13 @@ function createModelJobs(opts = {}) {
             typeof arg.generationId === 'string' ? arg.generationId : null,
             typeof arg.adapterKind === 'string' ? arg.adapterKind : null,
             typeof arg.model === 'string' ? arg.model.slice(0, 128) : null,
+            typeof arg.modelLabel === 'string' ? arg.modelLabel.slice(0, 128) : null,
             parsedTarget.origin + parsedTarget.pathname,
             kind,
             arg.streaming ? 1 : 0,
+            Number.isFinite(arg.inputTokens) ? Math.max(0, Math.round(arg.inputTokens)) : null,
+            Number.isFinite(arg.outputTokens) ? Math.max(0, Math.round(arg.outputTokens)) : null,
+            Number.isFinite(arg.maxContext) ? Math.max(0, Math.round(arg.maxContext)) : null,
             Date.now()
         );
         activeJobs.set(jobId, job);
@@ -643,6 +667,11 @@ function createModelJobs(opts = {}) {
                 chatId: req.body?.chatId,
                 generationId: req.body?.generationId,
                 adapterKind: req.body?.adapterKind,
+                model: req.body?.model,
+                modelLabel: req.body?.modelLabel,
+                inputTokens: req.body?.inputTokens,
+                outputTokens: req.body?.outputTokens,
+                maxContext: req.body?.maxContext,
                 kind: req.body?.kind,
                 streaming: !!req.body?.streaming,
                 timeoutMs: req.body?.timeoutMs

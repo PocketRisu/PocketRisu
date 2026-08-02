@@ -287,6 +287,10 @@
                     <span class="text-blue-500 justify-self-end">{$alertGenerationInfoStore.idx}</span>
                     <span class="text-amber-500">Model</span>
                     <span class="text-amber-500 justify-self-end">{$alertGenerationInfoStore.genInfo.model}</span>
+                    {#if $alertGenerationInfoStore.genInfo.modelId}
+                        <span class="text-amber-500">Model ID</span>
+                        <span class="text-amber-500 justify-self-end">{$alertGenerationInfoStore.genInfo.modelId}</span>
+                    {/if}
                     <span class="text-green-500">ID</span>
                     <span class="text-green-500 justify-self-end">{DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message[$alertGenerationInfoStore.idx].chatId ?? "None"}</span>
                     <span class="text-red-500">GenID</span>

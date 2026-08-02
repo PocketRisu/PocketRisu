@@ -1463,6 +1463,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         previewBody: arg.previewPrompt,
         escape: nowChatroom.type === 'character' && nowChatroom.escapeOutput,
         rememberToolUsage: DBState.db.rememberToolUsage,
+        generationInfo,
     }, 'model', abortSignal)
 
     console.log(req)
@@ -1470,6 +1471,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
         generationInfo.model = getGenerationModelString(req.model)
         console.log(generationInfo.model, req.model)
     }
+    if(req.modelId) generationInfo.modelId = req.modelId
 
     if(arg.previewPrompt && req.type === 'success'){
         previewBody = req.result
