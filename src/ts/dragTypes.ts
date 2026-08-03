@@ -28,6 +28,9 @@ export const RISU_EFFECT_DRAG_TYPE = 'application/x-risu-effect-drag'
 /** Bot preset reorder */
 export const RISU_PRESET_DRAG_TYPE = 'application/x-risu-preset-drag'
 
+/** Model preset/folder reorder */
+export const RISU_MODEL_PRESET_LAYOUT_DRAG_TYPE = 'application/x-risu-model-preset-layout-drag'
+
 /** Prompt template reorder */
 export const RISU_PROMPT_DRAG_TYPE = 'application/x-risu-prompt-drag'
 

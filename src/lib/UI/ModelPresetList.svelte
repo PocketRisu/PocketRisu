@@ -2,8 +2,9 @@
     import { DBState, settingsOpen, SettingsMenuIndex } from 'src/ts/stores.svelte';
     import { language } from "src/lang";
     import { notifySuccess } from "src/ts/alert";
-    import { ArrowLeft, CheckIcon, PinIcon, PinOffIcon, Settings, TriangleAlert } from "@lucide/svelte";
+    import { ArrowLeft, CheckIcon, ChevronRight, PinIcon, PinOffIcon, Settings, TriangleAlert } from "@lucide/svelte";
     import ShButton from "./GUI/ShButton.svelte";
+    import { normalizeModelPresetLayout } from "src/ts/preset/layout";
 
     interface Props {
         value?: string;
@@ -24,8 +25,11 @@
     }: Props = $props();
 
     let openOptions = $state(false);
+    let expandedFolders = $state<Set<string>>(new Set());
 
     let presets = $derived(DBState.db.modelPresets ?? []);
+    let layout = $derived(normalizeModelPresetLayout(DBState.db.modelPresetLayout, presets));
+    let presetsById = $derived(new Map(presets.map((preset) => [preset.id, preset])));
     let bound = $derived(value ? (presets.find(p => p.id === value) ?? null) : null);
     // value set but no matching preset → dangling (deleted). Treated as unset by
     // the resolver; surfaced here as a warning so the user can rebind.
@@ -46,6 +50,19 @@
         // Toast only on binding a real preset, not on clearing to the blank
         // ("use default sub model") option.
         if (id) notifySuccess(language.modelPresetBindedSuccess);
+    }
+
+    function toggleFolder(id: string) {
+        const next = new Set(expandedFolders);
+        next.has(id) ? next.delete(id) : next.add(id);
+        expandedFolders = next;
+    }
+
+    function openPresetList() {
+        if (disabled) return;
+        const selectedFolder = layout.find((entry) => entry.type === 'folder' && entry.presetIds.includes(value));
+        if (selectedFolder) expandedFolders = new Set([...expandedFolders, selectedFolder.id]);
+        openOptions = true;
     }
 
     function goToPresetSettings() {
@@ -80,11 +97,34 @@
                 {#if presets.length === 0}
                     <div class="px-3 py-4 text-sm text-textcolor2 text-center">{language.modelPresetEmpty}</div>
                 {:else}
-                    {#each presets as preset (preset.id)}
-                        <button class="shrink-0 w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-selected rounded" class:bg-selected={preset.id === value} onclick={() => pick(preset.id)}>
-                            <span class="truncate flex-1">{preset.name}</span>
-                            {#if preset.id === value}<CheckIcon size={14} class="shrink-0 text-primary" />{/if}
-                        </button>
+                    {#each layout as entry (`${entry.type}:${entry.id}`)}
+                        {#if entry.type === 'preset'}
+                            {@const preset = presetsById.get(entry.id)}
+                            {#if preset}
+                                <button class="shrink-0 w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-selected rounded" class:bg-selected={preset.id === value} onclick={() => pick(preset.id)}>
+                                    <span class="truncate flex-1">{preset.name}</span>
+                                    {#if preset.id === value}<CheckIcon size={14} class="shrink-0 text-primary" />{/if}
+                                </button>
+                            {/if}
+                        {:else}
+                            <button class="shrink-0 w-full flex items-center gap-1 px-3 py-1.5 text-sm font-medium hover:bg-selected rounded" onclick={() => toggleFolder(entry.id)}>
+                                <span class="truncate flex-1 text-left">{entry.name}</span>
+                                <ChevronRight size={14} class={`transition-transform shrink-0${expandedFolders.has(entry.id) ? ' rotate-90' : ''}`} />
+                            </button>
+                            {#if expandedFolders.has(entry.id)}
+                                <div class="pl-4 flex flex-col">
+                                    {#each entry.presetIds as presetId (presetId)}
+                                        {@const preset = presetsById.get(presetId)}
+                                        {#if preset}
+                                            <button class="shrink-0 w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-selected rounded" class:bg-selected={preset.id === value} onclick={() => pick(preset.id)}>
+                                                <span class="truncate flex-1">{preset.name}</span>
+                                                {#if preset.id === value}<CheckIcon size={14} class="shrink-0 text-primary" />{/if}
+                                            </button>
+                                        {/if}
+                                    {/each}
+                                </div>
+                            {/if}
+                        {/if}
                     {/each}
                 {/if}
 
@@ -104,7 +144,7 @@
         : (dangling || (warnIfEmpty && !value)) ? 'border-amber-500 text-amber-500'
         : 'text-textcolor2 opacity-75 hover:opacity-100'
     }`}
-    onclick={() => { if (!disabled) { openOptions = true } }}
+    onclick={openPresetList}
 >
     {#if bound}
         <PinIcon size={16} class="shrink-0" />

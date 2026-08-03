@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { applyModelPresetDefaults } from '../preset/dbDefaults';
 import type { ApiKeyPoolEntry, ModelBindingFields, ModelBindingSet, ModelPreset, ModelPresetMigrationSummary, RegistryCache } from '../preset/types';
 import { emptyModelBinding } from '../preset/types';
+import type { ModelPresetLayoutEntry } from '../preset/layout';
 import { isChatStub } from './chatStub';
 
 //APP_VERSION_POINT is to locate the app version in the database file for version bumping
@@ -1441,6 +1442,7 @@ export interface Database{
         flags: LLMFlags[]
     }[]
     modelPresets: ModelPreset[]
+    modelPresetLayout: ModelPresetLayoutEntry[]
     // P4 dual-regime global default binding (plan v6 §7). Copied into new chats
     // (seeding); useModelPresetByDefault seeds the new-chat regime toggle.
     useModelPresetByDefault?: boolean

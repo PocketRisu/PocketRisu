@@ -10,7 +10,7 @@
     import type { ModelPreset } from "src/ts/preset/types";
     import TextInput from "src/lib/UI/GUI/TextInput.svelte";
     import ShButton from "src/lib/UI/GUI/ShButton.svelte";
-    import { v4 as uuidv4 } from "uuid";
+    import { duplicateModelPreset, removeModelPresetFromLayout } from "src/ts/preset/layout";
 
     interface Props {
         preset: ModelPreset;
@@ -21,17 +21,13 @@
 
     function duplicate() {
         const src = preset;
-        const idx = DBState.db.modelPresets.findIndex(p => p.id === src.id);
-        if (idx < 0) return;
-        const copy = safeStructuredClone(src);
-        copy.id = uuidv4();
-        copy.name = `${src.name} Copy`;
-        copy.createdAt = Date.now();
-        copy.updatedAt = Date.now();
-        DBState.db.modelPresets = [...DBState.db.modelPresets, copy];
+        const result = duplicateModelPreset(DBState.db.modelPresets, DBState.db.modelPresetLayout, src.id);
+        if (!result) return;
+        DBState.db.modelPresets = result.presets;
+        DBState.db.modelPresetLayout = result.layout;
         notifySuccess(language.presetDuplicated);
         // Jump straight into the new copy's editor (parent watches this store).
-        openModelPresetEditId.set(copy.id);
+        openModelPresetEditId.set(result.copy.id);
     }
 
     async function remove() {
@@ -42,6 +38,7 @@
         const next = [...DBState.db.modelPresets];
         next.splice(idx, 1);
         DBState.db.modelPresets = next;
+        DBState.db.modelPresetLayout = removeModelPresetFromLayout(DBState.db.modelPresetLayout, preset.id);
         notifySuccess(language.presetDeleted);
         onAfterDelete();
     }

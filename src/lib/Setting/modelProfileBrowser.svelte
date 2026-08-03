@@ -176,6 +176,7 @@
             updatedAt: Date.now(),
         };
         DBState.db.modelPresets = [...DBState.db.modelPresets, preset];
+        DBState.db.modelPresetLayout = [...DBState.db.modelPresetLayout, { type: 'preset', id: preset.id }];
         notifySuccess(language.modelPresetCreated);
         openModelPresetEditId.set(preset.id);
         close();
