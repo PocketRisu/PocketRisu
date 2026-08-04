@@ -90,7 +90,7 @@
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.recursiveScanning} name={language.recursiveScanning}/>
         </div>
-        <span class="text-textcolor mt-4 mb-2">{language.lorebookMatchingMode}</span>
+        <span class="text-textcolor mt-4 mb-2">{language.lorebookMatchingMode} <Help key="lorebookMatchingMode"/></span>
         <ShSelect className="mb-2" bind:value={DBState.db.characters[$selectedCharID].loreSettings.matchingMode}>
             <OptionInput value="partial">{language.partialMatching}</OptionInput>
             <OptionInput value="whitespace">{language.fullWordMatching}</OptionInput>

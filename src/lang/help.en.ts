@@ -313,6 +313,8 @@ export const helpEn = {
             "Automatically create a folder when branching a chat, grouping the original and branched chats together.",
         hamburgerButtonBottom: "Move the hamburger/menu button to the bottom of the sidebar.",
         hideLeftBarCollapseButton: "Hide the toggle button that collapses the left character grid bar on narrow screens (under 400px).",
+        lorebookMatchingMode:
+            "Choose how activation keys are found.\n\n- **Partial:** finds text inside longer words. `cat` matches `category`.\n- **Space-delimited exact:** requires spaces around the key. `cat` matches `cat runs`, but not `cat, runs`.\n- **Unicode word boundary:** accepts punctuation and Korean particles while rejecting longer words. `Alice` matches `(Alice)` and `앨리스` matches `앨리스가`; `Alice` does not match `Aliceville`.",
         loreBookDepth:
             "Number of previous messages to scan for lorebook activation keywords. `0` disables scanning; higher values can find older keywords but may activate unnecessary lore. (0-20)",
         loreBookToken:
