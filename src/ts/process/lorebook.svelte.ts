@@ -106,6 +106,7 @@ export async function loadLoreBookV3Prompt(){
         fullWordMatching:boolean
         all?:boolean
         dontSearchWhenRecursive: boolean
+        recursivePrompts: typeof recursivePrompt
     }) => {
         const sliced = messages.slice(messages.length - arg.searchDepth,messages.length)
         const newKeys = []
@@ -136,7 +137,7 @@ export async function loadLoreBookV3Prompt(){
                 }
             }
         }).concat(
-            arg.dontSearchWhenRecursive ? [] : recursivePrompt.map((msg) => {
+            arg.dontSearchWhenRecursive ? [] : arg.recursivePrompts.map((msg) => {
                 return {
                     source: 'lorebook ' + msg.source,
                     prompt: msg.prompt,
@@ -256,6 +257,7 @@ export async function loadLoreBookV3Prompt(){
     let completedSweeps = 0
     while(matching && canRunLorebookSweep(completedSweeps, maxRecursionSteps)){
         completedSweeps++
+        const recursivePromptsAtSweepStart = recursivePrompt.slice()
         matching = false
         for(let i=0;i<fullLore.length;i++){
             if(activatedIndexes.includes(i)){
@@ -542,7 +544,8 @@ export async function loadLoreBookV3Prompt(){
                         regex: fullLore[i].useRegex,
                         fullWordMatching: fullWordMatching,
                         all: query.all,
-                        dontSearchWhenRecursive: dontSearchWhenRecursive
+                        dontSearchWhenRecursive: dontSearchWhenRecursive,
+                        recursivePrompts: recursivePromptsAtSweepStart,
                     })
                     if(query.negative){
                         if(result){
