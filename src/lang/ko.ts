@@ -592,7 +592,7 @@ export const languageKorean = {
   activationKeys: "활성화 키",
   activationKeysInfo: '","로 나눠주세요',
   prompt: "프롬프트",
-  loreBookDepth: "로어북 검색 깊이",
+  loreBookDepth: "최근 대화 검색 범위",
   loreBookToken: "로어북 최대 토큰",
   chatLoadInitialPages: "채팅 초기 로딩 개수",
   chatLoadAdditionalPages: "채팅 추가 로딩 개수",

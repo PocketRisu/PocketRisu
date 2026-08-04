@@ -525,7 +525,7 @@ export const languageEnglish = {
     activationKeys: "Activation keys",
     activationKeysInfo: "Comma seperated",
     prompt: "Prompt",
-    loreBookDepth: "Lorebook Search Depth",
+    loreBookDepth: "Recent Chat Scan Range",
     loreBookToken: "Lorebook Max Tokens",
     chatLoadInitialPages: "Initial Chat Load Count",
     chatLoadAdditionalPages: "Additional Chat Load Count",

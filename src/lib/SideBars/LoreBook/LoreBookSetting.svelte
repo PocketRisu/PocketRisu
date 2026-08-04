@@ -91,7 +91,7 @@
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.fullWordMatching} name={language.fullWordMatching}/>
         </div>
-        <span class="text-textcolor mt-4 mb-2">{language.loreBookDepth}</span>
+        <span class="text-textcolor mt-4 mb-2">{language.loreBookDepth} <Help key="loreBookDepth"/></span>
         <NumberInput min={0} max={20} bind:value={DBState.db.characters[$selectedCharID].loreSettings.scanDepth} />
         <span class="text-textcolor">{language.loreBookToken}</span>
         <NumberInput min={0} max={4096} bind:value={DBState.db.characters[$selectedCharID].loreSettings.tokenBudget} />
