@@ -84,6 +84,7 @@
             }}
             name={language.useGlobalSettings}
             />
+            <Help key="useGlobalSettings"/>
         </div>
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.recursiveScanning} name={language.recursiveScanning}/>
@@ -93,7 +94,7 @@
         </div>
         <span class="text-textcolor mt-4 mb-2">{language.loreBookDepth} <Help key="loreBookDepth"/></span>
         <NumberInput min={0} max={20} bind:value={DBState.db.characters[$selectedCharID].loreSettings.scanDepth} />
-        <span class="text-textcolor">{language.loreBookToken}</span>
+        <span class="text-textcolor">{language.loreBookToken} <Help key="loreBookToken"/></span>
         <NumberInput min={0} max={4096} bind:value={DBState.db.characters[$selectedCharID].loreSettings.tokenBudget} />
     {:else}
         <div class="flex items-center mt-4">
@@ -106,6 +107,7 @@
             }}
             name={language.useGlobalSettings}
             />
+            <Help key="useGlobalSettings"/>
         </div>
     {/if}
 {/if}

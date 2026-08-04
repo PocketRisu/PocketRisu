@@ -313,10 +313,12 @@ export const helpEn = {
             "Automatically create a folder when branching a chat, grouping the original and branched chats together.",
         hamburgerButtonBottom: "Move the hamburger/menu button to the bottom of the sidebar.",
         hideLeftBarCollapseButton: "Hide the toggle button that collapses the left character grid bar on narrow screens (under 400px).",
+        useGlobalSettings:
+            "Use the app-wide lorebook settings instead of separate values for this character. Turn this off to customize only this character.",
         loreBookDepth:
-            "Number of previous messages to scan for lorebook activation keywords. `0` disables scanning; higher values can find older keywords but may activate unnecessary lore. (0-20)",
+            "How many recent user and character messages to scan for activation keys. Example: `5` searches the latest five messages; `0` disables chat scanning. (0-20)",
         loreBookToken:
-            "Maximum number of tokens lorebook entries may occupy in one response. When the limit is exceeded, lower-priority entries are cut first. (0-4096)",
+            "Maximum tokens available to activated lorebook entries for one response. If they exceed the limit, lower-priority entries are omitted first. (0-4096)",
         autoContinueMinTokens:
             "Minimum token count for Auto Continue Chat. Responses shorter than this value will not trigger automatic continuation.",
         descriptionPrefix:
