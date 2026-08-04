@@ -7,11 +7,16 @@ import { tokenize } from "../tokenizer";
 import { risuChatParser } from "../parser/parser.svelte";
 import { findCharacterbyId, pickHashRand, selectSingleFile } from "../util";
 import { alertError, notifySuccess } from "../alert";
-import { language } from "../../lang";
+import { getCurrentLocale, language } from "../../lang";
 import { downloadFile } from "../globalApi.svelte";
 import { getModuleLorebooks } from "./modules";
 import { CCardLib } from "@risuai/ccardlib";
 import { v4 } from "uuid";
+import {
+    matchesLorebookKey,
+    resolveLorebookMatchingMode,
+    type LorebookMatchingMode,
+} from './lorebookMatching';
 
 export function addLorebook(type:number) {
     const selectedID = get(selectedCharID)
@@ -83,7 +88,11 @@ export async function loadLoreBookV3Prompt(){
     const currentChat = char.chats[page].message
     const loreDepth = char.loreSettings?.scanDepth ?? DBState.db.loreBookDepth
     const loreToken = char.loreSettings?.tokenBudget ?? DBState.db.loreBookToken
-    const fullWordMatchingSetting = char.loreSettings?.fullWordMatching ?? false
+    const matchingModeSetting = resolveLorebookMatchingMode(
+        char.loreSettings?.matchingMode,
+        char.loreSettings?.fullWordMatching,
+    )
+    const matchingLocale = getCurrentLocale()
     const chatLength = currentChat.length + 1 //includes first message
     const recursiveScanning = char.loreSettings?.recursiveScanning ?? true
     let recursivePrompt:{
@@ -101,7 +110,7 @@ export async function loadLoreBookV3Prompt(){
         keys:string[],
         searchDepth:number,
         regex:boolean
-        fullWordMatching:boolean
+        matchingMode:LorebookMatchingMode
         all?:boolean
         dontSearchWhenRecursive: boolean
     }) => {
@@ -183,42 +192,19 @@ export async function loadLoreBookV3Prompt(){
         let allModeMatched = true
 
         for(const m of mList){
-            let mText = m.data
-            if(arg.fullWordMatching){
-                const splited = mText.split(' ')
-                for(const key of arg.keys){
-                    if(splited.includes(key.toLocaleLowerCase())){
-                        matchLog.push({
-                            prompt: m.prompt,
-                            source: m.source,
-                            activated: key
-                        })
-                        if(!allMode){
-                            return true
-                        }
-                    }
-                    else if(allMode){
-                        allModeMatched = false
+            for(const key of arg.keys){
+                if(matchesLorebookKey(m.data, key, arg.matchingMode, matchingLocale)){
+                    matchLog.push({
+                        prompt: m.prompt,
+                        source: m.source,
+                        activated: key
+                    })
+                    if(!allMode){
+                        return true
                     }
                 }
-            }
-            else{
-                mText = mText.replace(/ /g,'')
-                for(const key of arg.keys){
-                    const realKey = key.toLocaleLowerCase().replace(/ /g,'')
-                    if(mText.includes(realKey)){
-                        matchLog.push({
-                            prompt: m.prompt,
-                            source: m.source,
-                            activated: key
-                        })
-                        if(!allMode){
-                            return true
-                        }
-                    }
-                    else if(allMode){
-                        allModeMatched = false
-                    }
+                else if(allMode){
+                    allModeMatched = false
                 }
             }
         }
@@ -279,7 +265,7 @@ export async function loadLoreBookV3Prompt(){
                 negative:boolean,
                 all?:boolean
             }[] = []
-            let fullWordMatching = fullWordMatchingSetting
+            let matchingMode = matchingModeSetting
             let dontSearchWhenRecursive = false
             
             if(fullLore[i].mode === 'child'){
@@ -459,11 +445,15 @@ export async function loadLoreBookV3Prompt(){
                         return
                     }
                     case 'match_full_word':{
-                        fullWordMatching = true
+                        matchingMode = 'whitespace'
                         return
                     }
                     case 'match_partial_word':{
-                        fullWordMatching = false
+                        matchingMode = 'partial'
+                        return
+                    }
+                    case 'match_word_boundary':{
+                        matchingMode = 'word-boundary'
                         return
                     }
                     case 'is_user_icon':{
@@ -536,7 +526,7 @@ export async function loadLoreBookV3Prompt(){
                         keys: query.keys,
                         searchDepth: scanDepth,
                         regex: fullLore[i].useRegex,
-                        fullWordMatching: fullWordMatching,
+                        matchingMode: matchingMode,
                         all: query.all,
                         dontSearchWhenRecursive: dontSearchWhenRecursive
                     })

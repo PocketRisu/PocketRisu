@@ -1,6 +1,7 @@
 import { writable, type Writable } from "svelte/store"
 import { alertCardExport, alertConfirm, alertError, alertInput, alertStore, alertTOS, alertWait, notifySuccess, notifyError } from "./alert"
 import { defaultSdDataFunc, type character, setDatabase, type customscript, type loreSettings, type loreBook, type triggerscript, importPreset, getDatabase, setDatabaseLite, appVer, newChatModelDefaults } from "./storage/database.svelte"
+import { resolveLorebookMatchingMode } from "./process/lorebookMatching"
 import { checkNullish, decryptBuffer, isKnownUri, selectFileByDom, sleep } from "./util"
 import { language } from "src/lang"
 import { v4 as uuidv4, v4 } from 'uuid';
@@ -963,6 +964,10 @@ function convertCharbook(arg:{
             scanDepth:charbook.scan_depth,
             recursiveScanning: charbook.recursive_scanning,
             fullWordMatching: charbook?.extensions?.risu_fullWordMatching ?? false,
+            matchingMode: resolveLorebookMatchingMode(
+                charbook?.extensions?.risu_matchingMode,
+                charbook?.extensions?.risu_fullWordMatching,
+            ),
         }
     }
 
@@ -1023,7 +1028,7 @@ function convertCharbook(arg:{
             delete extensions.delay
         }
         if(extensions.match_whole_words === true){
-            content = `@@match_full_word\n` + content
+            content = `@@match_word_boundary\n` + content
             delete extensions.match_whole_words
         }
         if(extensions.match_whole_words === false){
@@ -1092,7 +1097,12 @@ function createBaseV2(char:character) {
     }
     char.loreExt ??= {}
 
-    char.loreExt.risu_fullWordMatching = char.loreSettings?.fullWordMatching ?? false
+    const matchingMode = resolveLorebookMatchingMode(
+        char.loreSettings?.matchingMode,
+        char.loreSettings?.fullWordMatching,
+    )
+    char.loreExt.risu_matchingMode = matchingMode
+    char.loreExt.risu_fullWordMatching = matchingMode !== 'partial'
 
     const card:CharacterCardV2Risu = {
         spec: "chara_card_v2",
@@ -1501,7 +1511,12 @@ export function createBaseV3(char:character){
     }
     char.loreExt ??= {}
 
-    char.loreExt.risu_fullWordMatching = char.loreSettings?.fullWordMatching ?? false
+    const matchingMode = resolveLorebookMatchingMode(
+        char.loreSettings?.matchingMode,
+        char.loreSettings?.fullWordMatching,
+    )
+    char.loreExt.risu_matchingMode = matchingMode
+    char.loreExt.risu_fullWordMatching = matchingMode !== 'partial'
 
     const card:CharacterCardV3 = {
         spec: "chara_card_v3",

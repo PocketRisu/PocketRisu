@@ -6,6 +6,8 @@
     import { addLorebook, addLorebookFolder, exportLoreBook, importLoreBook } from "../../../ts/process/lorebook.svelte";
     import Check from "../../UI/GUI/CheckInput.svelte";
     import NumberInput from "../../UI/GUI/NumberInput.svelte";
+    import ShSelect from "../../UI/GUI/ShSelect.svelte";
+    import OptionInput from "../../UI/GUI/OptionInput.svelte";
     import LoreBookList from "./LoreBookList.svelte";
     import Help from "src/lib/Others/Help.svelte";
     import { selectedCharID } from "src/ts/stores.svelte";
@@ -88,9 +90,12 @@
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.recursiveScanning} name={language.recursiveScanning}/>
         </div>
-        <div class="flex items-center mt-4">
-            <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.fullWordMatching} name={language.fullWordMatching}/>
-        </div>
+        <span class="text-textcolor mt-4 mb-2">{language.lorebookMatchingMode}</span>
+        <ShSelect className="mb-2" bind:value={DBState.db.characters[$selectedCharID].loreSettings.matchingMode}>
+            <OptionInput value="partial">{language.partialMatching}</OptionInput>
+            <OptionInput value="whitespace">{language.fullWordMatching}</OptionInput>
+            <OptionInput value="word-boundary">{language.wordBoundaryMatching}</OptionInput>
+        </ShSelect>
         <span class="text-textcolor mt-4 mb-2">{language.loreBookDepth}</span>
         <NumberInput min={0} max={20} bind:value={DBState.db.characters[$selectedCharID].loreSettings.scanDepth} />
         <span class="text-textcolor">{language.loreBookToken}</span>
@@ -101,7 +106,9 @@
                 DBState.db.characters[$selectedCharID].loreSettings = {
                     tokenBudget: DBState.db.loreBookToken,
                     scanDepth:DBState.db.loreBookDepth,
-                    recursiveScanning: false
+                    recursiveScanning: false,
+                    fullWordMatching: false,
+                    matchingMode: 'partial'
                 }
             }}
             name={language.useGlobalSettings}
