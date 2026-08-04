@@ -88,6 +88,10 @@
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.recursiveScanning} name={language.recursiveScanning}/>
         </div>
+        {#if DBState.db.characters[$selectedCharID].loreSettings.recursiveScanning}
+            <span class="text-textcolor mt-4 mb-2">{language.maxRecursionSteps}</span>
+            <NumberInput min={0} max={20} bind:value={DBState.db.characters[$selectedCharID].loreSettings.maxRecursionSteps} />
+        {/if}
         <div class="flex items-center mt-4">
             <Check bind:check={DBState.db.characters[$selectedCharID].loreSettings.fullWordMatching} name={language.fullWordMatching}/>
         </div>
@@ -101,7 +105,8 @@
                 DBState.db.characters[$selectedCharID].loreSettings = {
                     tokenBudget: DBState.db.loreBookToken,
                     scanDepth:DBState.db.loreBookDepth,
-                    recursiveScanning: false
+                    recursiveScanning: false,
+                    maxRecursionSteps: 0
                 }
             }}
             name={language.useGlobalSettings}

@@ -962,6 +962,7 @@ function convertCharbook(arg:{
             tokenBudget:charbook.token_budget,
             scanDepth:charbook.scan_depth,
             recursiveScanning: charbook.recursive_scanning,
+            maxRecursionSteps: charbook?.extensions?.risu_maxRecursionSteps ?? 0,
             fullWordMatching: charbook?.extensions?.risu_fullWordMatching ?? false,
         }
     }
@@ -1093,6 +1094,7 @@ function createBaseV2(char:character) {
     char.loreExt ??= {}
 
     char.loreExt.risu_fullWordMatching = char.loreSettings?.fullWordMatching ?? false
+    char.loreExt.risu_maxRecursionSteps = char.loreSettings?.maxRecursionSteps ?? 0
 
     const card:CharacterCardV2Risu = {
         spec: "chara_card_v2",
@@ -1502,6 +1504,7 @@ export function createBaseV3(char:character){
     char.loreExt ??= {}
 
     char.loreExt.risu_fullWordMatching = char.loreSettings?.fullWordMatching ?? false
+    char.loreExt.risu_maxRecursionSteps = char.loreSettings?.maxRecursionSteps ?? 0
 
     const card:CharacterCardV3 = {
         spec: "chara_card_v3",

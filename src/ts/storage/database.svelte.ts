@@ -776,6 +776,9 @@ export function setDatabase(data:Database){
     delete (data as {largeChatPerformanceMode?: unknown}).largeChatPerformanceMode
     data.fixedChatTextarea ??= true
     for(const char of data.characters){
+        if(char.loreSettings){
+            char.loreSettings.maxRecursionSteps ??= 0
+        }
         for(const chat of char.chats ?? []){
             // Stubs (lazy-loaded chats) carry no streaming flags; skip them so
             // we don't graft chat-only fields onto stub objects.
@@ -1777,6 +1780,7 @@ export interface loreSettings{
     tokenBudget: number
     scanDepth:number
     recursiveScanning: boolean
+    maxRecursionSteps?: number
     fullWordMatching?: boolean
 }
 

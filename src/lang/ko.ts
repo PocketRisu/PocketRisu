@@ -789,6 +789,7 @@ export const languageKorean = {
   SecondaryKeys: "두번째 키",
   useGlobalSettings: "글로벌 설정 사용",
   recursiveScanning: "재귀 검색",
+  maxRecursionSteps: "최대 재귀 단계 (0 = 무제한)",
   creator: "제작자",
   CharVersion: "캐릭터 버전",
   Speech: "음성",

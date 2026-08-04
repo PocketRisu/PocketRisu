@@ -712,6 +712,7 @@ export const languageEnglish = {
     SecondaryKeys: "Secondary keys",
     useGlobalSettings: "Use Global Settings",
     recursiveScanning: "Recursive Scanning",
+    maxRecursionSteps: "Maximum Recursion Steps (0 = Unlimited)",
     creator: "Creator",
     CharVersion: "Character Version",
     Speech: "Speech",

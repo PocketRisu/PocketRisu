@@ -12,6 +12,7 @@ import { downloadFile } from "../globalApi.svelte";
 import { getModuleLorebooks } from "./modules";
 import { CCardLib } from "@risuai/ccardlib";
 import { v4 } from "uuid";
+import { canRunLorebookSweep } from './lorebookActivation';
 
 export function addLorebook(type:number) {
     const selectedID = get(selectedCharID)
@@ -86,6 +87,7 @@ export async function loadLoreBookV3Prompt(){
     const fullWordMatchingSetting = char.loreSettings?.fullWordMatching ?? false
     const chatLength = currentChat.length + 1 //includes first message
     const recursiveScanning = char.loreSettings?.recursiveScanning ?? true
+    const maxRecursionSteps = Math.max(0, char.loreSettings?.maxRecursionSteps ?? 0)
     let recursivePrompt:{
         prompt: string,
         source: string,
@@ -251,7 +253,9 @@ export async function loadLoreBookV3Prompt(){
     let matchTimes = 0
     let keepActivateAfterMatch = false
     let dontActivateAfterMatch = false
-    while(matching){
+    let completedSweeps = 0
+    while(matching && canRunLorebookSweep(completedSweeps, maxRecursionSteps)){
+        completedSweeps++
         matching = false
         for(let i=0;i<fullLore.length;i++){
             if(activatedIndexes.includes(i)){
