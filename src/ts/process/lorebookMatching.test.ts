@@ -27,6 +27,12 @@ describe('matchesLorebookKey', () => {
         expect(matchesLorebookKey('Visit New York, today', 'new york', 'word-boundary', 'en')).toBe(true)
         expect(matchesLorebookKey('Visit New Yorkshire', 'new york', 'word-boundary', 'en')).toBe(false)
     })
+
+    it('accepts Korean particles without matching longer names', () => {
+        expect(matchesLorebookKey('앨리스가 누구야?', '앨리스', 'word-boundary', 'ko')).toBe(true)
+        expect(matchesLorebookKey('앨리스라는 사람', '앨리스', 'word-boundary', 'ko')).toBe(true)
+        expect(matchesLorebookKey('앨리스터가 누구야?', '앨리스', 'word-boundary', 'ko')).toBe(false)
+    })
 })
 
 describe('resolveLorebookMatchingMode', () => {
