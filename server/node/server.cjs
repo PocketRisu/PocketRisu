@@ -1449,6 +1449,16 @@ async function checkDiskSpace(requiredBytes) {
 // not kick a PC mid-session); ownership moves on the first WRITE from a
 // freshly-booted session, and only stale sessions get 423.
 const { createSessionLock } = require('./session-lock.cjs');
+const { findOrphans, collectAssetBasenames } = require('./orphanCleanup.cjs');
+const {
+    CleanupScanError,
+    createCleanupScanStore,
+    intersectCandidates,
+    deleteKeysAtomically,
+} = require('./cleanupScan.cjs');
+const cleanupScanStore = createCleanupScanStore({
+    randomUUID: () => nodeCrypto.randomUUID(),
+});
 const sessionLock = createSessionLock();
 
 function checkActiveSession(req, res) {
@@ -3388,6 +3398,107 @@ app.get('/api/remove', async (req, res, next) => {
     }
 });
 
+// ── Server-side orphan cleanup (replaces client-side cleanChunks deletion) ────
+// Compute candidates from the server's current DB view instead of granting a
+// single client's reference set direct deletion authority. Dry-run-by-default
+// and the active-session requirement reduce risk; they do not guarantee that
+// this view represents every historical or concurrent DB generation.
+// Both phases run in the storage queue. A dry-run pins its candidate keys to a
+// short-lived server-side scan; confirm deletes only keys that were in that scan
+// and are still eligible now.
+function currentCleanupCandidates() {
+    const dbObj = dbCache[DB_HEX_KEY];
+    if (!dbObj) {
+        const error = new Error('Database not loaded');
+        error.status = 503;
+        throw error;
+    }
+    const uncleanable = buildUncleanableSet(dbObj);
+    // Keep kvListWithSizes() stable for existing callers. Cleanup alone
+    // enriches its rows with the already-present updated_at column.
+    const assetEntries = kvListWithSizes('assets/').map((entry) => ({
+        ...entry, updatedAt: kvGetUpdatedAt(entry.key),
+    }));
+    const remoteEntries = kvListWithSizes('remotes/').map((entry) => ({
+        ...entry, meta: kvGet(entry.key + '.meta'),
+    }));
+    return findOrphans(dbObj, assetEntries, remoteEntries, uncleanable);
+}
+
+app.post('/api/cleanup/orphan-assets', async (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if(!await checkAuth(req, res)) return;
+    if (!checkActiveSession(req, res)) return;
+
+    const sessionId = typeof req.headers['x-session-id'] === 'string'
+        ? req.headers['x-session-id']
+        : '';
+    const confirm = req.query.confirm === 'true';
+
+    try {
+        const result = await queueStorageOperation(() => {
+            if (!confirm) {
+                const candidates = currentCleanupCandidates();
+                const totalSize = candidates.reduce((sum, entry) => sum + entry.size, 0);
+                const scan = cleanupScanStore.issue(
+                    sessionId,
+                    candidates.map((entry) => entry.key),
+                );
+                return {
+                    confirm: false,
+                    scanId: scan.scanId,
+                    expiresAt: scan.expiresAt,
+                    count: candidates.length,
+                    totalSize,
+                    entries: candidates.map((entry) => ({
+                        key: entry.key,
+                        size: entry.size,
+                        prefix: entry.prefix,
+                        reason: entry.reason,
+                    })),
+                };
+            }
+
+            const scanId = req.body && req.body.scanId;
+            if (typeof scanId !== 'string' || !scanId) {
+                throw new CleanupScanError('missing-scan-id');
+            }
+            const scan = cleanupScanStore.consume(scanId, sessionId);
+            const current = currentCleanupCandidates();
+            const eligible = intersectCandidates(scan.candidateKeys, current);
+            const requestedCount = scan.candidateKeys.size;
+            const totalSize = eligible.reduce((sum, entry) => sum + entry.size, 0);
+
+            deleteKeysAtomically(
+                sqliteDb,
+                (key) => kvDel(key),
+                eligible.map((entry) => entry.key),
+            );
+            console.log(`[cleanup] reclaimed ${eligible.length}/${requestedCount} orphan(s), ${totalSize} bytes`);
+            return {
+                confirm: true,
+                count: eligible.length,
+                totalSize,
+                requestedCount,
+                skippedCount: requestedCount - eligible.length,
+            };
+        });
+        res.json(result);
+    } catch (error) {
+        if (error instanceof CleanupScanError) {
+            return res.status(409).json({
+                error: error.code,
+                code: error.code,
+                reason: error.reason,
+            });
+        }
+        if (error && error.status === 503) {
+            return res.status(503).json({ error: error.message });
+        }
+        next(error);
+    }
+});
+
 app.get('/api/list', async (req, res, next) => {
     if(!await checkAuth(req, res)){
         return;
@@ -5122,6 +5233,10 @@ function buildUncleanableSet(dbObj, { includeModuleAssets = true } = {}) {
             if (Array.isArray(cha.emotionImages)) for (const em of cha.emotionImages) add(em?.[1]);
             if (Array.isArray(cha.additionalAssets)) for (const em of cha.additionalAssets) add(em?.[1]);
             if (cha.vits?.files) for (const k of Object.keys(cha.vits.files)) add(cha.vits.files[k]);
+            // The UI stores saveAsset() output here and GPT-SoVITS TTS passes
+            // this supported field to loadAsset(). Protect it preventively;
+            // incident evidence does not implicate GPT-SoVITS.
+            add(cha.gptSoVitsConfig?.ref_audio_data?.assetId);
             if (Array.isArray(cha.ccAssets)) for (const a of cha.ccAssets) add(a?.uri);
         }
     }
@@ -5144,6 +5259,9 @@ function buildUncleanableSet(dbObj, { includeModuleAssets = true } = {}) {
             if (item && typeof item === 'object' && 'imgFile' in item) add(item.imgFile);
         }
     }
+    // Conservative safety net for real fields omitted by the manual walker,
+    // plugin-defined nested storage, and future DB fields.
+    if (includeModuleAssets) collectAssetBasenames(dbObj, set);
     return set;
 }
 
