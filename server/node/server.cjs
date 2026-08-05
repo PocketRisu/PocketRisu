@@ -3344,6 +3344,7 @@ app.get('/api/read', async (req, res, next) => {
 });
 
 app.get('/api/remove', async (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
     if(!await checkAuth(req, res)){
         return;
     }
@@ -3358,6 +3359,17 @@ app.get('/api/remove', async (req, res, next) => {
     }
     try {
         const key = Buffer.from(filePath, 'hex').toString('utf-8');
+        // Older clients ran cleanChunks() by listing assets/remotes and then
+        // deleting each key through this generic endpoint. A 409 (rather than
+        // a successful no-op) stops that legacy loop on its first request.
+        // Asset cleanup is only allowed through the server-validated,
+        // confirmable orphan-cleanup endpoint below.
+        if (key.startsWith('assets/') || key.startsWith('remotes/')) {
+            return res.status(409).json({
+                error: 'DIRECT_ASSET_REMOVE_DISABLED',
+                code: 'DIRECT_ASSET_REMOVE_DISABLED',
+            });
+        }
         if (key.startsWith('inlay/')) {
             const id = key.slice('inlay/'.length)
             await deleteInlayFile(id)
