@@ -2059,6 +2059,22 @@ export const languageEnglish = {
     storageWalCleanupNoop: "WAL is already clean.",
     storageWalCleanupFailed: "WAL cleanup failed",
 
+    orphanCleanup: "Reclaim orphan assets",
+    orphanCleanupHeader: (count: number, size: number) =>
+        `${count} orphan(s) · ${(size / 1024 / 1024).toFixed(1)} MB`,
+    orphanCleanupWhat: "Orphan assets are stored files no longer referenced by any character, module, or persona. They accumulate as you delete and re-create content. Reclaiming them frees disk space.",
+    orphanCleanup_btn: "Reclaim orphans",
+    orphanCleanupScanning: "Scanning for orphans…",
+    orphanCleanupConfirm: (count: number, size: number) =>
+        `Delete ${count} orphan asset(s) (${(size / 1024 / 1024).toFixed(1)} MB)? This cannot be undone.`,
+    orphanCleanupDone: (count: number, size: number) =>
+        `Reclaimed ${count} orphan(s), ${(size / 1024 / 1024).toFixed(1)} MB.`,
+    orphanCleanupDoneWithSkipped: (count: number, size: number, skipped: number) =>
+        `Reclaimed ${count} orphan(s), ${(size / 1024 / 1024).toFixed(1)} MB. ${skipped} item(s) were excluded because their state changed.`,
+    orphanCleanupRescan: "The cleanup scan expired or was replaced. Scan again before deleting.",
+    orphanCleanupNone: "No orphan assets found.",
+    orphanCleanupFailed: "Orphan cleanup failed",
+
     storageBackups: "Backups",
     storageBackupsManage: "Manage backups",
     storageBackupsAuto: "Snapshot (DB only)",

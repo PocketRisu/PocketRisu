@@ -20,6 +20,11 @@ export class AutoStorage{
         return await this.realStorage.removeItem(key)
     }
 
+    async cleanupOrphanAssets(confirm:boolean = false, scanId?:string){
+        await this.Init()
+        return this.realStorage.cleanupOrphanAssets(confirm, scanId)
+    }
+
     async checkAccountSync(){
         return false
     }

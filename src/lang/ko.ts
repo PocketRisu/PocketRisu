@@ -2248,6 +2248,22 @@ export const languageKorean = {
   storageWalCleanupNoop: "WAL은 이미 깨끗합니다.",
   storageWalCleanupFailed: "WAL 정리 실패",
 
+  orphanCleanup: "고아 에셋 회수",
+  orphanCleanupHeader: (count: number, size: number) =>
+    `${count}개 고아 · ${(size / 1024 / 1024).toFixed(1)} MB`,
+  orphanCleanupWhat: "고아 에셋은 더 이상 어떤 캐릭터·모듈·페르소나에서도 참조하지 않는 저장 파일입니다. 콘텐츠를 삭제하고 다시 만들면서 누적됩니다. 회수하면 디스크 공간이 확보됩니다.",
+  orphanCleanup_btn: "고아 회수",
+  orphanCleanupScanning: "고아 스캔 중…",
+  orphanCleanupConfirm: (count: number, size: number) =>
+    `${count}개 고아 에셋(${(size / 1024 / 1024).toFixed(1)} MB)을 삭제할까요? 되돌릴 수 없습니다.`,
+  orphanCleanupDone: (count: number, size: number) =>
+    `${count}개 고아 회수, ${(size / 1024 / 1024).toFixed(1)} MB.`,
+  orphanCleanupDoneWithSkipped: (count: number, size: number, skipped: number) =>
+    `${count}개 고아 회수, ${(size / 1024 / 1024).toFixed(1)} MB. ${skipped}개는 상태가 변경되어 제외했습니다.`,
+  orphanCleanupRescan: "정리 스캔이 만료되었거나 교체되었습니다. 삭제 전에 다시 스캔해 주세요.",
+  orphanCleanupNone: "고아 에셋이 없습니다.",
+  orphanCleanupFailed: "고아 정리 실패",
+
   storageBackups: "백업",
   storageBackupsManage: "백업 관리",
   storageBackupsAuto: "스냅샷 (DB만)",

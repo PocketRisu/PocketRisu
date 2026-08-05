@@ -36,6 +36,15 @@ export class ConflictError extends Error {
         this.currentEtag = currentEtag
     }
 }
+export class CleanupScanInvalidError extends Error {
+    code = 'CLEANUP_SCAN_INVALID'
+    reason: string
+    constructor(reason: string) {
+        super('Cleanup scan expired or was replaced')
+        this.name = 'CleanupScanInvalidError'
+        this.reason = reason
+    }
+}
 
 // Warning the server attaches to /api/patch responses when the most recent
 // debounced persist failed (Stage 1 visibility — see issues.md).
@@ -319,6 +328,36 @@ export class NodeStorage{
         const data = await da.json()
         if(data.error){
             throw data.error
+        }
+    }
+
+    async cleanupOrphanAssets(confirm:boolean = false, scanId?:string){
+        const url = '/api/cleanup/orphan-assets' + (confirm ? '?confirm=true' : '')
+        const init: RequestInit = { method: "POST" }
+        if (confirm) {
+            init.headers = { 'content-type': 'application/json' }
+            init.body = JSON.stringify({ scanId })
+        }
+        const response = await this.authFetch(url, init)
+        const data = await response.json().catch(() => ({}))
+        if(response.status < 200 || response.status >= 300){
+            if (response.status === 409 && data?.code === 'CLEANUP_SCAN_INVALID') {
+                throw new CleanupScanInvalidError(data.reason)
+            }
+            throw new Error(data?.error || 'cleanupOrphanAssets Error')
+        }
+        if(data.error){
+            throw new Error(data.error)
+        }
+        return data as {
+            confirm: boolean
+            count: number
+            totalSize: number
+            scanId?: string
+            expiresAt?: number
+            requestedCount?: number
+            skippedCount?: number
+            entries?: { key: string; size: number; prefix: string; reason: string }[]
         }
     }
 

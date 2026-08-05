@@ -17,6 +17,7 @@
         BlocksIcon,
         ShieldCheckIcon,
         SaveIcon,
+        TrashIcon,
     } from '@lucide/svelte'
     import { alertConfirm, alertMd, notifyError, notifySuccess } from 'src/ts/alert'
     import { forageStorage } from 'src/ts/globalApi.svelte'
@@ -86,6 +87,8 @@
     let optimizeMessage = $state('')
 
     let walCleanupOpen = $state(false)
+
+    let orphanCleanupOpen = $state(false)
 
     // Default off = show only RisuAI internal breakdown (smaller scope, more
     // useful at-a-glance). Toggle on to expand the bar to disk-total scale
@@ -222,6 +225,42 @@
             notifyError(language.storageOptimizeFailed + ': ' + (err instanceof Error ? err.message : String(err)))
         } finally {
             optimizeOpen = false
+        }
+    }
+
+    async function runOrphanCleanup() {
+        orphanCleanupOpen = true
+        try {
+            const dryRun = await forageStorage.cleanupOrphanAssets(false)
+            if (dryRun.count === 0) {
+                notifySuccess(language.orphanCleanupNone)
+                return
+            }
+            const ok = await alertConfirm(language.orphanCleanupConfirm(dryRun.count, dryRun.totalSize))
+            if (!ok) return
+            if (!dryRun.scanId) {
+                notifyError(language.orphanCleanupRescan)
+                return
+            }
+            const result = await forageStorage.cleanupOrphanAssets(true, dryRun.scanId)
+            if ((result.skippedCount ?? 0) > 0) {
+                notifySuccess(language.orphanCleanupDoneWithSkipped(
+                    result.count,
+                    result.totalSize,
+                    result.skippedCount ?? 0,
+                ))
+            } else {
+                notifySuccess(language.orphanCleanupDone(result.count, result.totalSize))
+            }
+            await loadStats()
+        } catch (err) {
+            if ((err as { code?: string })?.code === 'CLEANUP_SCAN_INVALID') {
+                notifyError(language.orphanCleanupRescan)
+            } else {
+                notifyError(language.orphanCleanupFailed + ': ' + (err instanceof Error ? err.message : String(err)))
+            }
+        } finally {
+            orphanCleanupOpen = false
         }
     }
 
@@ -537,6 +576,28 @@
         </div>
     </div>
 
+    <!-- ②b Orphan asset cleanup ─────────────────────────────────────────── -->
+    <div class="border border-darkborderc bg-darkbg/40 rounded-md p-4 mb-4">
+        <div class="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+            <div class="flex items-center gap-2 text-textcolor">
+                <TrashIcon size={16} />
+                <span class="font-medium">{language.orphanCleanup}</span>
+            </div>
+            <span class="text-textcolor2 text-sm tabular-nums">
+                {stats?.orphan?.available
+                    ? language.orphanCleanupHeader(stats.orphan.count, stats.orphan.totalSize)
+                    : '—'}
+            </span>
+        </div>
+        <p class="text-textcolor2 text-sm leading-relaxed mb-3">{language.orphanCleanupWhat}</p>
+        <div class="flex justify-end">
+            <ShButton variant="outline" onclick={runOrphanCleanup} disabled={orphanCleanupOpen}>
+                <TrashIcon size={16} />
+                {language.orphanCleanup_btn}
+            </ShButton>
+        </div>
+    </div>
+
     <!-- ③ SQLite overhead cleanup ──────────────────────────────────────── -->
     <div class="border border-darkborderc bg-darkbg/40 rounded-md p-4 mb-4">
         <div class="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
@@ -806,3 +867,4 @@
 
 <ShLoadingDialog open={optimizeOpen} message={optimizeMessage} tier="top" />
 <ShLoadingDialog open={walCleanupOpen} message={language.storageWalCleanuping} tier="top" />
+<ShLoadingDialog open={orphanCleanupOpen} message={language.orphanCleanupScanning} tier="top" />
