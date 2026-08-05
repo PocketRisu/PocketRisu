@@ -25,14 +25,13 @@ import {
     saveDb,
     setPatchSyncBaseline,
     getDbBackups,
-    getUncleanables,
-    getBasename,
     checkCharOrder
 } from "./globalApi.svelte";
 import { registerModelDynamic } from "./model/modellist";
 import { initModelJobRecovery } from "./process/request/jobRecovery";
 import { convertStubsToPlaceholders } from "./storage/chatStorage";
 import { isChatStub, purgeUnsupportedGroupChats } from "./storage/database.svelte";
+
 
 /**
  * Loads the application data.
@@ -176,10 +175,6 @@ export async function loadData() {
             registerModelDynamic()
             saveDb()
             moduleUpdate()
-            // cleanChunks는 화면 진입 후 유휴 시간에 실행 (부트 블로킹 제거)
-            setTimeout(() => {
-                cleanChunks().catch(console.error)
-            }, 5_000)
             checkRisuUpdate()
             fetchPublicStats()
             // Server-side model-job recovery (jobRecovery.ts): slot journaled
@@ -503,59 +498,6 @@ async function checkNewFormat(): Promise<void> {
         }
     }
     void sweepOrphanDrafts(validDraftKeys);
-}
-
-/**
- * Purges chunks of data that are not needed.
- */
-async function cleanChunks() {
-    const db = getDatabase()
-    const uncleanable = new Set(getUncleanables(db))
-    const indexes = await forageStorage.keys()
-    const allKeys = new Set(indexes)
-    const characterIds = new Set<string>(
-        db.characters.map((v) => v.chaId)
-    )
-    for (const asset of indexes) {
-        if (asset.endsWith('.meta')) {
-            continue
-        }
-        else if (asset.startsWith('assets/')) {
-            const n = getBasename(asset)
-            if(!uncleanable.has(n)) {
-                await forageStorage.removeItem(asset)
-            }
-        }
-        else if (asset.startsWith('remotes/')) {
-            const name = getBasename(asset).slice(0, -10) //remove .local.bin
-            const exists = characterIds.has(name)
-            if(!exists){
-                let okayToDelete = false
-                try {
-                    const metaPath = asset + '.meta'
-                    const metaExists = allKeys.has(metaPath)
-                    if (metaExists) {
-                        const metaData: Uint8Array = await forageStorage.getItem(metaPath) as unknown as Uint8Array
-                        const metaJson = JSON.parse(new TextDecoder().decode(metaData))
-                        const lastUsed = metaJson.lastUsed as number
-                        if(Date.now() - lastUsed > 1000 * 60 * 60 * 24 * 7) { //not used for 7 days
-                            okayToDelete = true
-                        }
-                    }
-                    else{
-                        //write meta for next time
-                        const metaJson = {
-                            lastUsed: Date.now()
-                        }
-                        await forageStorage.setItem(metaPath, new TextEncoder().encode(JSON.stringify(metaJson)))
-                    }
-                } catch (error) {}
-                if (okayToDelete) {
-                    await forageStorage.removeItem(asset)
-                }
-            }
-        }
-    }
 }
 
 
