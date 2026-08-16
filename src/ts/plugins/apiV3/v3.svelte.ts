@@ -57,17 +57,19 @@ import {
 */
 
 const pluginChannel = new Map<string, Function>();
-const documentEventListeners: Array<{type: string, listener: EventListenerOrEventListenerObject, options: any}> = [];
+const documentEventListeners: Array<{pluginName: string, type: string, listener: EventListenerOrEventListenerObject, options: any}> = [];
 
 class SafeElement {
     #element: HTMLElement;
+    protected readonly pluginName: string;
     __classType = 'REMOTE_REQUIRED' as const;
 
-    constructor(element: HTMLElement) {
+    constructor(element: HTMLElement, pluginName: string = '') {
         if(element.getAttribute('freezed')){
             throw new Error("This element cannot be accessed by SafeELement")
         }
         this.#element = element;
+        this.pluginName = pluginName;
     }
 
     public appendChild(child: SafeElement) {
@@ -88,7 +90,7 @@ class SafeElement {
 
     public cloneNode(deep: boolean = false): SafeElement {
         const cloned = this.#element.cloneNode(deep);
-        return new SafeElement(cloned as HTMLElement);
+        return new SafeElement(cloned as HTMLElement, this.pluginName);
     }
 
     public prepend(child: SafeElement) {
@@ -165,14 +167,14 @@ class SafeElement {
         const children: SafeElement[] = [];
         this.#element.childNodes.forEach(node => {
             if(node instanceof HTMLElement) {
-                children.push(new SafeElement(node));
+                children.push(new SafeElement(node, this.pluginName));
             }
         });
         return new SafeClassArray<SafeElement>(children);
     }
     public getParent(): SafeElement | null {
         if(this.#element.parentElement) {
-            return new SafeElement(this.#element.parentElement);
+            return new SafeElement(this.#element.parentElement, this.pluginName);
         }
         return null;
     }
@@ -205,7 +207,7 @@ class SafeElement {
         const elements: SafeElement[] = [];
         nodeList.forEach(node => {
             if(node instanceof HTMLElement) {
-                elements.push(new SafeElement(node));
+                elements.push(new SafeElement(node, this.pluginName));
             }
         });
         return new SafeClassArray<SafeElement>(elements);
@@ -213,7 +215,7 @@ class SafeElement {
     public querySelector(selector: string): SafeElement | null {
         const element = this.#element.querySelector(selector);
         if(element instanceof HTMLElement) {
-            return new SafeElement(element);
+            return new SafeElement(element, this.pluginName);
         }
         return null;
     }
@@ -317,7 +319,7 @@ class SafeElement {
                 listener(trimEvent(event))
             }
             this.#eventIdMap.set(id, modifiedListener)
-            documentEventListeners.push({type, listener: modifiedListener as EventListenerOrEventListenerObject, options: realOptions})
+            documentEventListeners.push({pluginName: this.pluginName, type, listener: modifiedListener as EventListenerOrEventListenerObject, options: realOptions})
             document.addEventListener(type, modifiedListener, realOptions)
             return id;
         }
@@ -332,7 +334,7 @@ class SafeElement {
                 }, delay);
             }
             this.#eventIdMap.set(id, modifiedListener)
-            documentEventListeners.push({type, listener: modifiedListener as EventListenerOrEventListenerObject, options: realOptions})
+            documentEventListeners.push({pluginName: this.pluginName, type, listener: modifiedListener as EventListenerOrEventListenerObject, options: realOptions})
             document.addEventListener(type, modifiedListener, realOptions);
             return id;
         }
@@ -359,8 +361,8 @@ class SafeElement {
 
 class SafeDocument extends SafeElement {
     __classType = 'REMOTE_REQUIRED' as const;
-    constructor(document: Document) {
-        super(document.documentElement);
+    constructor(document: Document, pluginName: string = '') {
+        super(document.documentElement, pluginName);
     }
     createElement(tagName: string): SafeElement {
         if(!tagWhitelist.includes(tagName.toLowerCase())) {
@@ -371,7 +373,7 @@ class SafeDocument extends SafeElement {
             console.warn(`<a> can be created but href attribute cannot be set directly for security reasons. Use .createAnchorElement(href: string) to create safe anchor elements.`);
         }
         const element = document.createElement(tagName);
-        return new SafeElement(element);
+        return new SafeElement(element, this.pluginName);
     }
     createAnchorElement(href: string): SafeElement {
         const anchor = document.createElement('a');
@@ -385,7 +387,7 @@ class SafeDocument extends SafeElement {
             console.warn(`Invalid URL provided for anchor element: ${href}. Setting href to '#' instead.`);
             anchor.setAttribute('href', '#');
         }
-        return new SafeElement(anchor);
+        return new SafeElement(anchor, this.pluginName);
     }
 }
 
@@ -438,7 +440,7 @@ type SafeMutationCallback = (mutations: SafeClassArray<SafeMutationRecord>) => v
 class SafeMutationObserver {
     #observer: MutationObserver;
     __classType = 'REMOTE_REQUIRED' as const;
-    constructor(callback: SafeMutationCallback) {
+    constructor(callback: SafeMutationCallback, pluginName: string = '') {
         this.#observer = new MutationObserver((mutations) => {
             const safeMutations: SafeMutationRecordObject[] = mutations.map(mutation => {
 
@@ -446,7 +448,7 @@ class SafeMutationObserver {
                     const elements: SafeElement[] = [];
                     nodeList.forEach(node => {
                         if(node instanceof HTMLElement) {
-                            elements.push(new SafeElement(node));
+                            elements.push(new SafeElement(node, pluginName));
                         }
                     })
                     return elements;
@@ -454,7 +456,7 @@ class SafeMutationObserver {
 
                 return {
                     type: mutation.type,
-                    target: new SafeElement(mutation.target as HTMLElement),
+                    target: new SafeElement(mutation.target as HTMLElement, pluginName),
                     addedNodes: elementMapHelper(mutation.addedNodes),
                     removedNodes: elementMapHelper(mutation.removedNodes)
                     
@@ -545,6 +547,12 @@ const unloadV3Plugin = async (pluginName: string) => {
             Promise.all(promises),
             sleep(1000) //timeout after 1 second
         ])
+    }
+    for(let i = documentEventListeners.length - 1; i >= 0; i--){
+        const entry = documentEventListeners[i];
+        if(entry.pluginName !== pluginName) continue;
+        document.removeEventListener(entry.type, entry.listener, entry.options);
+        documentEventListeners.splice(i, 1);
     }
     try {
         instance?.host?.terminate();        
@@ -806,13 +814,14 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             console.warn(`[WARN] addProvider is a powerful API that can potentially be unsafe if used incorrectly. addProvider's functionality might be limited or changed in future updates to ensure security. please use other APIs if possible.`);
             let provs = get(customProviderStore)
             provs.push(name)
-            pluginV2.providers.set(name, async (arg, abortSignal) => {
+            const provider = async (arg: PluginV2ProviderArgument, abortSignal?: AbortSignal) => {
                await getPluginPermission(plugin.name, 'provider', 'periodically');
                //mode is overridden to v3, due to vulnerabilities using mode.
                //Alternative to mode will be added in future
                arg.mode = 'v3'
                return await func(arg, abortSignal);
-            }),
+            }
+            pluginV2.providers.set(name, provider)
             pluginV2.providerOptions.set(name, options ?? {})
             customProviderStore.set(provs)
 
@@ -829,6 +838,23 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
                 tokenizer:options?.model?.tokenizer ??  LLMTokenizer.Unknown
             }
             customV3ProviderMetaStore.push(modelData);
+            addPluginUnloadCallback(plugin.name, () => {
+                if(pluginV2.providers.get(name) !== provider) return;
+                pluginV2.providers.delete(name);
+                pluginV2.providerOptions.delete(name);
+
+                const currentProviders = get(customProviderStore);
+                const providerIndex = currentProviders.indexOf(name);
+                if(providerIndex !== -1){
+                    currentProviders.splice(providerIndex, 1);
+                    customProviderStore.set(currentProviders);
+                }
+
+                const metaIndex = customV3ProviderMetaStore.indexOf(modelData);
+                if(metaIndex !== -1){
+                    customV3ProviderMetaStore.splice(metaIndex, 1);
+                }
+            });
         },
         addTTSPreprocessor: async (
             func: TTSHookFn<BeforeTTSContext, BeforeTTSResult>,
@@ -1065,7 +1091,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             if(!conf){
                 return null;
             }
-            return new SafeDocument(document);
+            return new SafeDocument(document, plugin.name);
         },
         registerSetting: (
             name:string,
@@ -1262,7 +1288,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             console.log(`[RisuAI Plugin: ${plugin.name}] ${message}`);
         },
         createMutationObserver(callback: SafeMutationCallback): SafeMutationObserver {
-            const observer = new SafeMutationObserver(callback)
+            const observer = new SafeMutationObserver(callback, plugin.name)
             addPluginUnloadCallback(plugin.name, () => {
                 observer.disconnect()
             })
@@ -1511,7 +1537,7 @@ type V3PluginInstance = {
 const v3PluginInstances: V3PluginInstance[] = [];
 
 export async function loadV3Plugins(plugins:RisuPlugin[]){
-    await Promise.all(v3PluginInstances.map(async (instance) => {
+    await Promise.all([...v3PluginInstances].map(async (instance) => {
         await unloadV3Plugin(instance.name);
     }));
 
@@ -1522,6 +1548,11 @@ export async function loadV3Plugins(plugins:RisuPlugin[]){
 
     const loadPromises = plugins.map(plugin => executePluginV3(plugin));
     await Promise.all(loadPromises);
+}
+
+export async function reloadV3Plugin(plugin:RisuPlugin){
+    await unloadV3Plugin(plugin.name);
+    await executePluginV3(plugin);
 }
 
 export async function executePluginV3(plugin:RisuPlugin){

@@ -9,7 +9,7 @@ import { DBState, hotReloading, pluginAlertModalStore, selectedCharID } from "..
 import type { ScriptMode } from "../process/scripts";
 import { checkCodeSafety } from "./pluginSafety";
 import { SafeDocument, SafeIdbFactory, SafeLocalStorage } from "./pluginSafeClass";
-import { loadV3Plugins } from "./apiV3/v3.svelte";
+import { loadV3Plugins, reloadV3Plugin } from "./apiV3/v3.svelte";
 import { pluginCodeTranspiler } from "./apiV3/transpiler";
 
 export const customProviderStore = writable([] as string[])
@@ -393,6 +393,7 @@ export async function importPlugin(code:string|null = null, argu:{
         db.plugins ??= []
 
         const oldPluginIndex = db.plugins.findIndex((p: RisuPlugin) => p.name === pluginData.name);
+        const oldPlugin = oldPluginIndex !== -1 ? db.plugins[oldPluginIndex] : undefined;
 
         if(originalPluginName && originalPluginName !== pluginData.name){
             showError(`When updating plugin "${originalPluginName}", the plugin name cannot be changed to "${pluginData.name}". Please keep the original name to update.`)
@@ -422,7 +423,12 @@ export async function importPlugin(code:string|null = null, argu:{
         setDatabaseLite(db)
         void requestImmediateSave()
 
-        loadPlugins()
+        if(isUpdate && oldPlugin?.version === '3.0' && apiInternalVersion === '3.0'){
+            await reloadV3Plugin(pluginData)
+        }
+        else{
+            loadPlugins()
+        }
         
     } catch (error) {
         console.error(error)
