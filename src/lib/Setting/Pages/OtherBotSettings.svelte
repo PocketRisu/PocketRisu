@@ -291,6 +291,8 @@
 
             <span class="text-textcolor">Model <Help key="naiModel"/></span>
             <SelectInput className="mt-2 mb-4" bind:value={DBState.db.NAIImgModel} >
+                <OptionInput value="nai-diffusion-5-full" >nai-diffusion-5-full</OptionInput>
+                <OptionInput value="nai-diffusion-5-curated" >nai-diffusion-5-curated</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-full" >nai-diffusion-4-5-full</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-curated" >nai-diffusion-4-5-curated</OptionInput>
                 <OptionInput value="nai-diffusion-4-full" >nai-diffusion-4-full</OptionInput>
@@ -307,7 +309,9 @@
             <NumberInput className="mt-2" marginBottom min={0} max={2048} bind:value={DBState.db.NAIImgConfig.height}/>
             <span class="text-textcolor">Sampler <Help key="naiSampler"/></span>
 
-            {#if DBState.db.NAIImgModel === 'nai-diffusion-4-full'
+            {#if DBState.db.NAIImgModel === 'nai-diffusion-5-full'
+            || DBState.db.NAIImgModel === 'nai-diffusion-5-curated'
+            || DBState.db.NAIImgModel === 'nai-diffusion-4-full'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-curated-preview'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-5-full'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'}
@@ -349,7 +353,9 @@
             <span class="text-textcolor">Image Reference <Help key="naiImageReference"/></span>
             <SelectInput className="mt-2 mb-4" bind:value={DBState.db.NAIImgConfig.reference_mode}>
                 <OptionInput value="" >None</OptionInput>
-                <OptionInput value="vibe" >Vibe Trasfer</OptionInput>
+                {#if DBState.db.NAIImgModel !== 'nai-diffusion-5-full' && DBState.db.NAIImgModel !== 'nai-diffusion-5-curated'}
+                    <OptionInput value="vibe" >Vibe Trasfer</OptionInput>
+                {/if}
                 {#if DBState.db.NAIImgModel === 'nai-diffusion-4-5-full' || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'}
                     <OptionInput value="character" >Character Reference</OptionInput>
                 {/if}

@@ -213,8 +213,10 @@ export async function generateAIImage(genPrompt:string, currentChar:character, n
             }
         }
 
-        // Add vibe reference_image_multiple if exists
-        if(db.NAIImgConfig.reference_mode === 'vibe' && db.NAIImgConfig.vibe_data) {
+        // Add vibe reference_image_multiple if exists. V5 does not support
+        // Vibe Transfer yet, so ignore a persisted V4/V4.5 reference setting.
+        const isNAIV5Model = db.NAIImgModel === 'nai-diffusion-5-full' || db.NAIImgModel === 'nai-diffusion-5-curated';
+        if(!isNAIV5Model && db.NAIImgConfig.reference_mode === 'vibe' && db.NAIImgConfig.vibe_data) {
             const vibeData = db.NAIImgConfig.vibe_data;
             // Determine which model to use based on vibe_model_selection or fallback to current model
             const modelKey = db.NAIImgConfig.vibe_model_selection || 
