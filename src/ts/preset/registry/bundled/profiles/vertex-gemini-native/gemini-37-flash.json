@@ -1,0 +1,72 @@
+{
+  "id": "vertex-gemini-native:gemini-37-flash",
+  "version": 1,
+  "updatedAt": 1786685377000,
+  "displayName": "Vertex AI - Gemini 3.7 Flash",
+  "providerBaseId": "vertex-gemini-native",
+  "description": "Gemini 3.7 Flash on Vertex AI (native generateContent).",
+  "modelId": "gemini-3.7-flash",
+  "endpoint": {
+    "kind": "vertex-gemini"
+  },
+  "auth": {
+    "kind": "google-service-account",
+    "fields": [
+      "serviceAccountJson"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": [
+      {
+        "key": "presencePenalty",
+        "widget": "slider",
+        "visibility": "hidden",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "frequencyPenalty",
+        "widget": "slider",
+        "visibility": "hidden",
+        "group": "generation",
+        "order": 6
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json",
+    "cache"
+  ],
+  "sourceUrls": [
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",
+    "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent"
+  ],
+  "tags": [
+    "vertex",
+    "google",
+    "gemini",
+    "reasoning",
+    "vision"
+  ],
+  "sortOrder": 841,
+  "displayNameI18n": {
+    "ko": "Vertex AI - Gemini 3.7 Flash"
+  },
+  "descriptionI18n": {
+    "ko": "Vertex AI의 Gemini 3.7 Flash (네이티브 generateContent)."
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current",
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 65536
+  }
+}

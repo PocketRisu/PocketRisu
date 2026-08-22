@@ -9,7 +9,7 @@
   import ShSelect from '../../UI/GUI/ShSelect.svelte'
 
   import { language } from 'src/lang'
-  import { SizeStore } from 'src/ts/stores.svelte'
+  import { SizeStore, InlayGallerySubmenuIndex } from 'src/ts/stores.svelte'
   import { alertConfirm, notifySuccess, notifyError } from 'src/ts/alert'
   import { downloadFile } from 'src/ts/globalApi.svelte'
   import {
@@ -28,7 +28,6 @@
   import SettingRenderer from '../SettingRenderer.svelte'
   import { inlayImageSettingsItems } from 'src/ts/setting/inlayImageSettingsData'
 
-  let submenu = $state(0)
 
   const PAGE_SIZE = 40
 
@@ -360,11 +359,11 @@
       <SettingTabs tabs={[
         { label: language.playground.inlayImageList, value: 0 },
         { label: language.settings, value: 1 },
-      ]} bind:selected={submenu} />
+      ]} bind:selected={$InlayGallerySubmenuIndex} />
     </SettingPage>
   </div>
 
-  {#if submenu === 1}
+  {#if $InlayGallerySubmenuIndex === 1}
     <div class="flex-1 min-h-0 overflow-y-auto">
       <SettingRenderer items={inlayImageSettingsItems} />
     </div>

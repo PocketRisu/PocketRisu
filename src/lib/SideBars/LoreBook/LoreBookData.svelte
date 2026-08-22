@@ -177,9 +177,9 @@
             if (shouldRemove) {
                 const secondConfirm = await alertConfirm(language.removeConfirm + (value.comment || 'Unnamed Folder'));
                 if (secondConfirm) {
-                    if (!open) {
-                        onClose();
-                    }
+                    // onRemove in LoreBookList already closes the entry when it is
+                    // open; closing a closed one here drove openedDetails negative
+                    // and permanently killed drag reordering.
                     deactivateLocally(value);
                     onRemove();
                 }
@@ -195,9 +195,6 @@
         <button class="valuer" onclick={async () => {
             const d = await alertConfirm(language.removeConfirm + getParentLoreName(value))
             if(d){
-                if(!open){
-                    onClose()
-                }
                 onRemove()
             }
         }}>

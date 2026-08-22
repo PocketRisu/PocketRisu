@@ -584,6 +584,8 @@ export async function registerModelDynamic(){
     try {
         if(DBState.db.google.accessToken){
             const res = await fetchNative(`https://generativelanguage.googleapis.com/v1beta/models?key=${DBState.db.google.accessToken}`, {
+                logCategory: 'other',
+                logSource: 'other',
                 method: 'GET',
             })
             const json = await res.json()
@@ -625,6 +627,8 @@ export async function registerModelDynamic(){
     try {
         if(DBState.db.claudeAPIKey){
             const res = await fetchNative('https://api.anthropic.com/v1/models', {
+                logCategory: 'other',
+                logSource: 'other',
                 method: 'GET',
                 headers: {
                     'anthropic-version': '2023-06-01',

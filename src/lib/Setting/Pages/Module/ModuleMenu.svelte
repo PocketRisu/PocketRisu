@@ -5,7 +5,7 @@
     import LoreBookList from "src/lib/SideBars/LoreBook/LoreBookList.svelte";
     import { type CCLorebook, convertExternalLorebook } from "src/ts/process/lorebook.svelte";
     import type { RisuModule } from "src/ts/process/modules";
-    import { DownloadIcon, FolderPlusIcon, HardDriveUploadIcon, PlusIcon, TrashIcon } from "@lucide/svelte";
+    import { DownloadIcon, FolderPlusIcon, HardDriveUploadIcon, ImageIcon, PlusIcon, TrashIcon } from "@lucide/svelte";
     import RegexList from "src/lib/SideBars/Scripts/RegexList.svelte";
     import TriggerList from "src/lib/SideBars/Scripts/TriggerList.svelte";
     import Check from "src/lib/UI/GUI/CheckInput.svelte";
@@ -15,6 +15,8 @@
     import { alertError, notifySuccess } from "src/ts/alert";
     import { exportRegex, importRegex } from "src/ts/process/scripts";
     import { selectMultipleFile } from "src/ts/util";
+    import { openAssetViewer, hasImageAssets } from "src/ts/assetViewer.svelte";
+    import ShButton from "src/lib/UI/GUI/ShButton.svelte";
     
     import { DBState } from 'src/ts/stores.svelte';
   import { v4 } from "uuid";
@@ -247,6 +249,15 @@
 {/if}
 
 {#if submenu === 5 && (Array.isArray(currentModule.assets))}
+    {#if hasImageAssets(currentModule.assets)}
+        <ShButton
+            className="w-full mb-3"
+            onclick={() => openAssetViewer(currentModule.name, currentModule.assets)}
+        >
+            <ImageIcon size={16} />
+            <span>{language.viewInAssetViewer}</span>
+        </ShButton>
+    {/if}
     <span class="mb-2 flex items-center">{language.additionalAssets} <Help key="moduleAdditionalAssets" /></span>
     <div class="w-full max-w-full border border-selected rounded-md p-2">
         <table class="contain w-full max-w-full tabler mt-2">

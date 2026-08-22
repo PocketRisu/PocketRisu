@@ -3,7 +3,7 @@
     import { language } from "src/lang";
     import { ChevronDownIcon, SettingsIcon } from "@lucide/svelte";
     import { alertConfirm, notifySuccess } from "src/ts/alert";
-    import { openSettings, SettingsRoute, AccessibilityTab } from "src/ts/routing";
+    import { openSettings, SettingsRoute, ModelPresetTab } from "src/ts/routing";
     import ModelList from "../UI/ModelList.svelte";
     import ModelPresetList from "../UI/ModelPresetList.svelte";
     import ShSwitch from "../UI/GUI/ShSwitch.svelte";
@@ -58,7 +58,9 @@
     }
 
     function openModelModeSettings() {
-        openSettings(SettingsRoute.Accessibility, undefined, AccessibilityTab.Sidebar);
+        // Model-mode settings live on the Model Preset page's Options tab
+        // (moved there from Accessibility > Sidebar in f678216e).
+        openSettings(SettingsRoute.ModelPreset, undefined, undefined, ModelPresetTab.Options);
     }
 
     async function confirmSetAsDefault() {

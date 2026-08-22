@@ -39,6 +39,18 @@
   ) !important;
 }
 
+/* 모바일 주소바 애니메이션 중에는 dvh 갱신이 브라우저 UI보다 한 박자 늦어
+   앱 아래로 body 배경이 잠깐 드러난다. 기본 body 배경(bgcolor)은 채팅 배경
+   (blend)보다 밝아 이색 띠로 보이므로, NodeOnly Standard 채팅 화면이 떠 있는
+   동안 body 배경을 채팅 배경과 동일하게 맞춰 과도기를 보이지 않게 한다. */
+body:has(.default-chat-screen.nodeonly-standard) {
+  background-color: color-mix(
+    in srgb,
+    var(--risu-theme-bgcolor) 25%,
+    var(--risu-theme-darkbg)
+  );
+}
+
 /* 제작자 코멘트 박스 (메시지 카드와 동일한 bgcolor) */
 .nodeonly-standard .bg-darkbg.rounded-md {
   background-color: var(--risu-theme-bgcolor) !important;

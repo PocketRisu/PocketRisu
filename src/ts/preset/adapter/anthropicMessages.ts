@@ -31,13 +31,24 @@ import { resolveWireModelId } from './wireInvariants'
 // negative override.
 const ANTHROPIC_FALLBACK_MAX_TOKENS = 4096
 
-type AnthropicContentBlock =
+// Hard API limit: a request may declare at most four prompt-cache breakpoints.
+const ANTHROPIC_MAX_CACHE_BREAKPOINTS = 4
+
+// Prompt-cache breakpoint. Anthropic caches the whole prefix up to and including
+// the block carrying this, so it goes on the LAST block of a flagged message.
+interface AnthropicCacheControl {
+    type: 'ephemeral'
+    ttl?: '1h'
+}
+
+type AnthropicContentBlock = (
     | { type: 'text'; text: string }
     | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
     | { type: 'thinking'; thinking: string; signature?: string }
     | { type: 'redacted_thinking'; data: string }
     | { type: 'tool_use'; id: string; name: string; input: unknown }
     | { type: 'tool_result'; tool_use_id: string; content: string }
+) & { cache_control?: AnthropicCacheControl }
 
 interface AnthropicWireMessage {
     role: 'user' | 'assistant'
@@ -164,12 +175,41 @@ async function prepareAnthropicBody(
     //   - model              → adapter selects the wire model id
     //   - stream             → adapter controls the transport mode
     const modelId = resolveWireModelId(preset, { vendorName: 'Anthropic' })
-    const { system, chat } = collectSystemAndChat(options.messages)
-    prepared.body.messages = toAnthropicWireMessages(chat)
+    const { system, systemCachePoint, chat } = collectSystemAndChat(options.messages)
+    const cacheControl: AnthropicCacheControl = options.anthropicCache1h
+        ? { type: 'ephemeral', ttl: '1h' }
+        : { type: 'ephemeral' }
+    // Anthropic rejects a request carrying more than ANTHROPIC_MAX_CACHE_BREAKPOINTS
+    // breakpoints. The cache prompt card's depth is free-form user input and this
+    // adapter does not merge turns, so one breakpoint is emitted per flagged
+    // message — a depth of 5 would 400 an otherwise valid request.
+    const cacheSystem = system.length > 0 && systemCachePoint
+    prepared.body.messages = toAnthropicWireMessages(
+        chat,
+        cacheControl,
+        ANTHROPIC_MAX_CACHE_BREAKPOINTS - (cacheSystem ? 1 : 0),
+    )
     if (system.length > 0) {
-        prepared.body.system = system
+        // A cachePoint that landed on a system message (the cache card's default
+        // role:'all' + a system-role block right before it) would otherwise be
+        // dropped entirely, silently disabling caching for the whole request.
+        // Anthropic caches the system prefix when it is sent in block form.
+        prepared.body.system = cacheSystem
+            ? [{ type: 'text', text: system, cache_control: cacheControl }]
+            : system
     } else {
         delete prepared.body.system
+    }
+    if (options.anthropicCache1h) {
+        // Parity with the classic path. The 1h TTL is GA everywhere Anthropic
+        // publishes (first-party, Bedrock, Vertex), so this header is a leftover
+        // from the beta period and is not required — it is sent because
+        // anthropic-compatible proxies pinned to the beta contract may still
+        // reject a bare `ttl`. Never clobber a user-supplied header.
+        const headers = prepared.headers as Record<string, string>
+        if (!headers['anthropic-beta'] && !headers['Anthropic-Beta']) {
+            headers['anthropic-beta'] = 'extended-cache-ttl-2025-04-11'
+        }
     }
     if (options.tools && options.tools.length > 0) {
         prepared.body.tools = options.tools.map(toAnthropicTool)
@@ -194,20 +234,23 @@ function toAnthropicTool(tool: AdapterToolDef): AnthropicWireTool {
 
 function collectSystemAndChat(messages: AdapterChatMessage[]): {
     system: string
+    systemCachePoint: boolean
     chat: AdapterChatMessage[]
 } {
     const systems: string[] = []
     const chat: AdapterChatMessage[] = []
+    let systemCachePoint = false
     for (const message of messages) {
         if (message.role === 'system') {
             systems.push(message.content)
+            systemCachePoint ||= message.cachePoint === true
         } else {
             // tool / user / assistant are all carried into the wire builder,
             // which groups tool results onto a user turn (Anthropic shape).
             chat.push(message)
         }
     }
-    return { system: systems.join('\n\n'), chat }
+    return { system: systems.join('\n\n'), systemCachePoint, chat }
 }
 
 // Build the Anthropic message array. Consecutive tool-role messages are merged
@@ -215,9 +258,24 @@ function collectSystemAndChat(messages: AdapterChatMessage[]): {
 // requires every tool_use to be answered in the immediately following user
 // turn). Assistant turns emit thinking blocks first, then text, then tool_use —
 // the order Anthropic requires when thinking is enabled.
-function toAnthropicWireMessages(chat: AdapterChatMessage[]): AnthropicWireMessage[] {
+function toAnthropicWireMessages(
+    chat: AdapterChatMessage[],
+    cacheControl: AnthropicCacheControl,
+    breakpointBudget: number,
+): AnthropicWireMessage[] {
     const out: AnthropicWireMessage[] = []
     let pendingToolResults: AnthropicContentBlock[] = []
+
+    // Over budget, keep the LAST flagged turns: they cover the longest prefixes
+    // and stay valid as the conversation grows (later messages are appended after
+    // the breakpoint, so the cached prefix is unchanged).
+    const flagged: number[] = []
+    chat.forEach((message, index) => {
+        if (message.cachePoint) flagged.push(index)
+    })
+    const marked = new Set(
+        breakpointBudget > 0 ? flagged.slice(-breakpointBudget) : [],
+    )
 
     const flushToolResults = () => {
         if (pendingToolResults.length > 0) {
@@ -226,25 +284,52 @@ function toAnthropicWireMessages(chat: AdapterChatMessage[]): AnthropicWireMessa
         }
     }
 
-    for (const message of chat) {
+    // The breakpoint marks "cache everything up to here", so it belongs on the
+    // last block of the turn. Without this the preset path never sent
+    // cache_control at all and every turn re-billed the full prefix.
+    // Replaces the block rather than mutating it: providerEcho blocks are the
+    // model's own objects held in memory for verbatim re-send, and annotating one
+    // in place would leave cache_control stuck on it for later requests.
+    // Invariant: a flagged assistant turn never carries reasoning/providerEcho
+    // today, so this cannot land on a `thinking` block — which Anthropic does not
+    // accept cache_control on. Revisit if history-restored turns start echoing.
+    const markCachePoint = (content: AnthropicContentBlock[]) => {
+        const idx = content.length - 1
+        if (idx >= 0) {
+            content[idx] = { ...content[idx], cache_control: cacheControl }
+        }
+    }
+
+    for (const [index, message] of chat.entries()) {
         if (message.role === 'tool') {
             pendingToolResults.push({
                 type: 'tool_result',
                 tool_use_id: message.toolCallId ?? '',
                 content: message.content,
             })
+            if (marked.has(index)) {
+                markCachePoint(pendingToolResults)
+            }
             continue
         }
         flushToolResults()
         if (message.role === 'assistant') {
             // Verbatim re-send of the model's own turn (thinking signatures intact)
             // when captured this request; reconstruct for history-restored turns.
+            // providerEcho is echoed back verbatim, so copy before annotating it.
             const content = Array.isArray(message.providerEcho)
-                ? (message.providerEcho as AnthropicContentBlock[])
+                ? (message.providerEcho as AnthropicContentBlock[]).slice()
                 : toAssistantBlocks(message)
+            if (marked.has(index)) {
+                markCachePoint(content)
+            }
             out.push({ role: 'assistant', content })
         } else {
-            out.push({ role: 'user', content: toUserBlocks(message) })
+            const content = toUserBlocks(message)
+            if (marked.has(index)) {
+                markCachePoint(content)
+            }
+            out.push({ role: 'user', content })
         }
     }
     flushToolResults()
@@ -317,7 +402,8 @@ function deriveStreamError(data: string): ModelPresetAdapterError {
     return new ModelPresetAdapterError('server', message)
 }
 
-function parseAnthropicMessage(raw: unknown): AdapterChatResponse {
+// Exported (pure) for job-journal recovery replay (process/request/jobRecovery.ts).
+export function parseAnthropicMessage(raw: unknown): AdapterChatResponse {
     if (!isPlainObject(raw)) {
         throw new ModelPresetAdapterError('parse', 'Anthropic response is not an object')
     }
@@ -363,7 +449,8 @@ function parseAnthropicMessage(raw: unknown): AdapterChatResponse {
     }
 }
 
-function parseAnthropicStreamDelta(eventName: string | undefined, raw: unknown): AdapterChatStreamDelta | null {
+// Exported (pure) for job-journal recovery replay (process/request/jobRecovery.ts).
+export function parseAnthropicStreamDelta(eventName: string | undefined, raw: unknown): AdapterChatStreamDelta | null {
     if (!isPlainObject(raw)) return null
     if (eventName === 'content_block_delta') {
         const delta = raw['delta']
@@ -376,6 +463,16 @@ function parseAnthropicStreamDelta(eventName: string | undefined, raw: unknown):
             return { textDelta: '', reasoningDelta: delta['thinking'] as string, raw }
         }
         return null
+    }
+    // Anthropic reports input_tokens (and the cache counters) ONLY on
+    // message_start; message_delta carries output_tokens. Without this the
+    // usage statistics lose the prompt side of every streamed request.
+    if (eventName === 'message_start') {
+        const message = raw['message']
+        if (!isPlainObject(message)) return null
+        const usage = parseAnthropicUsage(message['usage'])
+        if (!usage) return null
+        return { textDelta: '', usage, raw }
     }
     if (eventName === 'message_delta') {
         const delta = raw['delta']
@@ -394,6 +491,17 @@ function parseAnthropicUsage(raw: unknown): AdapterUsage | undefined {
     const usage: AdapterUsage = {}
     if (typeof raw['input_tokens'] === 'number') usage.promptTokens = raw['input_tokens'] as number
     if (typeof raw['output_tokens'] === 'number') usage.completionTokens = raw['output_tokens'] as number
+    // Prompt caching: reads are billed at a discount, writes at a premium.
+    // Anthropic reports both OUTSIDE input_tokens, so fold them in to keep
+    // promptTokens comparable with providers that report one total.
+    const cacheRead = typeof raw['cache_read_input_tokens'] === 'number'
+        ? raw['cache_read_input_tokens'] as number : 0
+    const cacheWrite = typeof raw['cache_creation_input_tokens'] === 'number'
+        ? raw['cache_creation_input_tokens'] as number : 0
+    if (cacheRead > 0 || cacheWrite > 0) {
+        usage.promptTokens = (usage.promptTokens ?? 0) + cacheRead + cacheWrite
+        usage.cachedTokens = cacheRead
+    }
     if (
         usage.promptTokens === undefined
         && usage.completionTokens === undefined

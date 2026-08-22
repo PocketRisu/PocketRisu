@@ -153,7 +153,12 @@ export async function pumpPresetStream(
     try {
         for await (const delta of gen) {
             onDelta?.(delta)
-            if (delta.usage) lastUsage = delta.usage
+            // Merge rather than replace: Anthropic splits usage across events
+            // (input_tokens on message_start, output_tokens on message_delta),
+            // so overwriting would discard whichever half arrived first.
+            if (delta.usage) {
+                lastUsage = lastUsage ? { ...lastUsage, ...delta.usage } : delta.usage
+            }
             if (delta.reasoningDelta) {
                 reasoningText += delta.reasoningDelta
             }

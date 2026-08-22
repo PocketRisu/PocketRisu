@@ -259,6 +259,20 @@ body {
   --risu-theme-success-900: #14532d;
 }
 
+/* Mobile Chrome: with a non-scrollable root (body overflow hidden), the layout
+   viewport that `height: 100%` resolves against freezes at its load-time value
+   and never follows the URL bar hiding/showing — measured on device: ICB stuck
+   at 674px while the visible viewport toggled 704/746px, leaving a background
+   band below the composer. 100dvh tracks the dynamic viewport directly, so the
+   app always fills exactly what is visible. Standalone/PWA and desktop have no
+   dynamic browser UI, where 100dvh === 100% (no behavior change). An explicit
+   db.heightMode still overrides this via updateHeightMode(). */
+@supports (height: 100dvh) {
+  :root {
+    --risu-height-size: 100dvh;
+  }
+}
+
 .x-risu-language-json {
   overflow-x: hidden;
   white-space: pre-wrap;
@@ -365,6 +379,19 @@ body {
 html {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--color-textcolor2) 35%, transparent) transparent;
+}
+
+/* Touch devices: the chat scroller's scrollbar spans the container's full height,
+   so its thumb rides right beside the sticky composer — and since a tap counts as
+   hover, it lingers there. Mobile scrolls by touch (plus the optional scroll-nav
+   buttons), so hide the bar on coarse pointers; desktop keeps it. */
+@media (pointer: coarse) {
+  .default-chat-screen::-webkit-scrollbar {
+    display: none;
+  }
+  .default-chat-screen {
+    scrollbar-width: none;
+  }
 }
 
 * {

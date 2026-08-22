@@ -1,0 +1,43 @@
+{
+  "id": "neuralwatt:openai-compatible",
+  "version": 1,
+  "displayName": "NeuralWatt",
+  "providerBaseId": "neuralwatt",
+  "description": "NeuralWatt energy-metered gateway via OpenAI-compatible API. Enter any model ID listed at portal.neuralwatt.com/models.",
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.neuralwatt.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://api.neuralwatt.com/v1/models",
+    "https://portal.neuralwatt.com/models"
+  ],
+  "tags": [
+    "neuralwatt",
+    "aggregator",
+    "openai-compatible"
+  ],
+  "sortOrder": 540,
+  "displayNameI18n": {
+    "ko": "NeuralWatt"
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current",
+  "updatedAt": 1781835416168
+}

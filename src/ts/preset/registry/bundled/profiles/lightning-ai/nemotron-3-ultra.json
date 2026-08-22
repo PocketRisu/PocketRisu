@@ -1,22 +1,22 @@
 {
   "id": "lightning-ai:nemotron-3-ultra",
-  "version": 1,
-  "updatedAt": 1781104476429,
+  "version": 2,
+  "updatedAt": 1784965102000,
   "displayName": "Nemotron 3 Ultra",
   "displayNameI18n": {
     "ko": "Nemotron 3 Ultra"
   },
   "providerBaseId": "lightning-ai",
-  "description": "Nemotron 3 Ultra via Lightning AI (lightning-ai/nvidia-nemotron-3-ultra-550b-a55b).",
+  "description": "Nemotron 3 Ultra 550B A55B via Lightning AI (lightning-ai/nemotron-3-ultra-550b-a55b).",
   "descriptionI18n": {
-    "ko": "Nemotron 3 Ultra (Lightning AI, lightning-ai/nvidia-nemotron-3-ultra-550b-a55b)."
+    "ko": "Nemotron 3 Ultra 550B A55B (Lightning AI, lightning-ai/nemotron-3-ultra-550b-a55b)."
   },
   "tags": [
     "lightning-ai",
     "nemotron"
   ],
   "sortOrder": 734,
-  "modelId": "lightning-ai/nvidia-nemotron-3-ultra-550b-a55b",
+  "modelId": "lightning-ai/nemotron-3-ultra-550b-a55b",
   "endpoint": {
     "kind": "static",
     "url": "https://lightning.ai/api/v1/chat/completions"

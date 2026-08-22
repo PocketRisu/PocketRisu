@@ -18,10 +18,11 @@
     );
 </script>
 
-<div class="flex items-center justify-between gap-3 py-3 border-t border-darkborderc">
+<!-- data-setting-id: anchor for settings search deep-links (searchIndex.ts) -->
+<div class="flex items-center justify-between gap-3 py-3 border-t border-darkborderc" data-setting-id={item.id}>
     <div class="flex flex-col min-w-0">
         <span class="text-sm text-textcolor">{getLabel(item)}</span>
-        {#if helpText}<p class="text-xs text-textcolor2 mt-0.5">{helpText}</p>{/if}
+        {#if helpText}<p class="text-xs text-textcolor2 mt-0.5 whitespace-pre-line">{helpText}</p>{/if}
     </div>
     <div class="shrink-0">{@render control?.()}</div>
 </div>

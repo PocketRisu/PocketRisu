@@ -95,21 +95,34 @@ export function getFirstMessage(): string | null {
     : null;
 }
 
-export async function processRegexScript(
+// CBS macros are always evaluated. Gating them on the preset toggle made the modal
+// show raw {{char}}/{{user}} text and — worse — feed that unparsed text back on
+// reroll, while the summarization pipeline itself always parses. Only the regex
+// scripts follow the toggle here, since that is what the setting names.
+// runVar is deliberately not passed, so setvar/addvar cannot write chat variables
+// from a preview.
+export async function processMessageForPreview(
   msg: Message,
-  msgIndex: number = -1
+  msgIndex: number = -1,
+  applyRegexScripts: boolean = false
 ): Promise<Message> {
   const char = DBState.db.characters[get(selectedCharID)];
+  const parsed: string = risuChatParser(msg.data, {
+    chara: char,
+    role: msg.role,
+  });
+
+  if (!applyRegexScripts) {
+    return {
+      ...msg,
+      data: parsed,
+    };
+  }
+
   const newData: string = (
-    await processScriptFull(
-      char,
-      risuChatParser(msg.data, { chara: char, role: msg.role }),
-      "editprocess",
-      msgIndex,
-      {
-        chatRole: msg.role,
-      }
-    )
+    await processScriptFull(char, parsed, "editprocess", msgIndex, {
+      chatRole: msg.role,
+    })
   ).data;
 
   return {

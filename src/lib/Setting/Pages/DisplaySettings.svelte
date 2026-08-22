@@ -4,7 +4,7 @@
     import SettingTabs from "src/lib/UI/GUI/SettingTabs.svelte";
     import PresetHeader from "src/lib/UI/GUI/PresetHeader.svelte";
     import SettingRenderer from "../SettingRenderer.svelte";
-    import { DBState, openThemePresetList } from "src/ts/stores.svelte";
+    import { DBState, openThemePresetList, DisplaySubmenuIndex } from "src/ts/stores.svelte";
     import {
         displayOtherHomeItems,
         displayOtherChatItems,
@@ -15,7 +15,6 @@
         displayThemeSettingsItems,
     } from "src/ts/setting/displaySettingsData.svelte";
 
-    let submenu = $state(0);
 </script>
 
 <SettingPage title={language.display}>
@@ -30,14 +29,14 @@
         { label: language.sizeAndSpeed, value: 1 },
         { label: language.others, value: 2 },
     ]}
-    bind:selected={submenu}
+    bind:selected={$DisplaySubmenuIndex}
 />
 
-{#if submenu === 0}
+{#if $DisplaySubmenuIndex === 0}
     <SettingRenderer items={displayThemeSettingsItems} layout="row" />
-{:else if submenu === 1}
+{:else if $DisplaySubmenuIndex === 1}
     <SettingRenderer items={displaySizeSettingsItems} layout="row" />
-{:else if submenu === 2}
+{:else if $DisplaySubmenuIndex === 2}
     <h3 class="text-base font-bold mt-2 mb-1">{language.sectionHomeList}</h3>
     <SettingRenderer items={displayOtherHomeItems} layout="row" />
 

@@ -1,0 +1,63 @@
+{
+  "id": "ollama-cloud:glm-52",
+  "version": 1,
+  "updatedAt": 1781683560445,
+  "displayName": "GLM 5.2",
+  "displayNameI18n": {
+    "ko": "GLM 5.2"
+  },
+  "providerBaseId": "ollama-cloud",
+  "description": "GLM 5.2 hosted on Ollama Cloud (glm-5.2:cloud).",
+  "descriptionI18n": {
+    "ko": "GLM 5.2 (Ollama Cloud 호스팅, glm-5.2:cloud)."
+  },
+  "tags": [
+    "ollama",
+    "cloud",
+    "glm"
+  ],
+  "sortOrder": 619,
+  "modelId": "glm-5.2:cloud",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ollama.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ollama.com/v1/models",
+    "https://ollama.com/library/glm-5.2",
+    "https://docs.ollama.com/cloud"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "notes": "Native 1M-token context (Ollama Cloud model page reports a 976K served window). Ollama Cloud may cap context per deployment and does not expose per-model limits via /v1/models.",
+    "notesI18n": {
+      "ko": "네이티브 1M 토큰 컨텍스트 (Ollama Cloud 모델 페이지 기준 976K 서빙). Ollama Cloud는 배포별로 컨텍스트를 제한할 수 있고 /v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://ollama.com/v1/models",
+      "https://ollama.com/library/glm-5.2",
+      "https://ollama.com/search?c=cloud"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

@@ -1,7 +1,7 @@
 {
   "id": "wellspring:deepseek-v32-marp",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1781836101943,
   "displayName": "DeepSeek V3.2 Marp",
   "displayNameI18n": {
     "ko": "DeepSeek V3.2 Marp"
@@ -52,5 +52,6 @@
     ]
   },
   "recommendedTokenizer": "deepseek",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "Wellspring (arca.live community API) shut down; service terminated."
 }

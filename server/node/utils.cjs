@@ -567,6 +567,29 @@ function normalizeJSON(value) {
     return result;
 }
 
+// Strip auth/control and hop-by-hop headers before forwarding a client-supplied
+// header object upstream. Shared by server.cjs (/proxy2, proxy-stream) and
+// model-jobs.cjs — a single copy of the security strip-list. Keys are passed
+// through as-is (no case normalization); the strip-set matches lowercase names.
+function normalizeForwardHeaders(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        return {};
+    }
+    const normalized = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (typeof key !== 'string') continue;
+        if (typeof value === 'string') {
+            normalized[key] = value;
+        }
+    }
+    delete normalized['risu-auth'];
+    delete normalized['risu-timeout-ms'];
+    delete normalized['host'];
+    delete normalized['connection'];
+    delete normalized['content-length'];
+    return normalized;
+}
+
 module.exports = {
     // Classes
     RisuSaveDecoder,
@@ -576,6 +599,7 @@ module.exports = {
     encodeRisuSaveLegacy,
     calculateHash,
     normalizeJSON,
+    normalizeForwardHeaders,
     checkHeader,
     checkCompressionStreams,
     hasRemoteBlocks,

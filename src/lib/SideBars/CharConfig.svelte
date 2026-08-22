@@ -15,8 +15,10 @@
     import { exportChar } from "src/ts/characterCards";
     import { getElevenTTSVoices, getWebSpeechTTSVoices, getVOICEVOXVoices, oaiVoices, getNovelAIVoices } from "src/ts/process/tts";
     import { getFileSrc } from "src/ts/globalApi.svelte";
+import { openAssetViewer, hasImageAssets } from "src/ts/assetViewer.svelte";
     import TextInput from "../UI/GUI/TextInput.svelte";
     import ShInput from "../UI/GUI/ShInput.svelte";
+import ShButton from "../UI/GUI/ShButton.svelte";
     import NumberInput from "../UI/GUI/NumberInput.svelte";
     import TextAreaInput from "../UI/GUI/TextAreaInput.svelte";
     import Button from "../UI/GUI/Button.svelte";
@@ -255,6 +257,18 @@
 {/if}
 
 
+{#snippet assetViewerButton()}
+    {#if DBState.db.characters[$selectedCharID].type === 'character' && hasImageAssets((DBState.db.characters[$selectedCharID] as character).additionalAssets)}
+        <ShButton
+            className="w-full mb-3"
+            onclick={() => openAssetViewer(DBState.db.characters[$selectedCharID].name, (DBState.db.characters[$selectedCharID] as character).additionalAssets)}
+        >
+            <ImageIcon size={16} />
+            <span>{language.viewInAssetViewer}</span>
+        </ShButton>
+    {/if}
+{/snippet}
+
 {#if $CharConfigSubMenu === 0}
     {#if licensed !== 'private'}
         <h2 class="mb-2 text-2xl font-bold mt-2">{language.characterInfo}</h2>
@@ -286,6 +300,8 @@
     {#if !$MobileGUI}
         <h2 class="mb-2 text-2xl font-bold mt-2">{language.characterDisplay}</h2>
     {/if}
+
+    {@render assetViewerButton()}
 
     <div class="flex w-full rounded-md border border-selected mb-4">
         <button onclick={() => {

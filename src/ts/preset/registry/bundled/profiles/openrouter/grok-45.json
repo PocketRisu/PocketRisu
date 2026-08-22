@@ -1,0 +1,56 @@
+{
+  "id": "openrouter:grok-45",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Grok 4.5",
+  "displayNameI18n": {
+    "ko": "Grok 4.5"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Grok 4.5 via OpenRouter (x-ai/grok-4.5).",
+  "descriptionI18n": {
+    "ko": "Grok 4.5 (OpenRouter, x-ai/grok-4.5)."
+  },
+  "tags": [
+    "openrouter",
+    "grok"
+  ],
+  "sortOrder": 540,
+  "modelId": "x-ai/grok-4.5",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 500000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

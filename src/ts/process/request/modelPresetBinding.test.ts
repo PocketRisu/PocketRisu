@@ -79,6 +79,52 @@ describe('resolveChatModelBinding — regime gate', () => {
     })
 })
 
+describe('resolveChatModelBinding — per-module override', () => {
+    const MODULE_PRESET = { id: 'p-module', name: 'Module' } as any
+    const classicChat = { useModelPreset: undefined, modelBinding: undefined } as any
+
+    beforeEach(() => {
+        mockDb.modelPresets = [PRESET, MODULE_PRESET]
+        mockDb.moduleModelBindingsEnabled = true
+        mockDb.moduleModelBindings = { 'mod-1': 'p-module' }
+    })
+
+    test('a bound module wins over the classic regime', () => {
+        expect(resolveChatModelBinding(classicChat, 'otherAx', 'mod-1'))
+            .toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
+    })
+
+    test("wins for mode 'model' too — a module's LLM call is never the visible reply", () => {
+        expect(resolveChatModelBinding(classicChat, 'model', 'mod-1'))
+            .toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
+    })
+
+    test('master switch off: falls through to normal resolution', () => {
+        mockDb.moduleModelBindingsEnabled = false
+        expect(resolveChatModelBinding(classicChat, 'model', 'mod-1')).toEqual({ kind: 'classic' })
+    })
+
+    test('unbound module falls through to normal resolution', () => {
+        expect(resolveChatModelBinding(classicChat, 'model', 'mod-other')).toEqual({ kind: 'classic' })
+    })
+
+    test('no moduleId (character script / normal send) is untouched', () => {
+        expect(resolveChatModelBinding(classicChat, 'model')).toEqual({ kind: 'classic' })
+    })
+
+    test('dangling preset id falls through rather than blocking', () => {
+        mockDb.moduleModelBindings = { 'mod-1': 'p-deleted' }
+        expect(resolveChatModelBinding(classicChat, 'model', 'mod-1')).toEqual({ kind: 'classic' })
+    })
+
+    test('overrides a preset-regime chat that already resolves to another preset', () => {
+        const presetChat = { useModelPreset: true, modelBinding: bindingWith('p-main') } as any
+        expect(resolveChatModelBinding(presetChat, 'model')).toEqual({ kind: 'modelPreset', preset: PRESET })
+        expect(resolveChatModelBinding(presetChat, 'model', 'mod-1'))
+            .toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
+    })
+})
+
 function presetWith(opts: { schema?: any[]; userValues?: any; defaults?: any } = {}) {
     return {
         id: 'p-main',

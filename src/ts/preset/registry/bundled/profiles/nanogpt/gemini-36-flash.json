@@ -1,0 +1,61 @@
+{
+  "id": "nanogpt:gemini-36-flash",
+  "version": 1,
+  "updatedAt": 1784964633000,
+  "displayName": "Gemini 3.6 Flash",
+  "displayNameI18n": {
+    "ko": "Gemini 3.6 Flash"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "Gemini 3.6 Flash via NanoGPT (google/gemini-3.6-flash).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.6 Flash (NanoGPT, google/gemini-3.6-flash)."
+  },
+  "tags": [
+    "nanogpt",
+    "gemini"
+  ],
+  "sortOrder": 532,
+  "modelId": "google/gemini-3.6-flash",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

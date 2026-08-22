@@ -1,7 +1,7 @@
 {
   "name": "pocketrisu",
   "private": true,
-  "version": "1.8.1",
+  "version": "1.10.0",
   "packageManager": "pnpm@10.34.1",
   "engines": {
     "node": ">=22.12.0"
@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "check:help": "node scripts/check-help-keys.mjs",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.config.server.ts",
     "test:compat": "vitest run --config vitest.config.compat.ts",
     "test:server": "vitest run --config vitest.config.server.ts",
     "runserver": "node server/node/server.cjs",

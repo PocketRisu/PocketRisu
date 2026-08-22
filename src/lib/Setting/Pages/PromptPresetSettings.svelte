@@ -6,7 +6,7 @@
     import SettingRenderer from "../SettingRenderer.svelte";
     import { InfoIcon } from "@lucide/svelte";
     import { language } from "src/lang";
-    import { DBState, openPresetList } from "src/ts/stores.svelte";
+    import { DBState, openPresetList, PromptPresetSubmenuIndex } from "src/ts/stores.svelte";
     import {
         promptPresetBasicInfoItems,
         promptPresetPromptItems,
@@ -14,7 +14,6 @@
         promptPresetAdvancedItems,
     } from "src/ts/setting/promptPresetSettingsData.svelte";
 
-    let submenu = $state(0);
 </script>
 
 <SettingPage title={language.promptPresetMenu}>
@@ -30,20 +29,20 @@
             { label: language.parameters, value: 2 },
             { label: language.advancedSettings, value: 3 },
         ]}
-        bind:selected={submenu}
+        bind:selected={$PromptPresetSubmenuIndex}
     />
 
-    {#if submenu === 0}
+    {#if $PromptPresetSubmenuIndex === 0}
         <SettingRenderer items={promptPresetBasicInfoItems} />
-    {:else if submenu === 1}
+    {:else if $PromptPresetSubmenuIndex === 1}
         <SettingRenderer items={promptPresetPromptItems} />
-    {:else if submenu === 2}
+    {:else if $PromptPresetSubmenuIndex === 2}
         <ShAlert className="mt-4 mb-2">
             {#snippet icon()}<InfoIcon />{/snippet}
             {language.promptPresetParamScopeDesc}
         </ShAlert>
         <SettingRenderer items={promptPresetParameterItems} layout="block" />
-    {:else if submenu === 3}
+    {:else if $PromptPresetSubmenuIndex === 3}
         <SettingRenderer items={promptPresetAdvancedItems} />
     {/if}
 </SettingPage>

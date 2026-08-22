@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:minimax-m3",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "MiniMax M3",
+  "displayNameI18n": {
+    "ko": "MiniMax M3"
+  },
+  "providerBaseId": "openrouter",
+  "description": "MiniMax M3 via OpenRouter (minimax/minimax-m3).",
+  "descriptionI18n": {
+    "ko": "MiniMax M3 (OpenRouter, minimax/minimax-m3)."
+  },
+  "tags": [
+    "openrouter",
+    "minimax"
+  ],
+  "sortOrder": 539,
+  "modelId": "minimax/minimax-m3",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 512000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

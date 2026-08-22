@@ -1,15 +1,15 @@
 {
   "id": "vercel:gpt-51-instant",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1786685377000,
   "displayName": "GPT-5.1 Instant",
   "displayNameI18n": {
     "ko": "GPT-5.1 Instant"
   },
   "providerBaseId": "vercel",
-  "description": "GPT-5.1 Instant via Vercel AI Gateway (openai/gpt-5.1-instant).",
+  "description": "GPT-5.1 Instant via Vercel AI Gateway (openai/gpt-5.1-instant). No longer served by Vercel AI Gateway; use the GPT-5.1 Thinking profile instead.",
   "descriptionI18n": {
-    "ko": "GPT-5.1 Instant (Vercel AI Gateway, openai/gpt-5.1-instant)."
+    "ko": "GPT-5.1 Instant (Vercel AI Gateway, openai/gpt-5.1-instant). Vercel AI Gateway에서 더 이상 제공하지 않습니다. GPT-5.1 Thinking 프로파일을 사용하세요."
   },
   "tags": [
     "vercel",
@@ -53,5 +53,5 @@
     "maxOutputTokens": 16384
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated"
 }

@@ -333,4 +333,13 @@ describe('render timer', () => {
         expect(get(requestStatuses).has('g1')).toBe(false) // entry dropped
         expect(clearSpy).toHaveBeenCalled()                // timer self-stopped
     })
+
+    it('exempts background entries from the abandon cull (jobs run up to 65min)', () => {
+        vi.useFakeTimers()
+        const start = Date.now()
+        startStatus('g1', { kind: 'main', label: 'x', phase: 'background', now: start })
+        vi.advanceTimersByTime(STATUS_ABANDON_MS + 60_000)
+        // Still there — the reattached job's own poll deadline is its GC.
+        expect(get(requestStatuses).get('g1')?.phase).toBe('background')
+    })
 })

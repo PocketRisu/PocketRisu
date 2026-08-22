@@ -1,6 +1,6 @@
 {
   "id": "lightning-ai:gpt-54",
-  "version": 1,
+  "version": 2,
   "updatedAt": 1781104476429,
   "displayName": "GPT-5.4",
   "displayNameI18n": {
@@ -17,7 +17,7 @@
     "gpt",
     "reasoning"
   ],
-  "sortOrder": 702,
+  "sortOrder": 705,
   "modelId": "openai/gpt-5.4-2026-03-05",
   "endpoint": {
     "kind": "static",

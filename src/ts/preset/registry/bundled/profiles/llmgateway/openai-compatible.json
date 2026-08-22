@@ -1,0 +1,49 @@
+{
+  "id": "llmgateway:openai-compatible",
+  "version": 1,
+  "displayName": "LLM Gateway",
+  "providerBaseId": "llmgateway",
+  "description": "LLM Gateway multi-provider aggregator via OpenAI-compatible API. Enter any model ID listed at GET https://api.llmgateway.io/v1/models. Reasoning controls differ per model family (effort for Anthropic, reasoning_effort elsewhere), so set them through additional parameters.",
+  "modelId": "",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.llmgateway.io/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "tags": [
+    "llmgateway",
+    "aggregator",
+    "openai-compatible"
+  ],
+  "sortOrder": 580,
+  "displayNameI18n": {
+    "ko": "LLM Gateway"
+  },
+  "descriptionI18n": {
+    "ko": "OpenAI 호환 API를 통한 LLM Gateway 멀티 공급자 애그리게이터. https://api.llmgateway.io/v1/models 에 나열된 모델 ID를 입력하세요. 추론 제어 파라미터는 모델 계열마다 다르므로(Anthropic은 effort, 그 외는 reasoning_effort) 추가 파라미터로 설정하세요."
+  },
+  "profileStatus": "current",
+  "updatedAt": 1784964953000,
+  "recommendedTokenizer": "tik"
+}

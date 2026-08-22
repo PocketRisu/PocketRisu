@@ -1,6 +1,6 @@
 {
   "id": "lightning-ai:claude-haiku-45",
-  "version": 1,
+  "version": 2,
   "updatedAt": 1781104476429,
   "displayName": "Claude Haiku 4.5",
   "displayNameI18n": {
@@ -16,7 +16,7 @@
     "anthropic",
     "claude"
   ],
-  "sortOrder": 713,
+  "sortOrder": 719,
   "modelId": "anthropic/claude-haiku-4-5-20251001",
   "endpoint": {
     "kind": "static",

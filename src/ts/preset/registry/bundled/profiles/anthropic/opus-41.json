@@ -1,7 +1,7 @@
 {
   "id": "anthropic:opus-41",
-  "version": 1,
-  "updatedAt": 1780592606461,
+  "version": 2,
+  "updatedAt": 1784964391000,
   "displayName": "Claude Opus 4.1",
   "displayNameI18n": {
     "ko": "Claude Opus 4.1"
@@ -316,6 +316,9 @@
     ]
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "outdated",
-  "statusReason": "Below the current Claude 4.6 threshold; superseded by a newer release."
+  "profileStatus": "deprecated",
+  "statusReason": "Claude Opus 4.1 is deprecated and will be retired on August 5, 2026. Migrate to Claude Opus 5.",
+  "statusSourceUrls": [
+    "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+  ]
 }

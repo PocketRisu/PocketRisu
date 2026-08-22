@@ -10,6 +10,13 @@ if (!fs.existsSync(saveDir)) {
     fs.mkdirSync(saveDir, { recursive: true });
 }
 const dbPath = path.join(saveDir, 'risuai.db');
+// Route SQLite temp files (VACUUM's transient DB copy, spilled temp tables) to
+// the save dir. The default /tmp is absent on Termux and is RAM-backed tmpfs in
+// Docker, where a multi-GB vacuum copy turns into an OOM kill. Same-disk also
+// means the optimize endpoint's free-space check covers the temp file too.
+if (!process.env.SQLITE_TMPDIR) {
+    process.env.SQLITE_TMPDIR = saveDir;
+}
 const db = new Database(dbPath);
 
 // WAL mode: better concurrent read performance, single-writer

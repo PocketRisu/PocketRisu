@@ -1,7 +1,7 @@
 {
   "id": "anthropic:opus-47",
-  "version": 2,
-  "updatedAt": 1780842360000,
+  "version": 3,
+  "updatedAt": 1784964391000,
   "displayName": "Claude Opus 4.7",
   "displayNameI18n": {
     "ko": "Claude Opus 4.7"
@@ -18,7 +18,7 @@
     "reasoning",
     "long-context"
   ],
-  "sortOrder": 201,
+  "sortOrder": 208,
   "modelId": "claude-opus-4-7",
   "endpoint": {
     "kind": "static",
@@ -258,5 +258,5 @@
     ]
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "current"
+  "profileStatus": "outdated"
 }

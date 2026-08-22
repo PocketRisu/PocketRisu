@@ -1,0 +1,318 @@
+{
+  "id": "cerebras:gpt-oss-120b",
+  "version": 1,
+  "updatedAt": 1783010768533,
+  "displayName": "OpenAI GPT OSS 120B",
+  "displayNameI18n": {
+    "ko": "OpenAI GPT OSS 120B"
+  },
+  "providerBaseId": "cerebras",
+  "description": "OpenAI GPT OSS 120B via Cerebras Inference.",
+  "descriptionI18n": {
+    "ko": "Cerebras Inference의 OpenAI GPT OSS 120B."
+  },
+  "tags": [
+    "cerebras",
+    "gpt-oss",
+    "reasoning"
+  ],
+  "sortOrder": 560,
+  "modelId": "gpt-oss-120b",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.cerebras.ai/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Cerebras model identifier.",
+      "required": true,
+      "enum": [
+        {
+          "value": "gpt-oss-120b",
+          "label": "GPT OSS 120B"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Cerebras 모델 ID."
+      }
+    },
+    {
+      "key": "temperature",
+      "type": "number",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "temperature"
+      }
+    },
+    {
+      "key": "top_p",
+      "type": "number",
+      "label": "Top P",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "top_p"
+      }
+    },
+    {
+      "key": "max_completion_tokens",
+      "type": "integer",
+      "label": "Max Completion Tokens",
+      "min": 1,
+      "max": 40960,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_completion_tokens"
+      },
+      "default": 8192
+    },
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning_effort"
+      }
+    },
+    {
+      "key": "frequency_penalty",
+      "type": "number",
+      "label": "Frequency Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "frequency_penalty"
+      }
+    },
+    {
+      "key": "presence_penalty",
+      "type": "number",
+      "label": "Presence Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "presence_penalty"
+      }
+    },
+    {
+      "key": "stop",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "stop"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "seed"
+      }
+    },
+    {
+      "key": "response_format",
+      "type": "string",
+      "label": "Response Format",
+      "enum": [
+        {
+          "value": "text",
+          "label": "Text"
+        },
+        {
+          "value": "json_object",
+          "label": "JSON object"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "response_format.type"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      },
+      {
+        "id": "output",
+        "label": "Output",
+        "order": 5,
+        "labelI18n": {
+          "ko": "출력"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "temperature",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "max_completion_tokens",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 2
+      },
+      {
+        "key": "reasoning_effort",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "top_p",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 3
+      },
+      {
+        "key": "frequency_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 4
+      },
+      {
+        "key": "presence_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "stop",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 6
+      },
+      {
+        "key": "seed",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 7
+      },
+      {
+        "key": "response_format",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 1
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 131072,
+    "maxOutputTokens": 40960,
+    "sourceUrls": [
+      "https://api.cerebras.ai/public/v1/models/gpt-oss-120b"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "sourceUrls": [
+    "https://inference-docs.cerebras.ai/api-reference/chat-completions",
+    "https://inference-docs.cerebras.ai/api-reference/models/public-models",
+    "https://api.cerebras.ai/public/v1/models/gpt-oss-120b"
+  ],
+  "profileStatus": "current"
+}

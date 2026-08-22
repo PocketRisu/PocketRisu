@@ -1,0 +1,63 @@
+{
+  "id": "cerebras",
+  "version": 1,
+  "displayName": "Cerebras",
+  "adapterKind": "openai-compatible",
+  "authKinds": [
+    "bearer"
+  ],
+  "endpointKinds": [
+    "static"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json"
+  },
+  "defaultBody": {},
+  "requestSchema": [
+    {
+      "key": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "description": "Cerebras API key.",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "Cerebras API 키."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://inference-docs.cerebras.ai/api-reference/authentication",
+    "https://inference-docs.cerebras.ai/api-reference/chat-completions",
+    "https://inference-docs.cerebras.ai/resources/openai",
+    "https://inference-docs.cerebras.ai/api-reference/models/public-models"
+  ]
+}

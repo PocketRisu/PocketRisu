@@ -1,22 +1,22 @@
 {
   "id": "nanogpt:gemma-4-31b",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1784965102000,
   "displayName": "Gemma 4 31B",
   "displayNameI18n": {
     "ko": "Gemma 4 31B"
   },
   "providerBaseId": "nanogpt",
-  "description": "Gemma 4 31B via NanoGPT (Gemma-4-31B-it).",
+  "description": "Gemma 4 31B via NanoGPT (google/gemma-4-31b-it).",
   "descriptionI18n": {
-    "ko": "Gemma 4 31B (NanoGPT, Gemma-4-31B-it)."
+    "ko": "Gemma 4 31B (NanoGPT, google/gemma-4-31b-it)."
   },
   "tags": [
     "nanogpt",
     "gemma"
   ],
   "sortOrder": 527,
-  "modelId": "Gemma-4-31B-it",
+  "modelId": "google/gemma-4-31b-it",
   "endpoint": {
     "kind": "static",
     "url": "https://nano-gpt.com/api/v1/chat/completions"

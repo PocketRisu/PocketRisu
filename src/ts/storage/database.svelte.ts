@@ -19,11 +19,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { applyModelPresetDefaults } from '../preset/dbDefaults';
 import type { ApiKeyPoolEntry, ModelBindingFields, ModelBindingSet, ModelPreset, ModelPresetMigrationSummary, RegistryCache } from '../preset/types';
 import { emptyModelBinding } from '../preset/types';
+import { isChatStub } from './chatStub';
 
 //APP_VERSION_POINT is to locate the app version in the database file for version bumping
 export let appVer = "2026.2.291" //<APP_VERSION_POINT>
 export let webAppSubVer = ''
 export const nodeOnlyVer: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'
+
+export type StreamingDisplayOptimizationMode = 'off'|'balanced'|'strong'
 
 // 'custom' was a deprecated experimental theme (kwaroran's "not for real use now",
 // 2024-10) whose select option had been hidden but still reachable through legacy
@@ -33,6 +36,7 @@ export function normalizeTheme(theme: string | undefined | null): string {
     if (theme === undefined || theme === null || theme === 'custom') return ''
     return theme
 }
+
 
 export function setDatabase(data:Database){
     if(checkNullish(data.characters)){
@@ -206,6 +210,9 @@ export function setDatabase(data:Database){
     if(checkNullish(data.themePresetsId)){
         data.themePresetsId = 0
     }
+    if(Array.isArray(data.promptTemplate)){
+        data.promptTemplate = normalizePromptTemplate(data.promptTemplate)
+    }
     if(checkNullish(data.sdProvider)){
         data.sdProvider = ''
     }
@@ -330,6 +337,20 @@ export function setDatabase(data:Database){
             style_aware: false,
         }
     }
+    //add NAI character reference / vibe (기존 save 보정)
+    // The block above only runs when NAIImgConfig is missing entirely, so saves that
+    // predate these fields never received them. Bound UI controls then read undefined
+    // — reference_strength_multiple[0] in particular throws on the vibe panel.
+    if(!checkNullish(data.NAIImgConfig)){
+        data.NAIImgConfig.reference_mode ??= ''
+        data.NAIImgConfig.character_image ??= ''
+        data.NAIImgConfig.character_base64image ??= ''
+        data.NAIImgConfig.style_aware ??= false
+        data.NAIImgConfig.InfoExtracted ??= 1
+        if(!Array.isArray(data.NAIImgConfig.reference_strength_multiple)){
+            data.NAIImgConfig.reference_strength_multiple = [0.7]
+        }
+    }
     //add NAI v4 (사용중인 사람용 추가 DB Init)
     if(checkNullish(data.NAIImgConfig.v4_prompt)){
         data.NAIImgConfig.autoSmea = false;
@@ -400,18 +421,36 @@ export function setDatabase(data:Database){
     // Concrete default so the settings toggle (reads !!value) and the runtime
     // gate (statusEnabled) agree. Default on — see request-status-toast-infra.md.
     data.showRequestStatus ??= true
+    // Request logging default ON. Bodies live in save/request-logs.db (never in
+    // the .bin export) under a byte budget, and the log is the only way to see
+    // what a server-side job actually sent — see request-log-usage.md.
+    data.requestLogEnabled ??= true
+    // Off by default: asking for usage on a streamed request means sending
+    // stream_options, which a strict OpenAI-compatible server can reject with
+    // a 400 and break the generation. Opt-in, per provider tolerance.
+    data.requestLogStreamUsage ??= false
+    // Server-side requests default ON (2026-07-28 user decision, supersedes the
+    // design note's "first release OFF"): the primary remote-mobile pattern is
+    // exactly what it protects, cache/aux hazards are structurally excluded
+    // from recovery (kind='aux', pinned cache fetch), degraded recovery falls
+    // back to pre-feature behavior, and the toggle remains the kill switch.
+    data.nodeOnlyServerSideRequests ??= true
     if(!data.formatingOrder.includes('personaPrompt')){
         data.formatingOrder.splice(data.formatingOrder.indexOf('main'),0,'personaPrompt')
     }
     data.selectedPersona ??= 0
     data.personaPrompt ??= ''
-    data.personas ??= [{
-        name: data.username,
-        personaPrompt: "",
-        icon: data.userIcon,
-        note: data.userNote,
-        largePortrait: false
-    }]
+    // A corrupted/imported DB can carry `personas: []`, which ??= leaves alone —
+    // persona UI then derefs personas[0], so rebuild the default entry too.
+    if(!Array.isArray(data.personas) || data.personas.length === 0){
+        data.personas = [{
+            name: data.username,
+            personaPrompt: "",
+            icon: data.userIcon,
+            note: data.userNote,
+            largePortrait: false
+        }]
+    }
     data.classicMaxWidth ??= false
     data.ooba ??= safeStructuredClone(defaultOoba)
     data.ainconfig ??= safeStructuredClone(defaultAIN)
@@ -512,6 +551,9 @@ export function setDatabase(data:Database){
     }
     if (data.botPresets) {
         for (const preset of data.botPresets) {
+            if(Array.isArray(preset.promptTemplate)){
+                preset.promptTemplate = normalizePromptTemplate(preset.promptTemplate)
+            }
             if (typeof preset.openrouterProvider === 'string') {
                 const oldProvider = preset.openrouterProvider as unknown as string;
                 preset.openrouterProvider = {
@@ -684,6 +726,8 @@ export function setDatabase(data:Database){
     data.showPresetInSidebar ??= true
     data.showPersonaInSidebar ??= true
     data.nodeOnlyModelModeLock ??= 'none'
+    data.moduleModelBindingsEnabled ??= false
+    data.moduleModelBindings ??= {}
     data.disableMobileDragDrop ??= false
     data.disableToggleBinding ??= false
     data.hideAllImages ??= false
@@ -719,6 +763,7 @@ export function setDatabase(data:Database){
     data.saveSignatures ??= false
     data.nodeOnlyScrollButtonType ??= 'four'
     data.nodeOnlyHideRecentChats ??= false
+    data.nodeOnlyAutoCleanAssets ??= false
     data.keepSessionAlive ??= 'off'
     data.localNetworkMode ??= false
     if (typeof data.localNetworkMode !== 'boolean') data.localNetworkMode = false
@@ -730,7 +775,22 @@ export function setDatabase(data:Database){
     data.moveInsteadOfCopyOnCMPConvert ??= false
     data.chatLoadInitialPages = normalizeChatLoadPages(data.chatLoadInitialPages, DEFAULT_CHAT_LOAD_INITIAL_PAGES)
     data.chatLoadAdditionalPages = normalizeChatLoadPages(data.chatLoadAdditionalPages, DEFAULT_CHAT_LOAD_ADDITIONAL_PAGES)
+    // NodeOnly default: 'balanced' (upstream defaults to 'off') — remote/mobile
+    // usage benefits from coalesced streaming updates out of the box.
+    data.streamingDisplayOptimizationMode ??= (data as {largeChatPerformanceMode?: StreamingDisplayOptimizationMode}).largeChatPerformanceMode ?? 'balanced'
+    delete (data as {largeChatPerformanceMode?: unknown}).largeChatPerformanceMode
     data.fixedChatTextarea ??= true
+    for(const char of data.characters){
+        for(const chat of char.chats ?? []){
+            // Stubs (lazy-loaded chats) carry no streaming flags; skip them so
+            // we don't graft chat-only fields onto stub objects.
+            if(!chat || isChatStub(chat)){
+                continue
+            }
+            chat.isStreaming = false
+            chat.activeStreamingDisplayOptimizationMode = undefined
+        }
+    }
     applyModelPresetDefaults(data)
     changeLanguage(data.language)
     setDatabaseLite(data)
@@ -1339,6 +1399,13 @@ export interface Database{
     // Show the floating request-status toast (phase / thinking+response tokens /
     // tok/s / stall) for model-preset requests. Memory-only UI feature; default on.
     showRequestStatus: boolean
+    // Persist outgoing provider requests (body + assembled response + tokens)
+    // to save/request-logs.db. Default on; the token usage statistics come from
+    // the same write, so turning it off stops both.
+    requestLogEnabled: boolean
+    // Send `stream_options: {include_usage: true}` on streaming OpenAI-compatible
+    // requests so token counts reach the usage statistics. Default off.
+    requestLogStreamUsage: boolean
     chatCompression: boolean
     claudeRetrivalCaching: boolean
     outputImageModal: boolean
@@ -1383,6 +1450,21 @@ export interface Database{
     // falling back to useModelPresetByDefault for chats that never chose. Read
     // by resolveChatModelBinding (the runtime regime chokepoint).
     nodeOnlyModelModeLock?: 'legacy' | 'preset' | 'none'
+    // Per-module model override (moduleId -> ModelPreset id). A module's own
+    // LLM calls (Lua/Python `LLMMain`/`simpleLLM`/`axLLMMain`, trigger
+    // `runLLM`/`runAxLLM`/`sendAIprompt`/`v2RunLLM`) dispatch via the bound
+    // preset instead of the chat's main/sub model, regardless of request mode.
+    //
+    // Deliberately stored OUTSIDE the module object: modules are exported and
+    // shared as .risum, and a preset id only means something in the environment
+    // that created it. Dangling ids (deleted preset / uninstalled module) are
+    // never auto-cleared, matching the P4 policy — a re-imported preset or
+    // re-installed module reconnects on its own.
+    //
+    // moduleModelBindingsEnabled is the master switch. Off (default) skips the
+    // override branch entirely, so behaviour is byte-identical to before.
+    moduleModelBindingsEnabled?: boolean
+    moduleModelBindings?: Record<string, string>
     modelPresetMigrationVersion?: number
     modelPresetMigrationAppliedAt?: number
     modelPresetMigrationReport?: ModelPresetMigrationSummary
@@ -1434,6 +1516,7 @@ export interface Database{
     moveInsteadOfCopyOnCMPConvert?:boolean
     chatLoadInitialPages?: number
     chatLoadAdditionalPages?: number
+    streamingDisplayOptimizationMode?: StreamingDisplayOptimizationMode
     ImagenModel:string
     ImagenImageSize:string
     ImagenAspectRatio:string
@@ -1473,6 +1556,16 @@ export interface Database{
     dynamicModelRegistry?:boolean
     nodeOnlyScrollButtonType?:'four'|'two'|'off'
     nodeOnlyHideRecentChats?:boolean
+    // Delete unreferenced assets/* on boot (cleanChunks). Default OFF: the
+    // reference walker deleting an asset it simply didn't know about is
+    // unrecoverable, so orphan removal is a deliberate act from the storage
+    // dashboard instead. Remote-character caches are swept regardless.
+    nodeOnlyAutoCleanAssets?:boolean
+    // Route main-chat model-preset requests through server-side jobs
+    // (/api/model-jobs) so generation survives client disconnects.
+    // Default OFF (undefined is falsy) — no migration needed. Toggled in
+    // advanced settings (advancedSettingsData.ts).
+    nodeOnlyServerSideRequests?:boolean
     seperateParametersByModel?:boolean
     disableSeperateParameterChangeOnPresetChange?:boolean
     saveSignatures?:boolean
@@ -2039,6 +2132,7 @@ export interface Chat{
     sdData?:string
     suggestMessages?:string[]
     isStreaming?:boolean
+    activeStreamingDisplayOptimizationMode?:StreamingDisplayOptimizationMode
     scriptstate?:{[key:string]:string|number|boolean}
     modules?:string[]
     id?:string
@@ -2441,7 +2535,7 @@ export function saveCurrentPreset(){
         proxyRequestModel: db.proxyRequestModel,
         openrouterRequestModel: db.openrouterRequestModel,
         NAISettings: safeStructuredClone(db.NAIsettings),
-        promptTemplate: db.promptTemplate ?? null,
+        promptTemplate: normalizePromptTemplate(db.promptTemplate) ?? null,
         NAIadventure: db.NAIadventure ?? false,
         NAIappendName: db.NAIappendName ?? false,
         localStopStrings: db.localStopStrings,
@@ -2559,7 +2653,7 @@ export function setPreset(db:Database, newPres: botPreset){
     db.autoSuggestPrompt = newPres.autoSuggestPrompt ?? db.autoSuggestPrompt
     db.autoSuggestPrefix = newPres.autoSuggestPrefix ?? db.autoSuggestPrefix
     db.autoSuggestClean = newPres.autoSuggestClean ?? db.autoSuggestClean
-    db.promptTemplate = newPres.promptTemplate
+    db.promptTemplate = normalizePromptTemplate(newPres.promptTemplate)
     db.NAIadventure = newPres.NAIadventure
     db.NAIappendName = newPres.NAIappendName
     db.NAIsettings.cfg_scale ??= 1
@@ -2918,6 +3012,9 @@ export async function importPreset(f:{
         pre = {...presetTemplate,...(JSON.parse(Buffer.from(f.data).toString('utf-8')))}
         console.log(pre)
     }
+    if(pre?.promptTemplate !== undefined){
+        pre.promptTemplate = normalizePromptTemplate(pre.promptTemplate)
+    }
     let db = getDatabase()
     if(pre.presetVersion && pre.presetVersion >= 3){
         //NAI preset
@@ -3044,6 +3141,7 @@ export async function importPreset(f:{
                 role: 'bot'
             })
         }
+        pr.promptTemplate = normalizePromptTemplate(pr.promptTemplate)
         pr.name = "Imported ST Preset"
         pr.id = uuidv4()
         db.botPresets.push(pr)
@@ -3055,4 +3153,58 @@ export async function importPreset(f:{
         db.botPresets = []
     }
     db.botPresets.push(pre)
+}
+
+function normalizePromptRole(role: unknown): 'user'|'bot'|'system'|null {
+    if(role === 'user' || role === 'bot' || role === 'system'){
+        return role
+    }
+    if(role === 'assistant' || role === 'char'){
+        return 'bot'
+    }
+    return null
+}
+
+function normalizeCacheRole(role: unknown): 'user'|'assistant'|'system'|'all' {
+    if(role === 'user' || role === 'assistant' || role === 'system' || role === 'all'){
+        return role
+    }
+    if(role === 'bot' || role === 'char'){
+        return 'assistant'
+    }
+    return 'all'
+}
+
+function normalizePromptTemplate(template: PromptItem[]|null|undefined): PromptItem[]|null {
+    if(!Array.isArray(template)){
+        return null
+    }
+    const normalized = safeStructuredClone(template) as any[]
+    for(const item of normalized){
+        if(!item || typeof item !== 'object'){
+            continue
+        }
+        switch(item.type){
+            case 'plain':
+            case 'jailbreak':
+            case 'cot':{
+                item.role = normalizePromptRole(item.role) ?? 'system'
+                break
+            }
+            case 'persona':
+            case 'description':
+            case 'authornote':
+            case 'memory':{
+                if(item.role2 !== undefined && item.role2 !== null){
+                    item.role2 = normalizePromptRole(item.role2) ?? 'system'
+                }
+                break
+            }
+            case 'cache':{
+                item.role = normalizeCacheRole(item.role)
+                break
+            }
+        }
+    }
+    return normalized as PromptItem[]
 }

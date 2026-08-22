@@ -30,27 +30,6 @@
     "start_url": "/",
     "display": "standalone",
     "theme_color": "#4682B4",
-    "share_target": {
-        "action": "/receive-files/",
-        "method": "POST",
-        "enctype": "multipart/form-data",
-        "params": {
-            "files": [
-                {
-                    "name": "character",
-                    "accept": [".charx"]
-                },
-                {
-                    "name": "preset",
-                    "accept": [".risup"]
-                },
-                {
-                    "name": "module",
-                    "accept": [".risum"]
-                }
-            ]
-        }
-    },
     "file_handlers": [
         {
             "action": "/",

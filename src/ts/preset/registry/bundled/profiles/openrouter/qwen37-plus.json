@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:qwen37-plus",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Qwen3.7 Plus",
+  "displayNameI18n": {
+    "ko": "Qwen3.7 Plus"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Qwen3.7 Plus via OpenRouter (qwen/qwen3.7-plus).",
+  "descriptionI18n": {
+    "ko": "Qwen3.7 Plus (OpenRouter, qwen/qwen3.7-plus)."
+  },
+  "tags": [
+    "openrouter",
+    "qwen"
+  ],
+  "sortOrder": 542,
+  "modelId": "qwen/qwen3.7-plus",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

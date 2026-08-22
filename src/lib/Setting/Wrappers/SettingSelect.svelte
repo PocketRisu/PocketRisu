@@ -59,7 +59,7 @@
         {/snippet}
     </SettingRowLayout>
 {:else}
-    <span class="text-textcolor {item.classes ?? 'mt-4'}">
+    <span class="text-textcolor {item.classes ?? 'mt-4'}" data-setting-id={item.id}>
         {getLabel(item)}
         {#if item.helpKey}<Help key={item.helpKey as any}/>{/if}
     </span>

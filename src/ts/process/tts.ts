@@ -188,6 +188,8 @@ export async function sayTTS(character:character,text:string) {
                 const format  = cfg?.format || 'mp3'
 
                 const res = await globalFetch(`${baseURL}/audio/speech`, {
+                    logCategory: 'tts',
+                    logSource: 'tts',
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -233,6 +235,8 @@ export async function sayTTS(character:character,text:string) {
                 const url = `https://api.novelai.net/ai/generate-voice?text=${encodedText}&voice=-1&seed=${encodedSeed}&opus=false&version=${character.naittsConfig.version}`;
 
                 const response = await globalFetch(url, {
+                    logCategory: 'tts',
+                    logSource: 'tts',
                     method: 'GET',
                     headers: {
                         "Authorization": "Bearer " + db.NAIApiKey,
@@ -317,6 +321,8 @@ export async function sayTTS(character:character,text:string) {
                 if (character.gptSoVitsConfig.use_auto_path){
                     console.log('auto')
                     const path = await globalFetch(`${character.gptSoVitsConfig.url}/get_path`, {
+                        logCategory: 'tts',
+                        logSource: 'tts',
                         method: 'GET',
                         headers: {
                             'Content-Type': 'application/json'
@@ -337,6 +343,8 @@ export async function sayTTS(character:character,text:string) {
                 console.log(body)
 
                 const response = await globalFetch(`${character.gptSoVitsConfig.url}/tts`, {
+                    logCategory: 'tts',
+                    logSource: 'tts',
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -395,6 +403,8 @@ export async function sayTTS(character:character,text:string) {
                 console.log(body)
 
                 const response = await globalFetch(`https://api.fish.audio/v1/tts`, {
+                    logCategory: 'tts',
+                    logSource: 'tts',
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

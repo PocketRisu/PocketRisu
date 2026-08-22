@@ -1,7 +1,8 @@
 import { getDatabase, setDatabase } from 'src/ts/storage/database.svelte';
 import { selectedCharID } from 'src/ts/stores.svelte';
 import { get } from 'svelte/store';
-import { doingChat, sendChat } from '../index.svelte';
+import { sendChat } from '../index.svelte';
+import { endAllGenerations } from '../generationState';
 import { downloadFile } from 'src/ts/globalApi.svelte';
 import { HypaProcesser } from '../memory/hypamemory';
 import { BufferToText as BufferToText, selectMultipleFile } from 'src/ts/util';
@@ -44,7 +45,7 @@ async function sendPofile(arg:sendFileArg){
             })
             currentChar.chats[currentChar.chatPage] = currentChat
             db.characters[get(selectedCharID)] = currentChar
-            doingChat.set(false)
+            endAllGenerations()
             await sendChat(-1);
             currentChar = db.characters[get(selectedCharID)]
             currentChat = currentChar.chats[currentChar.chatPage]

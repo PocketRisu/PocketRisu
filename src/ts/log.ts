@@ -36,7 +36,7 @@ function randomId(): string {
 }
 
 let cachedClientId: string | null = null
-function getClientId(): string {
+export function getClientId(): string {
     if (cachedClientId) return cachedClientId
     // Private-mode browsers and storage-disabled environments throw on localStorage access.
     // Fall back to a session-only random id so log capture keeps working even without persistence.

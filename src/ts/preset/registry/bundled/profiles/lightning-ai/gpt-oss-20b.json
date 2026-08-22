@@ -1,0 +1,55 @@
+{
+  "id": "lightning-ai:gpt-oss-20b",
+  "version": 1,
+  "updatedAt": 1784964865000,
+  "displayName": "GPT-OSS 20B",
+  "displayNameI18n": {
+    "ko": "GPT-OSS 20B"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "GPT-OSS 20B via Lightning AI (lightning-ai/gpt-oss-20b).",
+  "descriptionI18n": {
+    "ko": "GPT-OSS 20B (Lightning AI, lightning-ai/gpt-oss-20b)."
+  },
+  "tags": [
+    "lightning-ai",
+    "gpt-oss"
+  ],
+  "sortOrder": 735,
+  "modelId": "lightning-ai/gpt-oss-20b",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 128000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

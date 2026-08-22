@@ -1,0 +1,57 @@
+{
+  "id": "vercel:gemini-37-flash",
+  "version": 1,
+  "updatedAt": 1786685377000,
+  "displayName": "Gemini 3.7 Flash",
+  "displayNameI18n": {
+    "ko": "Gemini 3.7 Flash"
+  },
+  "providerBaseId": "vercel",
+  "description": "Gemini 3.7 Flash via Vercel AI Gateway (google/gemini-3.7-flash).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.7 Flash (Vercel AI Gateway, google/gemini-3.7-flash)."
+  },
+  "tags": [
+    "vercel",
+    "gemini"
+  ],
+  "sortOrder": 585,
+  "modelId": "google/gemini-3.7-flash",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

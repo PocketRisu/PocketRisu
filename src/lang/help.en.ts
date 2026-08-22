@@ -94,6 +94,9 @@ export const helpEn = {
         openAIFixer: "OpenAI Fixer is a plugin that fixes some of the problems of OpenAI.",
         sayNothing: "If enabled, it will input 'say nothing' when no string inputed.",
         showUnrecommended: "If enabled, it will show unrecommended, deprecated settings. it is NOT RECOMMENDED to use these settings.",
+        streamingDisplayOptimizationMode:
+            "Controls how the screen updates while streaming to reduce lag.",
+        moduleModelBindingEnable: "Use the assigned model preset for requests a module sends itself (scripts and triggers). When off, those requests use the chat's own main/sub model settings.",
         allowV2Plugin: "Warning: This enables deprecated V2.0 plugin execution. V2.0 plugins bypass the V2.1 safety check and may be unsafe. Leave this disabled unless you explicitly trust the plugin and cannot migrate it to V3 yet.",
         imageCompression: "If enabled, it will compress images when exporting character. if animated images doesn't works, try disabling this option.",
         inlayImageLossless: "If enabled, inlay images will be saved as lossless PNG instead of compressed WebP. This preserves original quality but uses significantly more storage.",
@@ -281,6 +284,7 @@ export const helpEn = {
             "The number of recent chat messages used as the query for similarity search. " +
             "Higher values use more chat context to determine similarity.",
         nodeOnlyScrollButtonType: "How the chat scroll buttons are shown. 4 Buttons adds jump-to-top and jump-to-bottom controls; 2 Buttons keeps only previous/next message navigation; Off hides them.",
+        nodeOnlyServerSideRequests: "The server sends requests on your behalf and preserves the response. Generation continues even if the screen turns off or the connection drops, and the response is recovered automatically when you return. This only applies to model preset requests; turning it off restores the previous direct-request behavior.",
         confirmReroll: "Ask for confirmation before regenerating a message.",
         sendWithEnter: "Send the message with Enter.",
         sendKeyPC: "Which key sends a message on desktop.",

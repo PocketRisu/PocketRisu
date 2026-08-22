@@ -371,15 +371,17 @@
                         openFolders={openFolders()}
                         isLastInContainer={book === lastVisibleItem}
                         onRemove={() => {
-                            if (openedRefs.has(book) && !book.folder) {
-                                onClose(true, book)
-                            }
-                            else if(openedRefs.has(book) && book.folder){
-                                onClose(false, book)
+                            // isDetail must use the same basis as the open side
+                            // (LoreBookData passes value.mode !== 'folder'). Keying it
+                            // off book.folder — the parent folder key — leaked the
+                            // counter for lore inside a folder and drove it negative
+                            // for an open top-level folder.
+                            if (openedRefs.has(book)) {
+                                onClose(book.mode !== 'folder', book)
                             }
                             
-                            let lore = externalLoreBooks
-                            
+                            const lore = externalLoreBooks
+
                             // When deleting a folder, also delete all items that belong to that folder
                             if (book.mode === 'folder') {
                                 // Close items belonging to the folder if they are open
@@ -388,18 +390,19 @@
                                         onClose(true, item)
                                     }
                                 })
-                                
-                                // Filter out the folder and all items belonging to it
-                                lore = lore.filter(item => 
+
+                                // Remove the folder and its items in place. externalLoreBooks is not
+                                // $bindable, so reassigning it here would drop the deletion on the
+                                // floor and the folder would come back on re-entry.
+                                const kept = lore.filter(item =>
                                     item !== book && item.folder !== book.key
                                 )
+                                lore.splice(0, lore.length, ...kept)
                             } else {
                                 // Delete regular item
                                 lore.splice(i, 1)
                             }
-                            
-                            externalLoreBooks = lore
-                        }} 
+                        }}
                         onOpen={(isDetail = true) => onOpen(isDetail, book)}
                         onClose={(isDetail = true) => onClose(isDetail, book)}
                         bind:externalLoreBooks={externalLoreBooks} />
@@ -422,11 +425,13 @@
                         openFolders={openFolders()}
                         isLastInContainer={book === lastVisibleItem}
                         onRemove={() => {
-                            if (openedRefs.has(book) && !book.folder) {
-                                onClose(true, book)
-                            }
-                            else if(openedRefs.has(book) && book.folder){
-                                onClose(false, book)
+                            // isDetail must use the same basis as the open side
+                            // (LoreBookData passes value.mode !== 'folder'). Keying it
+                            // off book.folder — the parent folder key — leaked the
+                            // counter for lore inside a folder and drove it negative
+                            // for an open top-level folder.
+                            if (openedRefs.has(book)) {
+                                onClose(book.mode !== 'folder', book)
                             }
                             
                             let lore  = DBState.db.characters[$selectedCharID].globalLore
@@ -473,11 +478,13 @@
                         openFolders={openFolders()}
                         isLastInContainer={book === lastVisibleItem}
                         onRemove={() => {
-                            if (openedRefs.has(book) && !book.folder) {
-                                onClose(true, book)
-                            }
-                            else if(openedRefs.has(book) && book.folder){
-                                onClose(false, book)
+                            // isDetail must use the same basis as the open side
+                            // (LoreBookData passes value.mode !== 'folder'). Keying it
+                            // off book.folder — the parent folder key — leaked the
+                            // counter for lore inside a folder and drove it negative
+                            // for an open top-level folder.
+                            if (openedRefs.has(book)) {
+                                onClose(book.mode !== 'folder', book)
                             }
                             
                             let lore  = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].localLore

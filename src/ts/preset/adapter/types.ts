@@ -132,8 +132,13 @@ export interface AdapterUsage {
     completionTokens?: number
     totalTokens?: number
     // Prompt tokens served from a context cache (Gemini usageMetadata
-    // .cachedContentTokenCount). Basis for the hit/savings display.
+    // .cachedContentTokenCount, Anthropic cache_read_input_tokens, OpenAI
+    // prompt_tokens_details.cached_tokens). Basis for the hit/savings display.
+    // Always a SUBSET of promptTokens, never an addition to it.
     cachedTokens?: number
+    // Tokens spent on reasoning/thinking, when the provider reports them
+    // separately. Already included in completionTokens.
+    reasoningTokens?: number
 }
 
 export interface AdapterChatResponse {
@@ -169,6 +174,13 @@ export interface AdapterCacheContext {
     // The request's generationId, so the cache layer can key a future
     // hit/savings badge to this exact request (request-status channel).
     generationId?: string
+    // Fetch for the cache lifecycle calls (create/extend/delete), separate from
+    // the chat request's fetchImpl. The server-side job path routes only the
+    // MAIN chat request through a durable job (one job per chat is enforced
+    // server-side, and boot recovery decodes journals as chat responses) — cache
+    // housekeeping must stay on the plain proxied fetch. Falls back to the
+    // chat fetchImpl when absent, so callers that don't set it are unchanged.
+    fetchImpl?: typeof fetch
 }
 
 export interface AdapterChatOptions {
@@ -176,6 +188,16 @@ export interface AdapterChatOptions {
     tools?: AdapterToolDef[]             // when present, enables tool use on the request
     abortSignal?: AbortSignal
     fetchImpl?: typeof fetch
+    /** Ask the provider to report token usage on a streamed response
+     *  (OpenAI-compatible `stream_options.include_usage`). Off unless the user
+     *  opted in — a strict server can reject the field with a 400. The adapter
+     *  never reads the database itself, so the caller passes this in. */
+    collectStreamUsage?: boolean
+    /** Extend Anthropic prompt-cache breakpoints to the 1-hour TTL instead of the
+     *  default 5 minutes. Same database flag the classic path reads
+     *  (`db.claude1HourCaching`); passed in because adapters never touch the
+     *  database. Ignored by every other adapter. */
+    anthropicCache1h?: boolean
     // Per-request identifier (= the message generationId issued in sendChat).
     // Threaded through so request-status / context-cache consumers can key
     // status and badges to this exact request. Optional and side-effect free:

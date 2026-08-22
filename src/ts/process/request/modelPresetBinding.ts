@@ -42,9 +42,24 @@ function findPreset(id: string | undefined, presets: ModelPreset[]): ModelPreset
 export function resolveChatModelBinding(
     chat: Chat | null | undefined,
     mode: ModelModeExtended,
+    moduleId?: string,
 ): ResolvedBinding {
     const db = getDatabase()
     const lock = db.nodeOnlyModelModeLock ?? 'none'
+
+    // Per-module override. Wins over everything below — including mode 'model' —
+    // because the user bound this specific module to this specific preset; a
+    // module's LLM call is never the reply the user is reading, so there is no
+    // "main is expensive, don't silently swap it" concern here.
+    //
+    // Regime-independent on purpose: the binding names a preset explicitly and
+    // sits behind a master switch that is off by default, so a classic-regime
+    // chat only ever takes this path when the user opted in. Dangling ids fall
+    // through to normal resolution rather than blocking.
+    if (moduleId && db.moduleModelBindingsEnabled) {
+        const bound = findPreset(db.moduleModelBindings?.[moduleId], db.modelPresets ?? [])
+        if (bound) return { kind: 'modelPreset', preset: bound }
+    }
 
     // Effective regime. A global lock forces every chat into one regime; 'none'
     // defers to the chat's OWN stored choice only. The new-chat default

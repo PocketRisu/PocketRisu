@@ -1,7 +1,7 @@
 {
   "id": "openrouter:claude-opus-47",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1784964534000,
   "displayName": "Claude Opus 4.7",
   "displayNameI18n": {
     "ko": "Claude Opus 4.7"
@@ -53,5 +53,5 @@
     "maxOutputTokens": 128000
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "current"
+  "profileStatus": "outdated"
 }

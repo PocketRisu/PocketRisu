@@ -1,0 +1,61 @@
+{
+  "id": "llmgateway:gpt-56-luna",
+  "version": 1,
+  "updatedAt": 1784964953000,
+  "displayName": "GPT-5.6 Luna",
+  "displayNameI18n": {
+    "ko": "GPT-5.6 Luna"
+  },
+  "providerBaseId": "llmgateway",
+  "description": "GPT-5.6 Luna via LLM Gateway (gpt-5.6-luna).",
+  "descriptionI18n": {
+    "ko": "GPT-5.6 Luna (LLM Gateway, gpt-5.6-luna)."
+  },
+  "tags": [
+    "llmgateway",
+    "openai"
+  ],
+  "sortOrder": 587,
+  "modelId": "gpt-5.6-luna",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.llmgateway.io/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://api.llmgateway.io/v1/models"
+    ],
+    "notes": "Context length per LLM Gateway GET /v1/models; the gateway does not expose a per-model max output token limit.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 LLM Gateway의 GET /v1/models 기준. 게이트웨이는 모델별 최대 출력 토큰 한도를 노출하지 않습니다."
+    }
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

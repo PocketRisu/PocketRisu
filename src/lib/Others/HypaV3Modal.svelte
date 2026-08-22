@@ -97,6 +97,11 @@
   $effect.pre(() => {
     hypaV3Data?.summaries?.length;
     filterSelected;
+    // Search results are now scoped to visible summaries, so narrowing a filter
+    // must invalidate them too — otherwise stale hits keep advancing the counter
+    // while nothing moves on screen.
+    filterState.showImportantOnly;
+    filterState.selectedCategoryFilter;
 
     untrack(() => {
       DBState.db.characters[$selectedCharID].chats[
@@ -178,6 +183,11 @@
     const lowerQuery = query.toLowerCase();
 
     hypaV3Data.summaries.forEach((summary, summaryIndex) => {
+      // Only summaries that pass the active filter are rendered, so a hit in a
+      // hidden one can never be scrolled to — it would just advance the result
+      // counter while nothing moves on screen.
+      if (!isSummaryVisible(summaryIndex)) return;
+
       // Search in summary text
       const summaryText = summary.text.toLowerCase();
       let index = 0;
@@ -475,12 +485,20 @@
   }
 
   function navigateToSearchResult(result: SearchResult) {
+    if (!searchState) return;
     searchState.isNavigating = true;
 
     if (result.type === "summary") {
       const summary = hypaV3Data.summaries[result.summaryIndex];
       const summaryItemState = summaryItemStateMap.get(summary);
-      const textarea = summaryItemState.originalRef;
+      // findAllMatches scans every summary, but only visible ones (isSummaryVisible)
+      // are rendered and registered in the map — a hit inside a filtered-out summary
+      // has no element to scroll to.
+      const textarea = summaryItemState?.originalRef;
+      if (!textarea) {
+        searchState.isNavigating = false;
+        return;
+      }
 
       // Scroll to element
       textarea.scrollIntoView({
@@ -510,7 +528,11 @@
     } else {
       const summary = hypaV3Data.summaries[result.summaryIndex];
       const summaryItemState = summaryItemStateMap.get(summary);
-      const button = summaryItemState.chatMemoRefs[result.memoIndex];
+      const button = summaryItemState?.chatMemoRefs?.[result.memoIndex];
+      if (!button) {
+        searchState.isNavigating = false;
+        return;
+      }
 
       // Scroll to element
       button.scrollIntoView({

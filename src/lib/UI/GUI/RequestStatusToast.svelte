@@ -32,6 +32,7 @@
         responding: rs?.responding ?? 'Responding…',
         retrying:   rs?.retrying ?? 'Retrying…',
         stalled:    rs?.stalled ?? 'Stalled…',
+        background: rs?.background ?? 'In background…',
         done:       rs?.done ?? 'Done',
         failed:     rs?.failed ?? 'Failed',
         aborted:    rs?.aborted ?? 'Cancelled',

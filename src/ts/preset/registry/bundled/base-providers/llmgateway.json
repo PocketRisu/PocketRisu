@@ -1,0 +1,262 @@
+{
+  "id": "llmgateway",
+  "version": 1,
+  "displayName": "LLM Gateway",
+  "adapterKind": "openai-compatible",
+  "authKinds": [
+    "bearer"
+  ],
+  "endpointKinds": [
+    "static"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json"
+  },
+  "defaultBody": {},
+  "requestSchema": [
+    {
+      "key": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "description": "LLM Gateway API key.",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "LLM Gateway API 키."
+      }
+    },
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Model identifier. Bare IDs (claude-opus-5) and provider-prefixed IDs (anthropic/claude-opus-5) both work.",
+      "required": true,
+      "enum": [
+        {
+          "value": "claude-opus-5",
+          "label": "Anthropic / Claude Opus 5"
+        },
+        {
+          "value": "claude-sonnet-5",
+          "label": "Anthropic / Claude Sonnet 5"
+        },
+        {
+          "value": "gpt-5.6-sol",
+          "label": "OpenAI / GPT-5.6 Sol"
+        },
+        {
+          "value": "gemini-3.6-flash",
+          "label": "Google / Gemini 3.6 Flash"
+        },
+        {
+          "value": "kimi-k3",
+          "label": "Moonshot / Kimi K3"
+        },
+        {
+          "value": "glm-5.2",
+          "label": "Z.ai / GLM 5.2"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "모델 ID. 무접두(claude-opus-5)와 공급자 접두(anthropic/claude-opus-5) 모두 사용 가능합니다."
+      }
+    },
+    {
+      "key": "temperature",
+      "type": "number",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "temperature"
+      }
+    },
+    {
+      "key": "top_p",
+      "type": "number",
+      "label": "Top P",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "top_p"
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "min": 1,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 8192
+    },
+    {
+      "key": "frequency_penalty",
+      "type": "number",
+      "label": "Frequency Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "frequency_penalty"
+      }
+    },
+    {
+      "key": "presence_penalty",
+      "type": "number",
+      "label": "Presence Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "presence_penalty"
+      }
+    },
+    {
+      "key": "stop",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "stop"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "seed"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "temperature",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "number-input",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 2
+      },
+      {
+        "key": "top_p",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 3
+      },
+      {
+        "key": "frequency_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 4
+      },
+      {
+        "key": "presence_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "stop",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 6
+      },
+      {
+        "key": "seed",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 7
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "limits": {
+    "known": false,
+    "sourceUrls": [
+      "https://docs.llmgateway.io/",
+      "https://api.llmgateway.io/v1/models",
+      "https://github.com/theopenco/llmgateway"
+    ],
+    "notes": "Model-dependent aggregator. Context and output token limits vary by selected model and routed provider, so PocketRisu uses a number input instead of a fixed-limit slider."
+  }
+}

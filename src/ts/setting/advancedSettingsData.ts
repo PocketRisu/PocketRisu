@@ -172,6 +172,9 @@ export const advancedSettingsItems: SettingItem[] = [
         id: 'adv.promptTextInfo', type: 'check', labelKey: 'promptTextInfoInsideChat', bindKey: 'promptTextInfoInsideChat',
         condition: (ctx) => ctx.db.promptInfoInsideChat, helpKey: 'promptTextInfoInsideChat', classes: 'mt-4'
     },
+    // Server-side requests toggle lives on the Model Preset page's Settings
+    // tab (modelPresetOptionsData.ts) — it only affects the preset path, and
+    // advanced settings buried it beyond discovery.
     // Remote saving removed — incompatible with NodeOnly server
 
     // Dynamic Assets & Others

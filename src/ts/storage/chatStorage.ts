@@ -156,6 +156,12 @@ export async function ensureChatHydrated(
                 return null
             }
 
+            // Clear stale streaming flags: if the app died mid-stream after a
+            // save, the server copy can carry isStreaming=true forever.
+            // (setDatabase does the same for chats present at boot.)
+            full.isStreaming = false
+            full.activeStreamingDisplayOptimizationMode = undefined
+
             const currentIndex = chats.findIndex(chat => chat?.id === chatId)
             if (currentIndex === -1) {
                 console.warn(`[chatStorage] hydrate skipped: chat removed before apply (${key})`)

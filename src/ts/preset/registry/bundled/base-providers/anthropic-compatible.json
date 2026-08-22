@@ -1,6 +1,6 @@
 {
   "id": "anthropic-compatible",
-  "version": 2,
+  "version": 3,
   "displayName": "Anthropic Compatible (Custom)",
   "adapterKind": "anthropic-messages",
   "authKinds": [
@@ -53,6 +53,14 @@
       "description": "Model identifier accepted by the upstream endpoint (e.g. claude-fable-5). Suggestions are first-party Claude IDs; any value the upstream accepts can be typed.",
       "required": true,
       "enum": [
+        {
+          "value": "claude-opus-5",
+          "label": "Claude Opus 5"
+        },
+        {
+          "value": "claude-sonnet-5",
+          "label": "Claude Sonnet 5"
+        },
         {
           "value": "claude-fable-5",
           "label": "Claude Fable 5"

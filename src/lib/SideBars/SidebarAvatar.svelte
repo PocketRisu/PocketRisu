@@ -67,6 +67,7 @@
         style:width={size + "px"}
         style:height={size + "px"}
         style:min-width={size + "px"}
+        style:min-height={size + "px"}
         class:rounded-md={!rounded} class:rounded-full={rounded}
       ></div>
       {:then resolvedBgImg}
@@ -84,6 +85,7 @@
         style:width={size + "px"}
         style:height={size + "px"}
         style:min-width={size + "px"}
+        style:min-height={size + "px"}
         style:background-image={resolvedBgImg ? `url('${resolvedBgImg}')` : undefined}
         style:background-size={resolvedBgImg ? "cover" : undefined}
         style:background-position={resolvedBgImg ? "center" : undefined}
@@ -101,6 +103,7 @@
           style:width={size + "px"}
           style:height={size + "px"}
           style:min-width={size + "px"}
+          style:min-height={size + "px"}
           class:rounded-md={!rounded} class:rounded-full={rounded} 
 ></div>
       {:then img}
@@ -110,6 +113,7 @@
           style:width={size + "px"}
           style:height={size + "px"}
           style:min-width={size + "px"}
+          style:min-height={size + "px"}
           class:rounded-md={!rounded} class:rounded-full={rounded} 
           alt="avatar"
         />
@@ -121,6 +125,7 @@
       style:width={size + "px"}
       style:height={size + "px"}
       style:min-width={size + "px"}
+      style:min-height={size + "px"}
       class:rounded-md={!rounded} class:rounded-full={rounded} 
 ></div>
   {/if}

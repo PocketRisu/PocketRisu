@@ -1,0 +1,56 @@
+{
+  "id": "openrouter:kimi-k3",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Kimi K3",
+  "displayNameI18n": {
+    "ko": "Kimi K3"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Kimi K3 via OpenRouter (moonshotai/kimi-k3).",
+  "descriptionI18n": {
+    "ko": "Kimi K3 (OpenRouter, moonshotai/kimi-k3)."
+  },
+  "tags": [
+    "openrouter",
+    "kimi"
+  ],
+  "sortOrder": 537,
+  "modelId": "moonshotai/kimi-k3",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

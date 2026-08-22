@@ -470,10 +470,14 @@ export function getModuleTriggers() {
             continue
         }
         if (module.trigger) {
-            triggers = triggers.concat(module.trigger.map((t) => {
-                t.lowLevelAccess = module.lowLevelAccess
-                return t
-            }))
+            // Copy rather than mutate: getModules() caches the RisuModule objects
+            // (lastModuleData), so writing onto `t` writes into the stored module
+            // and would leak runtime-only fields (moduleId) into .risum exports.
+            triggers = triggers.concat(module.trigger.map((t) => ({
+                ...t,
+                lowLevelAccess: module.lowLevelAccess,
+                moduleId: module.id,
+            })))
         }
     }
     return triggers

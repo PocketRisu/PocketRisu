@@ -17,6 +17,13 @@
     let sorted = $state(0)
     let opened = 0
     const createStb = () => {
+        // Children tear down before this component does, so a child's onDestroy can
+        // settle the counter to 0 while the list node is already detached. Checking
+        // isConnected (not a local flag, which is still false at that point) keeps us
+        // from building a Sortable that would immediately be thrown away.
+        if(!ele?.isConnected){
+            return
+        }
         stb = Sortable.create(ele, {
             onEnd: async () => {
                 let idx:number[] = []
@@ -69,7 +76,10 @@
         {#if value.length === 0}
                 <div class="text-textcolor2">No Scripts</div>
         {/if}
-        {#each value as customscript, i}
+        <!-- Keyed: RegexData's `open` is per-instance state, so with an unkeyed each a
+             deletion would destroy the LAST instance's state rather than the removed
+             row's, desyncing the `opened` counter and killing drag reordering. -->
+        {#each value as customscript, i (customscript)}
             <RegexData idx={i} bind:value={value[i]} onOpen={onOpen} onClose={onClose} onRemove={() => {
                 let customscript = value
                 customscript.splice(i, 1)

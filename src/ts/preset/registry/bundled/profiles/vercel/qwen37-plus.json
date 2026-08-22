@@ -1,0 +1,57 @@
+{
+  "id": "vercel:qwen37-plus",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Qwen3.7 Plus",
+  "displayNameI18n": {
+    "ko": "Qwen3.7 Plus"
+  },
+  "providerBaseId": "vercel",
+  "description": "Qwen3.7 Plus via Vercel AI Gateway (alibaba/qwen3.7-plus).",
+  "descriptionI18n": {
+    "ko": "Qwen3.7 Plus (Vercel AI Gateway, alibaba/qwen3.7-plus)."
+  },
+  "tags": [
+    "vercel",
+    "qwen"
+  ],
+  "sortOrder": 581,
+  "modelId": "alibaba/qwen3.7-plus",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 64000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

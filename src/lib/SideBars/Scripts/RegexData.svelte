@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import { XIcon } from "@lucide/svelte";
     import { language } from "src/lang";
     import { ReloadGUIPointer } from "src/ts/stores.svelte";
@@ -28,9 +29,12 @@ interface Props {
     idx
   }: Props = $props();
 
+    // flag is optional in customscript — imported/legacy scripts can have
+    // ableFlag set without a flag string, so every read must tolerate undefined.
     const checkFlagContain = (flag:string, matchFlag:string) => {
+        matchFlag ??= ''
         if(flag.length === 1){
-            matchFlag = value.flag.replace(/<(.+?)>/g, '')
+            matchFlag = (value.flag ?? '').replace(/<(.+?)>/g, '')
         }
         return matchFlag.includes(flag)
     }
@@ -41,12 +45,12 @@ interface Props {
             value.flag = value.flag.replace(flag, '')
         }
         else{
-            value.flag += flag
+            value.flag = (value.flag ?? '') + flag
         }
     }
 
     const getOrder = (flag:string) => {
-        const order = flag.match(/<order (-?\d+)>/)?.[1]
+        const order = flag?.match(/<order (-?\d+)>/)?.[1]
         if(order === undefined || order === null){
             return 0
         }
@@ -54,11 +58,11 @@ interface Props {
     }
 
     const changeOrder = (order:number) => {
-        if(value.flag.includes('<order')){
+        if(value.flag?.includes('<order')){
             value.flag = value.flag.replace(/<order (-?\d+)>/, `<order ${order}>`)
         }
         else{
-            value.flag += `<order ${order}>`
+            value.flag = (value.flag ?? '') + `<order ${order}>`
         }
     }
 
@@ -79,6 +83,16 @@ interface Props {
     ]
 
     let open = $state(false)
+
+    // Single point that balances onOpen. Covers every way this row can go away:
+    // deletion, the parent's array being swapped wholesale (character/preset/module
+    // switch), and parent unmount. Without it an open row leaks the list's counter
+    // and drag reordering stays dead with no UI left to close.
+    onDestroy(() => {
+        if(open){
+            onClose()
+        }
+    })
 </script>
 
 <div class="w-full flex flex-col pt-2 mt-2 border-t border-t-selected first:pt-0 first:mt-0 first:border-0" data-risu-idx={idx}>
@@ -97,9 +111,8 @@ interface Props {
         <button class="valuer" onclick={async () => {
             const d = await alertConfirm(language.removeConfirm + value.comment)
             if(d){
-                if(!open){
-                    onClose()
-                }
+                // The each block is keyed, so this removes exactly this row and
+                // onDestroy above settles the counter.
                 onRemove()
             }
         }}>

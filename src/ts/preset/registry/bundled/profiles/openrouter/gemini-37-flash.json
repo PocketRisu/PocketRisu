@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:gemini-37-flash",
+  "version": 1,
+  "updatedAt": 1786685377000,
+  "displayName": "Gemini 3.7 Flash",
+  "displayNameI18n": {
+    "ko": "Gemini 3.7 Flash"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Gemini 3.7 Flash via OpenRouter (google/gemini-3.7-flash).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.7 Flash (OpenRouter, google/gemini-3.7-flash)."
+  },
+  "tags": [
+    "openrouter",
+    "gemini"
+  ],
+  "sortOrder": 546,
+  "modelId": "google/gemini-3.7-flash",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

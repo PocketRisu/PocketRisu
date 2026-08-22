@@ -11,6 +11,7 @@
     import TextInput from "../UI/GUI/TextInput.svelte";
     import { prebuiltPresets } from "src/ts/process/templates/templates";
     import PromptDiffModal from "../Others/PromptDiffModal.svelte";
+    import { RISU_PRESET_DRAG_TYPE } from "src/ts/dragTypes";
 
     let editMode = $state(false)
     let isDragging = $state(false)
@@ -49,14 +50,24 @@
         });
     }
 
-    function handlePresetDrop(targetIndex: number, e) {
+    function isPresetDrag(e: DragEvent) {
+        return e.dataTransfer?.types.includes(RISU_PRESET_DRAG_TYPE) ?? false;
+    }
+
+    function markPresetDrag(e: DragEvent, index: number) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'preset');
+        e.dataTransfer.setData(RISU_PRESET_DRAG_TYPE, index.toString());
+    }
+
+    function handlePresetDrop(targetIndex: number, e: DragEvent) {
+        if (!isPresetDrag(e)) {
+            return;
+        }
         e.preventDefault();
         e.stopPropagation();
-        const data = e.dataTransfer?.getData('text');
-        if (data === 'preset') {
-            const sourceIndex = parseInt(e.dataTransfer?.getData('presetIndex') || '0');
-            movePreset(sourceIndex, targetIndex);
-        }
+        const sourceIndex = parseInt(e.dataTransfer?.getData(RISU_PRESET_DRAG_TYPE) || '0');
+        movePreset(sourceIndex, targetIndex);
     }
 
 
@@ -118,7 +129,12 @@
                 class:hover:bg-gray-600={!isDragging}
                 role="listitem"
                 ondragover={(e) => {
+                    if (!isPresetDrag(e)) {
+                        return
+                    }
                     e.preventDefault()
+                    e.stopPropagation()
+                    e.dataTransfer.dropEffect = 'move'
                     dragOverIndex = i
                 }}
                 ondragleave={(e) => {
@@ -152,8 +168,7 @@
                     return
                 }
                 isDragging = true
-                e.dataTransfer?.setData('text', 'preset')
-                e.dataTransfer?.setData('presetIndex', i.toString())
+                markPresetDrag(e, i)
 
                 const dragElement = document.createElement('div')
                 dragElement.textContent = preset?.name || 'Unnamed Preset'
@@ -170,7 +185,12 @@
                 dragOverIndex = -1
             }}
             ondragover={(e) => {
+                if (!isPresetDrag(e)) {
+                    return
+                }
                 e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = 'move'
                 const rect = e.currentTarget.getBoundingClientRect()
                 const mouseY = e.clientY
                 const elementCenter = rect.top + rect.height / 2
@@ -282,7 +302,12 @@
             class:hover:bg-gray-600={!isDragging}
             role="listitem"
             ondragover={(e) => {
+                if (!isPresetDrag(e)) {
+                    return
+                }
                 e.preventDefault()
+                e.stopPropagation()
+                e.dataTransfer.dropEffect = 'move'
                 dragOverIndex = DBState.db.botPresets.length
             }}
             ondragleave={(e) => {

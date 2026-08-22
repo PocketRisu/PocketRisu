@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { requestChatData } from "src/ts/process/request/request";
     import { doingChat, type OpenAIChat } from "../../ts/process/index.svelte";
+    import { syncDoingChat } from "../../ts/process/generationState";
     import { setDatabase, type character, type Message, type Database } from "../../ts/storage/database.svelte";
 	import { DBState } from 'src/ts/stores.svelte';
     import { selectedCharID } from "../../ts/stores.svelte";
@@ -145,8 +146,12 @@
                     alertConfirm(language.askReRollAutoSuggestions).then((result) => {
                         if(result) {
                             suggestMessages = []
+                            // pulse the compat store to retrigger the subscriber
+                            // above, then re-converge it with generationStates
+                            // (covers a generation starting in the async gap)
                             doingChat.set(true)
                             doingChat.set(false)        
+                            syncDoingChat()
                         }
                     })
                 }}

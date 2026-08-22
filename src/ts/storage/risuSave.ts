@@ -1135,11 +1135,14 @@ export class RisuSavePatcher {
                 const changedByHash = !!(curCharId && curCharHash !== this.hashBlocks[curCharId])
 
                 if (trackedBySave || changedByHash) {
-                    let charPatch = compare(lastChar, normChar).map((v) => {
+                    // Iterate instead of spreading — a single character's diff
+                    // can exceed spread-argument limits (e.g. a shifted
+                    // multi-thousand-entry lorebook). Same rule as the
+                    // module/preset paths above.
+                    for (const v of compare(lastChar, normChar)) {
                         v.path = `/characters/${i}` + v.path;
-                        return v;
-                    })
-                    patch.push(...charPatch);
+                        patch.push(v);
+                    }
                     this.hashBlocks[normChar.chaId] = curCharHash ?? calculateHash(normChar);
                     this.lastSyncedDb.characters[i] = normChar;
                 }

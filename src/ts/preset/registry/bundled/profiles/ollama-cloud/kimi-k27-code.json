@@ -1,0 +1,63 @@
+{
+  "id": "ollama-cloud:kimi-k27-code",
+  "version": 2,
+  "updatedAt": 1784964865000,
+  "displayName": "Kimi K2.7 Code",
+  "displayNameI18n": {
+    "ko": "Kimi K2.7 Code"
+  },
+  "providerBaseId": "ollama-cloud",
+  "description": "Kimi K2.7 Code via Ollama Cloud (kimi-k2.7-code).",
+  "descriptionI18n": {
+    "ko": "Kimi K2.7 Code (Ollama Cloud, kimi-k2.7-code)."
+  },
+  "tags": [
+    "ollama",
+    "cloud",
+    "kimi"
+  ],
+  "sortOrder": 628,
+  "modelId": "kimi-k2.7-code:cloud",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ollama.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ollama.com/v1/models",
+    "https://ollama.com/library/glm-5.2",
+    "https://docs.ollama.com/cloud"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 262144,
+    "notes": "Native model spec. Ollama Cloud may cap context per deployment and does not expose per-model limits via /v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. Ollama Cloud는 배포별로 컨텍스트를 제한할 수 있고 /v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://ollama.com/v1/models",
+      "https://ollama.com/library/glm-5.2",
+      "https://ollama.com/search?c=cloud"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

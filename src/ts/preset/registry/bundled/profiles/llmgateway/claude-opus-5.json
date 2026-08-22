@@ -1,0 +1,61 @@
+{
+  "id": "llmgateway:claude-opus-5",
+  "version": 1,
+  "updatedAt": 1784964953000,
+  "displayName": "Claude Opus 5",
+  "displayNameI18n": {
+    "ko": "Claude Opus 5"
+  },
+  "providerBaseId": "llmgateway",
+  "description": "Claude Opus 5 via LLM Gateway (claude-opus-5).",
+  "descriptionI18n": {
+    "ko": "Claude Opus 5 (LLM Gateway, claude-opus-5)."
+  },
+  "tags": [
+    "llmgateway",
+    "claude"
+  ],
+  "sortOrder": 581,
+  "modelId": "claude-opus-5",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.llmgateway.io/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://api.llmgateway.io/v1/models"
+    ],
+    "notes": "Context length per LLM Gateway GET /v1/models; the gateway does not expose a per-model max output token limit.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 LLM Gateway의 GET /v1/models 기준. 게이트웨이는 모델별 최대 출력 토큰 한도를 노출하지 않습니다."
+    }
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

@@ -1,0 +1,277 @@
+{
+  "id": "neuralwatt",
+  "version": 1,
+  "displayName": "NeuralWatt",
+  "adapterKind": "openai-compatible",
+  "authKinds": [
+    "bearer"
+  ],
+  "endpointKinds": [
+    "static"
+  ],
+  "defaultHeaders": {
+    "Content-Type": "application/json"
+  },
+  "defaultBody": {},
+  "requestSchema": [
+    {
+      "key": "apiKey",
+      "type": "string",
+      "label": "API Key",
+      "description": "NeuralWatt API key (created under API Keys & Allowances).",
+      "required": true,
+      "secret": true,
+      "mapsTo": {
+        "target": "auth",
+        "path": "apiKey"
+      },
+      "descriptionI18n": {
+        "ko": "NeuralWatt API 키 (API Keys & Allowances에서 발급)."
+      }
+    },
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Model identifier accepted by NeuralWatt.",
+      "required": true,
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "NeuralWatt가 허용하는 모델 ID."
+      }
+    },
+    {
+      "key": "temperature",
+      "type": "number",
+      "label": "Temperature",
+      "min": 0,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "temperature"
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "min": 1,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 4096
+    },
+    {
+      "key": "top_p",
+      "type": "number",
+      "label": "Top P",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "top_p"
+      }
+    },
+    {
+      "key": "frequency_penalty",
+      "type": "number",
+      "label": "Frequency Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "frequency_penalty"
+      }
+    },
+    {
+      "key": "presence_penalty",
+      "type": "number",
+      "label": "Presence Penalty",
+      "min": -2,
+      "max": 2,
+      "step": 0.01,
+      "mapsTo": {
+        "target": "body",
+        "path": "presence_penalty"
+      }
+    },
+    {
+      "key": "stop",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "stop"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "seed"
+      }
+    },
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth. Applies to GLM thinking models on NeuralWatt; 'none' disables thinking. Kimi/Qwen expose thinking on/off via separate '-fast' model IDs instead of this knob.",
+      "enum": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning_effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. NeuralWatt의 GLM thinking 모델에 적용 (none은 비활성). Kimi/Qwen은 이 노브 대신 '-fast' 모델 ID로 thinking on/off를 구분."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "temperature",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "number-input",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 2
+      },
+      {
+        "key": "top_p",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 3
+      },
+      {
+        "key": "frequency_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 4
+      },
+      {
+        "key": "presence_penalty",
+        "widget": "slider",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "stop",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 6
+      },
+      {
+        "key": "seed",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 7
+      },
+      {
+        "key": "reasoning_effort",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://api.neuralwatt.com/v1/models",
+    "https://portal.neuralwatt.com/models"
+  ],
+  "limits": {
+    "known": false,
+    "sourceUrls": [
+      "https://api.neuralwatt.com/v1/models"
+    ],
+    "notes": "Model-dependent provider. NeuralWatt's /v1/models exposes per-model context length but reports max_output_tokens as null, so PocketRisu uses a number input for Max Tokens instead of a fixed-limit slider."
+  }
+}

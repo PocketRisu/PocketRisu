@@ -1,15 +1,15 @@
 {
   "id": "anthropic:opus-4",
-  "version": 1,
-  "updatedAt": 1780592606461,
+  "version": 2,
+  "updatedAt": 1786685377000,
   "displayName": "Claude Opus 4",
   "displayNameI18n": {
     "ko": "Claude Opus 4"
   },
   "providerBaseId": "anthropic",
-  "description": "Claude Opus 4 via the Anthropic Messages API (manual extended thinking).",
+  "description": "Claude Opus 4 via the Anthropic Messages API (manual extended thinking). Retired by Anthropic on 2026-06-15; requests to this model fail.",
   "descriptionI18n": {
-    "ko": "Claude Opus 4 (Anthropic Messages API, 수동 extended thinking)."
+    "ko": "Claude Opus 4 (Anthropic Messages API, 수동 extended thinking). 2026-06-15에 Anthropic이 지원을 종료했습니다. 이 모델로의 요청은 실패합니다."
   },
   "tags": [
     "anthropic",
@@ -316,6 +316,6 @@
     ]
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "outdated",
+  "profileStatus": "deprecated",
   "statusReason": "Below the current Claude 4.6 threshold; superseded by a newer release."
 }

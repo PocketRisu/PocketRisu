@@ -1,6 +1,6 @@
 {
   "id": "lightning-ai:claude-opus-48",
-  "version": 1,
+  "version": 2,
   "updatedAt": 1781104476429,
   "displayName": "Claude Opus 4.8",
   "displayNameI18n": {
@@ -16,7 +16,7 @@
     "anthropic",
     "claude"
   ],
-  "sortOrder": 710,
+  "sortOrder": 716,
   "modelId": "anthropic/claude-opus-4-8",
   "endpoint": {
     "kind": "static",

@@ -40,7 +40,16 @@ export function checkNullish(data:any){
 
 export async function selectSingleFile(ext:string[]){
     const v = await selectFileByDom(ext, 'single')
-    const file = v[0]
+    // selectFileByDom resolves [] when the picked file is filtered out by
+    // extension — tell the user and return null so callers' cancel guards
+    // handle it. Dynamic import: alert.ts statically imports this module.
+    const file = v?.[0]
+    if(!file){
+        const { notifyError } = await import('./alert')
+        const { language } = await import('../lang')
+        notifyError(`${language.unsupportedFileType} (.${ext.join(', .')})`)
+        return null
+    }
     return {name: file.name,data:await readFileAsUint8Array(file)}
 }
 

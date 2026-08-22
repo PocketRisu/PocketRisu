@@ -1,0 +1,59 @@
+{
+  "id": "neuralwatt:glm-52",
+  "version": 1,
+  "updatedAt": 1781835416168,
+  "displayName": "GLM-5.2",
+  "displayNameI18n": {
+    "ko": "GLM-5.2"
+  },
+  "providerBaseId": "neuralwatt",
+  "description": "GLM-5.2 via NeuralWatt (glm-5.2). Use reasoning_effort=none for the non-thinking tier.",
+  "descriptionI18n": {
+    "ko": "GLM-5.2 (NeuralWatt, glm-5.2). non-thinking은 reasoning_effort=none 사용."
+  },
+  "tags": [
+    "neuralwatt",
+    "glm"
+  ],
+  "sortOrder": 541,
+  "modelId": "glm-5.2",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.neuralwatt.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://api.neuralwatt.com/v1/models",
+    "https://portal.neuralwatt.com/models"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048560,
+    "notes": "Context length per NeuralWatt /v1/models; max_output_tokens reported null.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 NeuralWatt /v1/models 기준; max_output_tokens는 null로 보고됨."
+    },
+    "sourceUrls": [
+      "https://api.neuralwatt.com/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

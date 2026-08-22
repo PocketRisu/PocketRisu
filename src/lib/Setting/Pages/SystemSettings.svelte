@@ -8,6 +8,8 @@
     import SystemDashboard from './SystemDashboard.svelte'
     import SystemBackup from './SystemBackup.svelte'
     import PluginStorageViewer from './PluginStorageViewer.svelte'
+    import RequestLogs from './RequestLogs.svelte'
+    import UsageStats from './UsageStats.svelte'
     import { SystemSubmenuIndex } from 'src/ts/stores.svelte'
     import { Collapsible, Tooltip } from 'bits-ui'
     import {
@@ -366,7 +368,9 @@
         { label: language.systemDashboard, value: 0 },
         { label: language.systemBackups, value: 1 },
         { label: language.systemLogs, value: 2 },
-        { label: language.pluginStorageTab, value: 3 },
+        { label: language.requestLogsTab, value: 3 },
+        { label: language.usageTab, value: 4 },
+        { label: language.pluginStorageTab, value: 5 },
     ]} bind:selected={$SystemSubmenuIndex} />
 
     {#if $SystemSubmenuIndex === 0}
@@ -613,6 +617,10 @@
         </div>
     {/if}
     {:else if $SystemSubmenuIndex === 3}
+    <RequestLogs />
+    {:else if $SystemSubmenuIndex === 4}
+    <UsageStats />
+    {:else if $SystemSubmenuIndex === 5}
     <PluginStorageViewer />
     {/if}
 </SettingPage>

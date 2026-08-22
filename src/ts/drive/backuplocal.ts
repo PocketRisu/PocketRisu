@@ -1,4 +1,4 @@
-import { alertError, alertStore, alertWait, alertMd, alertConfirm, waitAlert, notifySuccess, notifyInfo, notifyError } from "../alert";
+import { alertError, alertStore, alertWait, alertMd, alertConfirm, alertConfirmMulti, alertClear, waitAlert, notifySuccess, notifyInfo, notifyError } from "../alert";
 import { downloadFile, LocalWriter, forageStorage } from "../globalApi.svelte";
 import { encodeRisuSaveLegacy } from "../storage/risuSave";
 import { getDatabase, type Chat } from "../storage/database.svelte";
@@ -50,6 +50,74 @@ export async function SaveLocalBackup(){
         const response = await forageStorage.exportBackup()
         await streamBackupToDisk(response, `risu-backup-${Date.now()}.bin`)
         notifySuccess('Success')
+    } catch (error) {
+        console.error(error)
+        alertError('Failed')
+    }
+}
+
+/**
+ * Saves a settings-only backup — the full backup minus characters, chats and
+ * inlay images. Intended for seeding a fresh instance: modules, plugins, prompt
+ * presets, personas, lorebooks, theme and API keys all travel.
+ *
+ * Asks about module assets first. Asset-pack modules routinely hold thousands
+ * of images, so for those users the module images — not the character library —
+ * are what makes the file big, and it is worth one question rather than a
+ * silent multi-GB download. Excluding them ships the module definitions with
+ * their images missing, which is why it is never the default.
+ *
+ * The server does the trimming (see /api/backup/export?mode=settings) so the
+ * character library never has to cross the network.
+ */
+export async function SaveSettingsOnlyBackup(){
+    let includeModuleAssets = true
+    try {
+        alertWait(language.backupSettingsOnlyEstimating)
+        const estimate = await forageStorage.settingsBackupEstimate()
+        alertClear()
+
+        const baseBytes = estimate.dbBytes + estimate.baseAssets.bytes
+        if (estimate.moduleAssets.count > 0) {
+            // The dialog supplies its own Cancel, so only the two real choices
+            // go in here. Sizes sit on the buttons because that is the whole
+            // decision being made.
+            const choice = await alertConfirmMulti(
+                language.backupSettingsOnly,
+                [
+                    language.backupSettingsOnlyWithModuleAssets(
+                        formatBytes(baseBytes + estimate.moduleAssets.bytes),
+                    ),
+                    language.backupSettingsOnlyWithoutModuleAssets(formatBytes(baseBytes)),
+                ],
+                language.backupSettingsOnlyBreakdown(
+                    formatBytes(baseBytes),
+                    estimate.moduleAssets.moduleCount,
+                    estimate.moduleAssets.count,
+                    formatBytes(estimate.moduleAssets.bytes),
+                ),
+            )
+            if (choice !== 0 && choice !== 1) return
+            includeModuleAssets = choice === 0
+        } else {
+            // Nothing worth asking about — a plain confirm with the size.
+            if (!(await alertConfirm(language.backupSettingsOnlyConfirm(formatBytes(baseBytes))))) return
+        }
+    } catch (error) {
+        console.error(error)
+        alertError(error instanceof Error ? error.message : 'Failed')
+        return
+    }
+
+    try {
+        alertWait("Saving settings backup...")
+        const response = await forageStorage.exportBackup({ mode: 'settings', moduleAssets: includeModuleAssets })
+        await streamBackupToDisk(response, `risu-settings-${Date.now()}.bin`)
+        if (!includeModuleAssets) {
+            alertMd(language.backupSettingsOnlyModuleAssetsSkipped)
+        } else {
+            notifySuccess('Success')
+        }
     } catch (error) {
         console.error(error)
         alertError('Failed')

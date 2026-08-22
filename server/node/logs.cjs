@@ -71,6 +71,19 @@ const MASK_PATTERNS = [
     { re: /(Authorization\s*[:=]\s*)[^\s,;)}{]+/gi, replacement: '$1[REDACTED_TOKEN]' },
     // Header-style api key fields (x-api-key, api-key, api_key, apikey) — non-JSON form
     { re: /((?:x-)?api[-_]?key\s*[:=]\s*)['"]?[^'"\s,;)}{]+/gi, replacement: '$1[REDACTED_API_KEY]' },
+    // Vendor-specific and generic secret-bearing JSON fields. Value-shape
+    // patterns below miss these because the values are opaque (Google ya29.*
+    // OAuth tokens, AWS session tokens, plugin-supplied custom headers), so
+    // match on the FIELD NAME instead.
+    { re: /"(x-goog-api-key|x-goog-iam-authorization-token)"\s*:\s*"[^"]*"/gi, replacement: '"$1":"[REDACTED_API_KEY]"' },
+    { re: /"(x-amz-security-token|x-amz-credential|x-amz-signature)"\s*:\s*"[^"]*"/gi, replacement: '"$1":"[REDACTED_TOKEN]"' },
+    { re: /"(cookie|set-cookie)"\s*:\s*"[^"]*"/gi, replacement: '"$1":"[REDACTED_COOKIE]"' },
+    { re: /"([a-z0-9_-]*(?:secret|password|passwd|private[-_]?key|access[-_]?token|refresh[-_]?token|auth[-_]?key|session[-_]?key))"\s*:\s*"[^"]*"/gi, replacement: '"$1":"[REDACTED]"' },
+    // Google OAuth access tokens (service-account / Vertex), which carry no
+    // recognizable prefix beyond ya29.
+    { re: /ya29\.[A-Za-z0-9_\-]{20,}/g, replacement: '[REDACTED_TOKEN]' },
+    // PEM private keys (service-account JSON pasted into a profile).
+    { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, replacement: '[REDACTED_PRIVATE_KEY]' },
     // Anthropic keys (more specific than sk-)
     { re: /sk-ant-[A-Za-z0-9_\-]{20,}/g, replacement: '[REDACTED_API_KEY]' },
     // Google API keys

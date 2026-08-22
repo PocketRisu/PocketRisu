@@ -58,6 +58,7 @@
     import PluginDefinedIcon from "../Others/PluginDefinedIcon.svelte";
   const isTouchDevice = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
   const touchDragEnabled = $derived(isTouchDevice && !DBState.db.disableMobileDragDrop);
+    import { RISU_SIDEBAR_DRAG_TYPE } from "src/ts/dragTypes";
 
   let sideBarMode = $state(0);
   let editMode = $state(false);
@@ -89,7 +90,7 @@
   let recentVisible = $state(10);
   let IconRounded = $state(false)
   let openFolders:string[] = $state([])
-  let currentDrag: DragData = $state(null)
+  let currentDrag: DragData | null = $state(null)
   interface Props {
     openGrid?: any;
     hidden?: boolean;
@@ -333,6 +334,9 @@
         db.characterOrder.splice(mainIndex.index, 1)
       }
     }
+
+    DBState.db.characterOrder = db.characterOrder
+    checkCharOrder()
   }
 
   type DragEv = DragEvent & {
@@ -344,7 +348,7 @@
   }
   const avatarDragStart = (ind:DragData, e:DragEv) => {
     e.dataTransfer.setData('text/plain', '');
-    e.dataTransfer.setData('application/x-risu-internal', 'true');
+    e.dataTransfer.setData(RISU_SIDEBAR_DRAG_TYPE, 'true');
     currentDrag = ind
     const avatar = e.currentTarget.querySelector('.avatar')
     if(avatar){
@@ -352,21 +356,60 @@
     }
   }
 
+  const clearCurrentDrag = () => {
+    currentDrag = null
+  }
+
+  $effect(() => {
+    if (typeof window === 'undefined') return
+
+    window.addEventListener('dragend', clearCurrentDrag)
+    window.addEventListener('drop', clearCurrentDrag)
+    window.addEventListener('blur', clearCurrentDrag)
+
+    return () => {
+      window.removeEventListener('dragend', clearCurrentDrag)
+      window.removeEventListener('drop', clearCurrentDrag)
+      window.removeEventListener('blur', clearCurrentDrag)
+    }
+  })
+
+  const getCurrentSidebarDrag = (e:DragEvent) => {
+    if(!currentDrag || !e.dataTransfer?.types.includes(RISU_SIDEBAR_DRAG_TYPE)){
+      return null
+    }
+    return currentDrag
+  }
+
   const avatarDragOver = (e:DragEv) => {
+    if(!getCurrentSidebarDrag(e)){
+      return
+    }
     e.preventDefault()
+    e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
   }
 
   const avatarDrop = (ind:DragData, e:DragEv) => {
+    const drag = getCurrentSidebarDrag(e)
+    if(!drag){
+      return
+    }
     e.preventDefault()
+    e.stopPropagation()
     try {
-      if(currentDrag){
-        createFolder(currentDrag,ind)
-      }
-    } catch (error) {}
+      createFolder(drag,ind)
+    } catch (error) {
+      console.error('avatarDrop error:', error)
+    } finally {
+      clearCurrentDrag()
+    }
   }
 
-  const preventAll = (e:Event) => {
+  const preventAll = (e:DragEvent) => {
+    if(!getCurrentSidebarDrag(e)){
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
     return false
@@ -661,17 +704,23 @@
   {/if}
   <div class="character-list flex grow w-full flex-col items-center overflow-x-hidden overflow-y-auto pr-0" class:max-xs:hidden={$leftBarCollapsed} use:touchDragContainer>
     <div class="h-4 min-h-4 w-14" role="listitem" data-spacer-index="0" ondragover={(e) => {
+      if(!getCurrentSidebarDrag(e)){ return }
       e.preventDefault()
+      e.stopPropagation()
       e.dataTransfer.dropEffect = 'move'
       e.currentTarget.classList.add('bg-green-500')
     }} ondragleave={(e) => {
       e.currentTarget.classList.remove('bg-green-500')
     }} ondrop={(e) => {
+      const drag = getCurrentSidebarDrag(e)
+      if(!drag){ return }
       e.preventDefault()
+      e.stopPropagation()
       e.currentTarget.classList.remove('bg-green-500')
-      const da = currentDrag
-      if(da){
-        inserter(da,{index:0})
+      try {
+        inserter(drag,{index:0})
+      } finally {
+        clearCurrentDrag()
       }
     }} ondragenter={preventAll}></div>
     {#each charImages as char, ind}
@@ -680,6 +729,7 @@
         data-drag-index={ind}
         draggable={!isTouchDevice ? "true" : undefined}
         ondragstart={!isTouchDevice ? (e) => {avatarDragStart({index:ind}, e)} : undefined}
+        ondragend={!isTouchDevice ? clearCurrentDrag : undefined}
         ondragover={!isTouchDevice ? avatarDragOver : undefined}
         ondrop={!isTouchDevice ? (e) => {avatarDrop({index:ind}, e)} : undefined}
         ondragenter={!isTouchDevice ? preventAll : undefined}
@@ -819,17 +869,25 @@
             'bg-darkbg/20'
           }"></div>
           <div class="h-4 min-h-4 w-14 relative z-10" role="listitem" data-spacer-index="0" data-spacer-folder={char.type === 'folder' ? char.id : undefined} ondragover={(e) => {
+            if(!getCurrentSidebarDrag(e)){ return }
             e.preventDefault()
+            e.stopPropagation()
             e.dataTransfer.dropEffect = 'move'
             e.currentTarget.classList.add('bg-green-500')
           }} ondragleave={(e) => {
             e.currentTarget.classList.remove('bg-green-500')
           }} ondrop={(e) => {
+            const drag = getCurrentSidebarDrag(e)
+            if(!drag){ return }
             e.preventDefault()
+            e.stopPropagation()
             e.currentTarget.classList.remove('bg-green-500')
-            const da = currentDrag
-            if(da && char.type === 'folder'){
-              inserter(da,{index:0,folder:char.id})
+            try {
+              if(char.type === 'folder'){
+                inserter(drag,{index:0,folder:char.id})
+              }
+            } finally {
+              clearCurrentDrag()
             }
           }} ondragenter={preventAll}></div>
           {#each char.folder as char2, ind}
@@ -839,6 +897,7 @@
               data-drag-folder={char.type === 'folder' ? char.id : undefined}
               draggable={!isTouchDevice ? "true" : undefined}
               ondragstart={!isTouchDevice ? (e) => {if(char.type === 'folder'){avatarDragStart({index: ind, folder:char.id}, e)}} : undefined}
+              ondragend={!isTouchDevice ? clearCurrentDrag : undefined}
               ondragover={!isTouchDevice ? avatarDragOver : undefined}
               ondrop={!isTouchDevice ? (e) => {if(char.type === 'folder'){avatarDrop({index: ind, folder:char.id}, e)}} : undefined}
               ondragenter={!isTouchDevice ? preventAll : undefined}
@@ -874,17 +933,25 @@
               </div>
             </div>
             <div class="h-4 min-h-4 w-14 relative z-20" role="listitem" data-spacer-index={ind+1} data-spacer-folder={char.type === 'folder' ? char.id : undefined} ondragover={(e) => {
+              if(!getCurrentSidebarDrag(e)){ return }
               e.preventDefault()
+              e.stopPropagation()
               e.dataTransfer.dropEffect = 'move'
               e.currentTarget.classList.add('bg-green-500')
             }} ondragleave={(e) => {
               e.currentTarget.classList.remove('bg-green-500')
             }} ondrop={(e) => {
+              const drag = getCurrentSidebarDrag(e)
+              if(!drag){ return }
               e.preventDefault()
+              e.stopPropagation()
               e.currentTarget.classList.remove('bg-green-500')
-              const da = currentDrag
-              if(da && char.type === 'folder'){
-                inserter(da,{index:ind+1,folder:char.id})
+              try {
+                if(char.type === 'folder'){
+                  inserter(drag,{index:ind+1,folder:char.id})
+                }
+              } finally {
+                clearCurrentDrag()
               }
             }} ondragenter={preventAll}></div>
           {/each}
@@ -892,17 +959,23 @@
         {/key}
       {/if}
       <div class="h-4 min-h-4 w-14" role="listitem" data-spacer-index={ind+1} ondragover={((e) => {
+        if(!getCurrentSidebarDrag(e)){ return }
         e.preventDefault()
+        e.stopPropagation()
         e.dataTransfer.dropEffect = 'move'
         e.currentTarget.classList.add('bg-green-500')
       })} ondragleave={(e) => {
         e.currentTarget.classList.remove('bg-green-500')
       }} ondrop={(e) => {
+        const drag = getCurrentSidebarDrag(e)
+        if(!drag){ return }
         e.preventDefault()
+        e.stopPropagation()
         e.currentTarget.classList.remove('bg-green-500')
-        const da = currentDrag
-        if(da){
-          inserter(da,{index:ind+1})
+        try {
+          inserter(drag,{index:ind+1})
+        } finally {
+          clearCurrentDrag()
         }
       }} ondragenter={preventAll}></div>
     {/each}

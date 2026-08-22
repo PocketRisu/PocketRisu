@@ -1,7 +1,7 @@
 {
   "id": "anthropic:opus-46",
-  "version": 1,
-  "updatedAt": 1780592606461,
+  "version": 2,
+  "updatedAt": 1784964391000,
   "displayName": "Claude Opus 4.6",
   "displayNameI18n": {
     "ko": "Claude Opus 4.6"
@@ -18,7 +18,7 @@
     "reasoning",
     "long-context"
   ],
-  "sortOrder": 203,
+  "sortOrder": 209,
   "modelId": "claude-opus-4-6",
   "endpoint": {
     "kind": "static",
@@ -254,5 +254,5 @@
     ]
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "current"
+  "profileStatus": "outdated"
 }

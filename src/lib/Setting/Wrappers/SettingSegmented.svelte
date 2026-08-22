@@ -48,9 +48,10 @@
     });
 </script>
 
-<span class="text-textcolor {item.classes ?? ''}">
+<span class="text-textcolor {item.classes ?? ''}" data-setting-id={item.id}>
     {getLabel(item)}
-    {#if item.helpKey}<Help key={item.helpKey as any}/>{/if}
+    {#if item.showExperimental}<Help key="experimental"/>{/if}
+    {#if item.helpKey}<Help key={item.helpKey as any} unrecommended={item.helpUnrecommended ?? false}/>{/if}
 </span>
 <SegmentedControl
     bind:value={localValue}

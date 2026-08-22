@@ -1,7 +1,7 @@
 {
   "id": "vertex-gemini-native:gemini-35-flash",
-  "version": 1,
-  "updatedAt": 1781399379992,
+  "version": 2,
+  "updatedAt": 1786685377000,
   "displayName": "Vertex AI - Gemini 3.5 Flash",
   "providerBaseId": "vertex-gemini-native",
   "description": "Vertex AI native Gemini 3.5 Flash via streamGenerateContent. Requires PocketRisu 1.8.0+.",
@@ -19,7 +19,22 @@
   "schema": [],
   "uiSchema": {
     "groups": [],
-    "fields": []
+    "fields": [
+      {
+        "key": "presencePenalty",
+        "widget": "slider",
+        "visibility": "hidden",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "frequencyPenalty",
+        "widget": "slider",
+        "visibility": "hidden",
+        "group": "generation",
+        "order": 6
+      }
+    ]
   },
   "capabilities": [
     "streaming",

@@ -449,7 +449,7 @@ export class HypaProcessorV2<TMetadata> {
         },
       };
 
-      response = await globalFetch(replaceUrl, fetchArgs);
+      response = await globalFetch(replaceUrl, { ...fetchArgs, logCategory: 'embedding', logSource: 'memory' });
     } else if (
       ["ada", "openai3small", "openai3large"].includes(this.options.model)
     ) {
@@ -473,7 +473,7 @@ export class HypaProcessorV2<TMetadata> {
 
       response = await globalFetch(
         "https://api.openai.com/v1/embeddings",
-        fetchArgs
+        { ...fetchArgs, logCategory: 'embedding', logSource: 'memory' }
       );
     } else if (isContextModel(this.options.model)) {
       const provider = getContextProvider(this.options.model);

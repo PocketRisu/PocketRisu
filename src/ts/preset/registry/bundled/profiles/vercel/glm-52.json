@@ -1,0 +1,56 @@
+{
+  "id": "vercel:glm-52",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "GLM 5.2",
+  "displayNameI18n": {
+    "ko": "GLM 5.2"
+  },
+  "providerBaseId": "vercel",
+  "description": "GLM 5.2 via Vercel AI Gateway (zai/glm-5.2).",
+  "descriptionI18n": {
+    "ko": "GLM 5.2 (Vercel AI Gateway, zai/glm-5.2)."
+  },
+  "tags": [
+    "vercel",
+    "glm"
+  ],
+  "sortOrder": 577,
+  "modelId": "zai/glm-5.2",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1040000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

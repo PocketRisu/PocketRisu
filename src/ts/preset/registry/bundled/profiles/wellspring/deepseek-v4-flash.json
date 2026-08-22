@@ -1,7 +1,7 @@
 {
   "id": "wellspring:deepseek-v4-flash",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1781836101943,
   "displayName": "DeepSeek V4 Flash",
   "displayNameI18n": {
     "ko": "DeepSeek V4 Flash"
@@ -55,5 +55,6 @@
     ]
   },
   "recommendedTokenizer": "deepseek",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "Wellspring (arca.live community API) shut down; service terminated."
 }

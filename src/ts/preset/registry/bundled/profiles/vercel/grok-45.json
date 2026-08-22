@@ -1,0 +1,57 @@
+{
+  "id": "vercel:grok-45",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Grok 4.5",
+  "displayNameI18n": {
+    "ko": "Grok 4.5"
+  },
+  "providerBaseId": "vercel",
+  "description": "Grok 4.5 via Vercel AI Gateway (xai/grok-4.5).",
+  "descriptionI18n": {
+    "ko": "Grok 4.5 (Vercel AI Gateway, xai/grok-4.5)."
+  },
+  "tags": [
+    "vercel",
+    "grok"
+  ],
+  "sortOrder": 579,
+  "modelId": "xai/grok-4.5",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 500000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 500000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

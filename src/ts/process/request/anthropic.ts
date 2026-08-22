@@ -476,6 +476,8 @@ export async function requestClaude(arg:RequestDataArgumentExtended):Promise<req
         }
 
         const res = await globalFetch(url, {
+            logCategory: 'llm',
+            logSource: 'main',
             method: "POST",
             body: params,
             headers: signed.headers,
@@ -608,6 +610,8 @@ export async function requestClaude(arg:RequestDataArgumentExtended):Promise<req
         }
         const id = v4()
         const resp = await fetchNative(replacerURL + '/batches', {
+            logCategory: 'llm',
+            logSource: 'main',
             "body": JSON.stringify({
                 "requests": [{
                     "custom_id": id,
@@ -798,6 +802,8 @@ async function requestClaudeHTTP(replacerURL:string, headers:{[key:string]:strin
     if(arg.useStreaming){
         
         const res = await fetchNative(replacerURL, {
+            logCategory: 'llm',
+            logSource: 'main',
             body: JSON.stringify(body),
             headers: headers,
             method: "POST",
@@ -896,6 +902,8 @@ async function requestClaudeHTTP(replacerURL:string, headers:{[key:string]:strin
                                     text = ''
                                     reader.cancel()
                                     const res = await fetchNative(replacerURL, {
+                                        logCategory: 'llm',
+                                        logSource: 'sub',
                                         body: JSON.stringify(body),
                                         headers: headers,
                                         method: "POST",
@@ -949,6 +957,8 @@ async function requestClaudeHTTP(replacerURL:string, headers:{[key:string]:strin
 
     const db = getDatabase()
     const res = await globalFetch(replacerURL, {
+        logCategory: 'llm',
+        logSource: 'main',
         body: body,
         headers: headers,
         method: "POST",

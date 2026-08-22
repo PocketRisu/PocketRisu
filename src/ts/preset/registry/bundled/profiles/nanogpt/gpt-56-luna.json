@@ -1,0 +1,63 @@
+{
+  "id": "nanogpt:gpt-56-luna",
+  "version": 1,
+  "updatedAt": 1784964781000,
+  "displayName": "GPT-5.6 Luna",
+  "displayNameI18n": {
+    "ko": "GPT-5.6 Luna"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "GPT-5.6 Luna via NanoGPT (openai/gpt-5.6-luna).",
+  "descriptionI18n": {
+    "ko": "GPT-5.6 Luna (NanoGPT, openai/gpt-5.6-luna)."
+  },
+  "tags": [
+    "nanogpt",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 542,
+  "modelId": "openai/gpt-5.6-luna",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

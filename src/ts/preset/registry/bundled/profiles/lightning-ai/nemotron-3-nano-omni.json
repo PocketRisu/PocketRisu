@@ -1,0 +1,55 @@
+{
+  "id": "lightning-ai:nemotron-3-nano-omni",
+  "version": 1,
+  "updatedAt": 1784964865000,
+  "displayName": "Nemotron 3 Nano Omni",
+  "displayNameI18n": {
+    "ko": "Nemotron 3 Nano Omni"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Nemotron 3 Nano Omni 30B A3B (reasoning) via Lightning AI.",
+  "descriptionI18n": {
+    "ko": "Nemotron 3 Nano Omni 30B A3B (reasoning) (Lightning AI)."
+  },
+  "tags": [
+    "lightning-ai",
+    "nemotron"
+  ],
+  "sortOrder": 736,
+  "modelId": "lightning-ai/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 256000,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

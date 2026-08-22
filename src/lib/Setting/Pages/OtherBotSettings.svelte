@@ -5,7 +5,7 @@
     import { language } from "src/lang";
     import Help from "src/lib/Others/Help.svelte";
     import { selectSingleFile } from "src/ts/util";
-    import { DBState, selectedCharID } from 'src/ts/stores.svelte';
+    import { DBState, selectedCharID, OtherBotsSubmenuIndex } from 'src/ts/stores.svelte';
     import { saveAsset, downloadFile, globalFetch } from "src/ts/globalApi.svelte";
     import NumberInput from "src/lib/UI/GUI/NumberInput.svelte";
     import TextInput from "src/lib/UI/GUI/TextInput.svelte";
@@ -23,7 +23,6 @@
     import { alertError, alertInput, alertConfirm, notifySuccess, notifyError } from "src/ts/alert";
     import { createHypaV3Preset } from "src/ts/process/memory/hypav3";
 
-    let submenu = $state(0);
 
     // HypaV3
     $effect(() => {
@@ -229,9 +228,9 @@
     { label: 'TTS', value: 1 },
     { label: language.emotionImage, value: 2 },
     { label: language.imageGeneration, value: 3 },
-]} bind:selected={submenu} />
+]} bind:selected={$OtherBotsSubmenuIndex} />
 
-{#if submenu === 3}
+{#if $OtherBotsSubmenuIndex === 3}
     <Accordion name={language.imageGeneration} styled disabled>
         <span class="text-textcolor mt-2">{language.imageGeneration} {language.provider} <Help key="sdProvider"/></span>
         <SelectInput className="mt-2 mb-4" bind:value={DBState.db.sdProvider}>
@@ -292,6 +291,8 @@
 
             <span class="text-textcolor">Model <Help key="naiModel"/></span>
             <SelectInput className="mt-2 mb-4" bind:value={DBState.db.NAIImgModel} >
+                <OptionInput value="nai-diffusion-5-full" >nai-diffusion-5-full</OptionInput>
+                <OptionInput value="nai-diffusion-5-curated" >nai-diffusion-5-curated</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-full" >nai-diffusion-4-5-full</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-curated" >nai-diffusion-4-5-curated</OptionInput>
                 <OptionInput value="nai-diffusion-4-full" >nai-diffusion-4-full</OptionInput>
@@ -311,7 +312,9 @@
             {#if DBState.db.NAIImgModel === 'nai-diffusion-4-full'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-curated-preview'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-5-full'
-            || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'}
+            || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'
+            || DBState.db.NAIImgModel === 'nai-diffusion-5-full'
+            || DBState.db.NAIImgModel === 'nai-diffusion-5-curated'}
                 <SelectInput className="mt-2 mb-4" bind:value={DBState.db.NAIImgConfig.sampler}>
                     <OptionInput value="k_euler_ancestral" >Euler Ancestral</OptionInput>
                     <OptionInput value="k_dpmpp_2s_ancestral" >DPM++ 2S Ancestral</OptionInput>
@@ -937,7 +940,7 @@
     </Accordion>
 {/if}
 
-{#if submenu === 1}
+{#if $OtherBotsSubmenuIndex === 1}
 <Accordion name="TTS" styled disabled>
     <span class="text-textcolor mt-2">Auto Speech <Help key="ttsAutoSpeech"/></span>
     <CheckInput className="mt-2" bind:check={DBState.db.ttsAutoSpeech}/>
@@ -963,7 +966,7 @@
 </Accordion>
 {/if}
 
-{#if submenu === 2}
+{#if $OtherBotsSubmenuIndex === 2}
 <Accordion name={language.emotionImage} styled disabled>
     <span class="text-textcolor mt-2">{language.emotionMethod} <Help key="emotionMethod"/></span>
 
@@ -974,7 +977,7 @@
 </Accordion>
 {/if}
 
-{#if submenu === 0}
+{#if $OtherBotsSubmenuIndex === 0}
     <Accordion name={language.longTermMemory} styled disabled>
         <span class="text-textcolor mt-4">{language.type} <Help key="memType"/></span>
 
@@ -1087,7 +1090,7 @@
 
                 <button class="mr-2 text-textcolor2 hover:text-primary cursor-pointer" onclick={async() => {
                     try {
-                        const bytesImport = (await selectSingleFile(['json'])).data
+                        const bytesImport = (await selectSingleFile(['json']))?.data
 
                         if(!bytesImport) return
 

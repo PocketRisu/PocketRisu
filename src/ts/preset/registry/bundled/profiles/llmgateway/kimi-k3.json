@@ -1,0 +1,61 @@
+{
+  "id": "llmgateway:kimi-k3",
+  "version": 1,
+  "updatedAt": 1784964953000,
+  "displayName": "Kimi K3",
+  "displayNameI18n": {
+    "ko": "Kimi K3"
+  },
+  "providerBaseId": "llmgateway",
+  "description": "Kimi K3 via LLM Gateway (kimi-k3).",
+  "descriptionI18n": {
+    "ko": "Kimi K3 (LLM Gateway, kimi-k3)."
+  },
+  "tags": [
+    "llmgateway",
+    "kimi"
+  ],
+  "sortOrder": 592,
+  "modelId": "kimi-k3",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.llmgateway.io/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://api.llmgateway.io/v1/models"
+    ],
+    "notes": "Context length per LLM Gateway GET /v1/models; the gateway does not expose a per-model max output token limit.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 LLM Gateway의 GET /v1/models 기준. 게이트웨이는 모델별 최대 출력 토큰 한도를 노출하지 않습니다."
+    }
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

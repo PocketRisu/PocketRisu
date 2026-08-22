@@ -1,7 +1,7 @@
 {
   "id": "lightning-ai:glm-5",
-  "version": 1,
-  "updatedAt": 1781104476429,
+  "version": 2,
+  "updatedAt": 1784964873000,
   "displayName": "GLM-5",
   "displayNameI18n": {
     "ko": "GLM-5"
@@ -52,5 +52,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "No longer served by Lightning AI; the model is absent from GET /api/v1/models.",
+  "statusSourceUrls": [
+    "https://lightning.ai/api/v1/models"
+  ]
 }

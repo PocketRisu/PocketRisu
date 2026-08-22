@@ -40,7 +40,7 @@
         {/snippet}
     </SettingRowLayout>
 {:else}
-    <div class="flex items-center {item.classes ?? 'mt-2'}">
+    <div class="flex items-center {item.classes ?? 'mt-2'}" data-setting-id={item.id}>
         <Check bind:check={localValue} name={getLabel(item)} >
             {#if item.showExperimental}<Help key="experimental"/>{/if}
             {#if item.helpKey}<Help key={item.helpKey as any} unrecommended={item.helpUnrecommended ?? false}/>{/if}

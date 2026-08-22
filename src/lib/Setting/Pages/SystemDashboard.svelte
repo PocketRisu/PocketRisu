@@ -17,10 +17,11 @@
         BlocksIcon,
         ShieldCheckIcon,
         SaveIcon,
+        ImageOffIcon,
     } from '@lucide/svelte'
     import { alertConfirm, alertMd, notifyError, notifySuccess } from 'src/ts/alert'
     import { forageStorage } from 'src/ts/globalApi.svelte'
-    import { SystemSubmenuIndex, settingsOpen } from 'src/ts/stores.svelte'
+    import { DBState, SystemSubmenuIndex, settingsOpen } from 'src/ts/stores.svelte'
     import { getDatabase } from 'src/ts/storage/database.svelte'
     import { changeChar } from 'src/ts/characters'
     import { SystemTab } from 'src/ts/routing'
@@ -128,6 +129,37 @@
             loadError = err instanceof Error ? err.message : String(err)
         } finally {
             loading = false
+        }
+    }
+
+    async function runPurgeOrphans() {
+        const ok = await alertConfirm(language.storageOrphanConfirm(
+            stats?.orphan.count ?? 0,
+            stats?.orphan.totalSize ?? 0,
+        ))
+        if (!ok) return
+        optimizeMessage = language.storageOrphanPurging
+        optimizeOpen = true
+        try {
+            const auth = await forageStorage.createAuth()
+            const res = await fetch('/api/db/assets/purge-orphans', {
+                method: 'POST',
+                headers: { 'risu-auth': auth },
+            })
+            const json = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                notifyError(language.storageOrphanFailed + ': ' + (json?.error || `HTTP ${res.status}`))
+                return
+            }
+            notifySuccess(language.storageOrphanDone(json.deleted ?? 0, json.bytes ?? 0))
+            await loadStats()
+            // The per-character panel carries its own orphan tally — drop it so
+            // it cannot keep showing a count we just cleared.
+            characters = null
+        } catch (err) {
+            notifyError(language.storageOrphanFailed + ': ' + (err instanceof Error ? err.message : String(err)))
+        } finally {
+            optimizeOpen = false
         }
     }
 
@@ -597,6 +629,46 @@
             <ShButton variant="primary" onclick={runOptimize} disabled={(stats.sqlite.reclaimable + (stats.chunks?.orphanBytes ?? 0)) < 50 * 1024 * 1024}>
                 <SparklesIcon size={16} />
                 {language.storageOptimize}
+            </ShButton>
+        </div>
+    </div>
+
+    <!-- ④ Orphan media ──────────────────────────────────────────────────── -->
+    <div class="border border-darkborderc bg-darkbg/40 rounded-md p-4 mb-4">
+        <div class="flex items-baseline justify-between gap-2 mb-3 flex-wrap">
+            <div class="flex items-center gap-2 text-textcolor">
+                <ImageOffIcon size={16} />
+                <span class="font-medium">{language.storageOrphan}</span>
+            </div>
+            {#if stats.orphan.available}
+                <span class="text-textcolor2 text-sm tabular-nums">
+                    {language.storageOrphanHeader(stats.orphan.count, stats.orphan.totalSize)}
+                </span>
+            {/if}
+        </div>
+
+        <p class="text-textcolor2 text-sm leading-relaxed mb-2">{language.storageOrphanWhat}</p>
+        <p class="text-textcolor2 text-sm leading-relaxed mb-3">{language.storageOrphanWhen}</p>
+
+        {#if !stats.orphan.available}
+            <ShAlert variant="default">
+                {#snippet icon()}<InfoIcon />{/snippet}
+                {language.storageOrphanUnavailable}
+            </ShAlert>
+        {/if}
+
+        <div class="flex items-center justify-between gap-3 mb-3">
+            <div class="min-w-0">
+                <div class="text-textcolor text-sm">{language.storageOrphanAutoClean}</div>
+                <div class="text-textcolor2 text-xs leading-relaxed">{language.storageOrphanAutoCleanDesc}</div>
+            </div>
+            <ShSwitch bind:checked={DBState.db.nodeOnlyAutoCleanAssets} />
+        </div>
+
+        <div class="flex justify-end">
+            <ShButton variant="primary" onclick={runPurgeOrphans} disabled={!stats.orphan.available || stats.orphan.count === 0}>
+                <ImageOffIcon size={16} />
+                {language.storageOrphanPurge}
             </ShButton>
         </div>
     </div>

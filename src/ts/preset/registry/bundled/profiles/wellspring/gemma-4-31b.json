@@ -1,7 +1,7 @@
 {
   "id": "wellspring:gemma-4-31b",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1781836101943,
   "displayName": "Gemma 4 31B",
   "displayNameI18n": {
     "ko": "Gemma 4 31B"
@@ -53,5 +53,6 @@
     ]
   },
   "recommendedTokenizer": "gemma",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "Wellspring (arca.live community API) shut down; service terminated."
 }

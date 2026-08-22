@@ -7,7 +7,6 @@ import { saveInlayedSignature, setInlayAsset, writeInlayImage, type InlaySignatu
 import { extractJSON, getGeneralJSONSchema } from "../templates/jsonSchema"
 import { callTool, decodeToolCall, encodeToolCall } from "../mcp/mcp"
 import { notifyError } from "src/ts/alert";
-import { addFetchLog } from "src/ts/globalApi.svelte"
 import type { RequestDataArgumentExtended, requestDataResponse, StreamResponseChunk } from './request'
 import { applyAdditionalParameters, applyParameters, getAdditionalParameters, type LLMParameter } from './shared'
 import { bodyIntercepterStore } from "src/ts/stores.svelte"
@@ -682,7 +681,10 @@ async function requestGoogle(url:string, body:any, headers:{[key:string]:string}
             method: 'POST',
             chatId: arg.chatId,
             signal: arg.abortSignal,
-            interceptor: 'gemini_base_stream'
+            interceptor: 'gemini_base_stream',
+            logCategory: 'llm',
+            logSource: 'main',
+            logModel: arg.modelInfo?.id,
         })
 
         if(f.status !== 200){
@@ -715,7 +717,10 @@ async function requestGoogle(url:string, body:any, headers:{[key:string]:string}
         method: 'POST',
         chatId: arg.chatId,
         signal: arg.abortSignal,
-        interceptor: 'gemini_base'
+        interceptor: 'gemini_base',
+        logCategory: 'llm',
+        logSource: 'main',
+        logModel: arg.modelInfo?.id,
     })
     
 
@@ -1262,6 +1267,9 @@ function wrapToolStream(
                                 if (arg?.abortSignal?.aborted) break
                             }
                             resRec = await fetchNative(url, {
+                                logCategory: 'llm',
+                                logSource: 'sub',
+                                logModel: arg.modelInfo?.id,
                                 headers: headers,
                                 body: JSON.stringify(body),
                                 method: 'POST',
@@ -1271,14 +1279,6 @@ function wrapToolStream(
                             })
 
                             if(resRec.status == 200){
-                                addFetchLog({
-                                    body: body,
-                                    response: "Streaming",
-                                    success: true,
-                                    url: url,
-                                    status: resRec.status,
-                                })
-
                                 errorFlag = false
                                 break
                             }

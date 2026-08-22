@@ -36,7 +36,7 @@
     alertConfirmTwice,
     handleDualAction,
     getFirstMessage,
-    processRegexScript,
+    processMessageForPreview,
     getCategoryName,
   } from "./utils";
 
@@ -212,7 +212,7 @@
       msg = chat.message[msgIndex];
     }
 
-    return shouldProcess ? await processRegexScript(msg, msgIndex) : msg;
+    return await processMessageForPreview(msg, msgIndex, shouldProcess);
   }
 
   async function deleteThis(): Promise<void> {

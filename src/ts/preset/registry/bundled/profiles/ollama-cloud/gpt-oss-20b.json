@@ -1,0 +1,61 @@
+{
+  "id": "ollama-cloud:gpt-oss-20b",
+  "version": 2,
+  "updatedAt": 1784964865000,
+  "displayName": "gpt-oss 20B",
+  "displayNameI18n": {
+    "ko": "gpt-oss 20B"
+  },
+  "providerBaseId": "ollama-cloud",
+  "description": "gpt-oss 20B via Ollama Cloud (gpt-oss:20b).",
+  "descriptionI18n": {
+    "ko": "gpt-oss 20B (Ollama Cloud, gpt-oss:20b)."
+  },
+  "tags": [
+    "ollama",
+    "cloud",
+    "gpt-oss"
+  ],
+  "sortOrder": 631,
+  "modelId": "gpt-oss:20b-cloud",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ollama.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ollama.com/v1/models",
+    "https://docs.ollama.com/cloud"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 131072,
+    "notes": "Native model spec. Ollama Cloud may cap context per deployment and does not expose per-model limits via /v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. Ollama Cloud는 배포별로 컨텍스트를 제한할 수 있고 /v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://ollama.com/v1/models",
+      "https://ollama.com/search?c=cloud"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

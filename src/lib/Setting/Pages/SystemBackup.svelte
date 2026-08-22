@@ -19,13 +19,14 @@
         TriangleAlertIcon,
         RefreshCwIcon,
         TrashIcon,
+        SettingsIcon,
     } from '@lucide/svelte'
     import { alertConfirm, alertError, alertWait, notifyError, notifySuccess } from 'src/ts/alert'
     import { forageStorage } from 'src/ts/globalApi.svelte'
     import { setDatabase } from 'src/ts/storage/database.svelte'
     import { decodeRisuSave } from 'src/ts/storage/risuSave'
     import { language } from 'src/lang'
-    import { LoadLocalBackup, SaveLocalBackup, SaveServerBackup } from 'src/ts/drive/backuplocal'
+    import { LoadLocalBackup, SaveLocalBackup, SaveSettingsOnlyBackup, SaveServerBackup } from 'src/ts/drive/backuplocal'
 
     // ── Types ────────────────────────────────────────────────────────────────
     interface Snapshot { key: string; size: number; timestamp: number | null }
@@ -332,6 +333,12 @@
         SaveLocalBackup()
     }
 
+    // Confirmation lives inside SaveSettingsOnlyBackup — it needs the server's
+    // size breakdown before it can ask anything useful.
+    async function downloadSettingsOnly() {
+        SaveSettingsOnlyBackup()
+    }
+
     async function restoreFromLocalFile() {
         if (!(await alertConfirm(language.backupLoadConfirm))) return
         if (!(await alertConfirm(language.backupLoadConfirm2))) return
@@ -494,6 +501,16 @@
             <ShButton variant="outline" size="sm" onclick={downloadLocal}>
                 <DownloadIcon size={14} />
                 {language.backupLocalDownload}
+            </ShButton>
+        </div>
+        <div class="flex items-center justify-between gap-3 p-3 border border-darkborderc/50 rounded-md bg-bgcolor/50">
+            <div class="flex flex-col min-w-0 flex-1">
+                <span class="text-textcolor text-sm font-medium">{language.backupSettingsOnly}</span>
+                <span class="text-textcolor2 text-xs leading-relaxed mt-0.5">{language.backupSettingsOnlyDesc}</span>
+            </div>
+            <ShButton variant="outline" size="sm" onclick={downloadSettingsOnly}>
+                <SettingsIcon size={14} />
+                {language.backupSettingsOnly}
             </ShButton>
         </div>
         <div class="flex items-center justify-between gap-3 p-3 border border-darkborderc/50 rounded-md bg-bgcolor/50">

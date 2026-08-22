@@ -1,4 +1,4 @@
-import { NodeStorage, type PatchItemResult } from "./nodeStorage"
+import { NodeStorage, type PatchItemResult, type ExportBackupOptions } from "./nodeStorage"
 
 export class AutoStorage{
     isAccount:boolean = false
@@ -38,9 +38,14 @@ export class AutoStorage{
         return this.realStorage.createAuth()
     }
 
-    async exportBackup(opts?: { target?: 'upstream' }) {
+    async exportBackup(opts?: ExportBackupOptions) {
         await this.Init()
         return this.realStorage.exportBackup(opts)
+    }
+
+    async settingsBackupEstimate() {
+        await this.Init()
+        return this.realStorage.settingsBackupEstimate()
     }
 
     async importBackup(file: Blob, onProgress?: (loaded: number, total: number) => void) {
@@ -50,6 +55,12 @@ export class AutoStorage{
 
     async patchItem(key: string, patchData: { patch: any[], expectedHash: string }): Promise<PatchItemResult> {
         return await this.realStorage.patchItem(key, patchData)
+    }
+
+    /** Writer-lock state for the reload-on-return check (see NodeStorage). */
+    async getWriterLockState() {
+        await this.Init()
+        return this.realStorage.getWriterLockState()
     }
 
     /** Get the last known ETag for database.bin */

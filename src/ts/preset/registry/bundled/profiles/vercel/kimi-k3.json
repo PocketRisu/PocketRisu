@@ -1,0 +1,57 @@
+{
+  "id": "vercel:kimi-k3",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Kimi K3",
+  "displayNameI18n": {
+    "ko": "Kimi K3"
+  },
+  "providerBaseId": "vercel",
+  "description": "Kimi K3 via Vercel AI Gateway (moonshotai/kimi-k3).",
+  "descriptionI18n": {
+    "ko": "Kimi K3 (Vercel AI Gateway, moonshotai/kimi-k3)."
+  },
+  "tags": [
+    "vercel",
+    "kimi"
+  ],
+  "sortOrder": 576,
+  "modelId": "moonshotai/kimi-k3",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 131072
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

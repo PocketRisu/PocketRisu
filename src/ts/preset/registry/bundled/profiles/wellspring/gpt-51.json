@@ -1,0 +1,57 @@
+{
+  "id": "wellspring:gpt-51",
+  "version": 2,
+  "updatedAt": 1781836101943,
+  "displayName": "GPT-5.1",
+  "displayNameI18n": {
+    "ko": "GPT-5.1"
+  },
+  "providerBaseId": "wellspring",
+  "description": "GPT-5.1 via Wellspring (gpt-5.1).",
+  "descriptionI18n": {
+    "ko": "GPT-5.1 (챈섭, gpt-5.1)."
+  },
+  "tags": [
+    "wellspring",
+    "openai"
+  ],
+  "sortOrder": 599,
+  "modelId": "gpt-5.1",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://wellspring.encrypt.gay/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming"
+  ],
+  "sourceUrls": [
+    "https://wellspring.encrypt.gay/v1/models"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 61440,
+    "maxOutputTokens": 32000,
+    "notes": "Wellspring host-enforced per-request caps (max_input_tokens / max_output_tokens), not native model context window. Per-user rate limit 2 RPM, concurrency 5, deduction weight 5.1, global quota 10M. No tools or reasoning support. Host /v1/models advertises 120000 input; effective input cap recorded as 61440.",
+    "notesI18n": {
+      "ko": "Wellspring(챈섭) 호스트가 거는 요청당 캡(입력/출력)이며 네이티브 모델 윈도우가 아닙니다. 유저별 분당 한도 2 RPM, 동시 처리량 5, 차감 가중치 5.1, 글로벌 할당량 10M. tools·reasoning 미지원. 호스트 /v1/models는 입력 120000을 광고하나 실효 입력 캡은 61440으로 기록."
+    },
+    "sourceUrls": [
+      "https://wellspring.encrypt.gay/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "deprecated",
+  "statusReason": "Wellspring (arca.live community API) shut down; service terminated."
+}

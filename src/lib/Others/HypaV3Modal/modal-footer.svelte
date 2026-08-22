@@ -6,7 +6,7 @@
   import { type Message } from "src/ts/storage/database.svelte";
   import { DBState, selectedCharID } from "src/ts/stores.svelte";
   import { language } from "src/lang";
-  import { getFirstMessage, processRegexScript } from "./utils";
+  import { getFirstMessage, processMessageForPreview } from "./utils";
 
   interface Props {
     hypaV3Data: SerializableHypaV3Data;
@@ -29,8 +29,12 @@
       if (lastMessageIndex !== -1) {
         const next = chat.message[lastMessageIndex + 1] ?? null;
 
-        return next && shouldProcess
-          ? await processRegexScript(next, lastMessageIndex + 1)
+        return next
+          ? await processMessageForPreview(
+              next,
+              lastMessageIndex + 1,
+              shouldProcess
+            )
           : next;
       }
     }
@@ -42,13 +46,15 @@
     if (!firstMessage) {
       const next = chat.message[0] ?? null;
 
-      return next && shouldProcess ? await processRegexScript(next, 0) : next;
+      return next
+        ? await processMessageForPreview(next, 0, shouldProcess)
+        : next;
     }
 
     // Will summarize first message
     const next: Message = { role: "char", chatId: "first", data: firstMessage };
 
-    return shouldProcess ? await processRegexScript(next) : next;
+    return await processMessageForPreview(next, -1, shouldProcess);
   }
 </script>
 

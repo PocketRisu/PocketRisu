@@ -48,6 +48,11 @@ export const languageKorean = {
     chatGuardPersistTitle: "기존 채팅 데이터 보호를 위해 저장을 중단했어요",
     chatGuardPersistDesc:
       "서버에서 손상된 채팅 구조를 감지하여 디스크 기록을 거부했어요. 최근 변경사항이 아직 디스크에 반영되지 않았을 수 있으니 새로고침 전에 다시 확인해주세요. 기존 데이터는 안전합니다.",
+    backgroundGenerationFailed: "백그라운드 생성 실패 ({char}): {error}",
+    modelJobBusy:
+      "이 채팅은 서버에서 아직 생성 중이에요. 완료되면 자동으로 채워지니 잠시 기다려주세요.",
+    modelJobConnectionLost:
+      "연결이 끊겼지만 서버에서 계속 생성 중이에요. 다시 돌아오면 자동으로 이어집니다 — 다시 보내지 않아도 돼요.",
   },
   showHelp: "도움말 보기",
   help: helpKo,
@@ -742,7 +747,6 @@ export const languageKorean = {
   highcontrast: "고대비",
   requestretrys: "실패 시 재요청 횟수",
   utilityBot: "유틸리티 봇",
-  ShowLog: "리퀘스트 로그 보기",
   waifuWidth2: "Waifu 캐릭터 크기",
   nodeOnlyStandardChatWidth: "채팅창 가로폭",
   chatWidthStandard: "표준",
@@ -770,6 +774,13 @@ export const languageKorean = {
   unrecommended: "비권장",
   chatNotes: "채팅 노트",
   showUnrecommended: "비권장 설정 보이기",
+  streamingDisplayOptimizationMode: "스트리밍 표시 최적화",
+  streamingDisplayOptimizationOff: "끄기 (매 토큰 갱신)",
+  streamingDisplayOptimizationOffDesc: "토큰이 올 때마다 화면을 갱신하고 스크립트를 처리합니다",
+  streamingDisplayOptimizationBalanced: "0.1초 간격 갱신",
+  streamingDisplayOptimizationBalancedDesc: "화면 갱신을 0.1초 단위로 묶어 부하를 낮춥니다",
+  streamingDisplayOptimizationStrong: "완료 후 일괄 적용",
+  streamingDisplayOptimizationStrongDesc: "스트리밍 중엔 원문만 표시하고, 완료되면 스크립트를 한 번에 적용합니다",
   allowV2Plugin: "비권장 V2.0 플러그인 허용",
   altGreet: "추가 첫 메시지",
   scripts: "스크립트",
@@ -808,6 +819,7 @@ export const languageKorean = {
   otherBots: "기타 봇",
   user: "유저",
   additionalAssets: "추가 에셋",
+  viewInAssetViewer: "에셋 뷰어로 보기",
   editDisplay: "디스플레이 수정",
   textBackgrounds: "커스텀 채팅창 색깔",
   textBorder: "텍스트 윤곽선",
@@ -1067,6 +1079,7 @@ export const languageKorean = {
   persistentStorageFail:
     "저장소 설정에 실패했습니다. 브라우저에서 거부되었을 수 있습니다.",
   persistentStorageRecommended: "영구 저장소 권장됨",
+  unsupportedFileType: "지원하지 않는 파일 형식입니다",
   persistentStorageDesc:
     "당신의 브라우저는 영구 저장소를 지원합니다. 이 기능을 활성화하면, 데이터가 브라우저에 더 오래 남습니다.",
   enable: "활성화",
@@ -1092,6 +1105,8 @@ export const languageKorean = {
   antiClaudeOverload: "Claude 오버로드 방지",
   activeTabChange:
     "현재 탭이 비활성화되었습니다. OK를 누르면 탭이 다시 활성화됩니다.",
+  sessionHandoffReload:
+    "다른 기기에서 사용되어 최신 상태로 새로고침했어요.",
   addCharacter: "캐릭터 추가",
   importFromRealm: "RisuRealm에서 고르기",
   importFromRealmDesc:
@@ -1556,6 +1571,11 @@ export const languageKorean = {
   modelPresetTabPresets: "프리셋",
   modelPresetTabOptions: "설정",
   modelPresetTabTest: "테스트",
+  modelPresetTabModules: "모듈 분리 바인딩",
+  moduleModelBindingEnable: "모듈별 모델 지정 사용",
+  moduleModelBindingUnset: "지정 안 함",
+  moduleModelBindingEmpty: "모델을 호출하는 모듈이 없습니다.",
+  moduleModelBindingDangling: "지정된 프리셋을 찾을 수 없습니다. 다시 선택하거나, 프리셋을 다시 불러오면 연결됩니다.",
   modelPresetTestTitle: "테스트 요청",
   modelPresetTestHelp: "이 프리셋으로 메시지 하나를 보내 자격증명과 엔드포인트가 응답하는지 확인합니다. 채팅에는 저장되지 않습니다.",
   modelPresetTestSend: "테스트 전송",
@@ -1652,6 +1672,7 @@ export const languageKorean = {
   folderNameInput: "새 폴더 이름을 입력해주세요",
   folderRemoveLengthError: "폴더를 제거하려면 폴더가 비어 있어야 합니다.",
   personaNote: "페르소나 노트",
+  personaDuplicate: "복제",
   mcpAccessPrompt:
     '{{tool}}이(가) "{{action}}"을(를) 시도하고 있습니다. 허용하시겠습니까?',
   rememberToolUsage: "도구 사용 기억하기",
@@ -1741,7 +1762,6 @@ export const languageKorean = {
   loadMore: "더 보기",
   pluginUpdateFoundInstallIt:
     "플러그인 업데이트가 발견되었습니다. 업데이트를 설치하시겠습니까?",
-  noRequestLogs: "요청 로그가 없습니다.",
   branchedText: "이 채팅은 {}에서 분기되었습니다.",
   disableMessage: "메시지 비활성화",
   disableFirstMessageConfirm: "퍼스널 메세지를 비활성화할까요? 컨텍스트에서 제외됩니다.",
@@ -1934,6 +1954,11 @@ export const languageKorean = {
   scrollButtonTypeFour: "4버튼",
   scrollButtonTypeTwo: "2버튼",
   scrollButtonTypeOff: "사용 안 함",
+  nodeOnlyServerSideRequests: "서버 사이드 요청",
+  pendingSendNotice: "완료되지 못한 전송: {chars} — 해당 채팅을 열면 이어서 보냅니다.",
+  searchSettingsPlaceholder: "설정 검색...",
+  searchSettingsNoResults: "일치하는 설정이 없습니다",
+  searchSettingsHint: "설정 이름이나 키워드로 검색하세요",
   // 원격 접속 (Cloudflare Quick Tunnel)
   remoteAccess: "원격 접속",
   remoteAccessDesc:
@@ -2030,6 +2055,94 @@ export const languageKorean = {
   systemLogsExplicitOnly: "명시적 로그만",
   systemLogsExplicitOnlyHint: "console, 미처리 예외, 프레임워크 캡처 제외",
 
+  // 리퀘스트 로그 / 사용량 (시스템 설정)
+  requestLogsTab: "리퀘스트 로그",
+  requestLogsDesc:
+    "프로바이더로 나간 요청의 본문·응답·소요 시간을 기록합니다. 기본 필터는 LLM 요청만 표시합니다.",
+  requestLogsFilters: "필터",
+  requestLogsFilterClear: "필터 초기화",
+  requestLogsFilterActive: (count: number) =>
+    count === 0 ? "" : `${count}개 적용됨`,
+  requestLogsFilterCategory: "종류",
+  requestLogsFilterSource: "출처",
+  requestLogsFilterResult: "결과",
+  requestLogsCategoryLlm: "LLM",
+  requestLogsCategoryTts: "음성",
+  requestLogsCategoryImage: "이미지",
+  requestLogsCategoryTranslate: "번역",
+  requestLogsCategoryEmbedding: "임베딩",
+  requestLogsCategoryOther: "기타",
+  requestLogsSourceMain: "채팅",
+  requestLogsSourceTranslate: "번역",
+  requestLogsSourceMemory: "메모리",
+  requestLogsSourceEmotion: "감정",
+  requestLogsSourceSub: "보조",
+  requestLogsSourcePreview: "미리보기",
+  requestLogsSourceTest: "테스트",
+  requestLogsSourceTts: "음성",
+  requestLogsSourceImage: "이미지",
+  requestLogsSourcePlugin: "플러그인",
+  requestLogsSourceOther: "기타",
+  requestLogsResultSuccess: "성공",
+  requestLogsResultFailed: "실패",
+  requestLogsRouteDirect: "직접",
+  requestLogsRouteProxy: "프록시",
+  requestLogsRouteJob: "백엔드 콜",
+  requestLogsSearchPlaceholder: "URL, 모델, 오류 메시지로 검색",
+  requestLogsRefresh: "새로고침",
+  requestLogsClearAll: "전체 삭제",
+  requestLogsClearConfirm:
+    "저장된 리퀘스트 로그를 모두 삭제할까요? 사용량 통계는 유지됩니다.",
+  requestLogsEmpty: "로그가 없습니다",
+  requestLogsEmptyDesc: "요청을 보내면 여기에 기록됩니다.",
+  requestLogsEmptyButMore: "현재 필터에 맞는 항목이 없습니다. 더 불러와 보세요.",
+  requestLogsLoading: "불러오는 중...",
+  requestLogsFailedLoad: "리퀘스트 로그를 불러오지 못했습니다",
+  requestLogsLoadMore: "더 불러오기",
+  requestLogsCount: (shown: number, total: number) =>
+    shown === total ? `${total}건` : `${shown} / ${total}건`,
+  requestLogsDuration: "소요 시간",
+  requestLogsFirstToken: "첫 응답",
+  requestLogsTokens: "토큰",
+  requestLogsRequestHeaders: "요청 헤더",
+  requestLogsRequestBody: "요청 본문",
+  requestLogsResponse: "응답",
+  requestLogsError: "오류",
+  requestLogsCopied: "클립보드에 복사됨",
+  requestLogsTruncated: "일부 생략됨",
+  requestLogsEnabled: "리퀘스트 로그 기록",
+  requestLogsEnabledDesc:
+    "끄면 새 요청이 기록되지 않습니다. 사용량 통계도 함께 멈춥니다.",
+  requestLogsStreamUsage: "스트리밍 요청 토큰 수집",
+  requestLogsStreamUsageDesc:
+    "스트리밍 응답의 토큰 사용량을 함께 받아옵니다. 프로바이더에 따라 400 오류가 발생할 수 있으며, 그런 경우 이 옵션을 끄세요.",
+  requestLogsStorage: (used: string, max: string) =>
+    `저장 용량 ${used} / ${max}`,
+
+  usageTab: "사용량",
+  usageDesc: "LLM 요청의 토큰 사용량 통계입니다. 음성·이미지 등 토큰이 없는 요청은 집계에서 제외됩니다.",
+  usageRequests: "요청",
+  usageInputTokens: "입력 토큰",
+  usageOutputTokens: "출력 토큰",
+  usageCachedTokens: "캐시 토큰",
+  usageChartTitle: "토큰 사용 현황",
+  usageByModel: "모델별",
+  usageBySource: "출처별",
+  usageModel: "모델",
+  usageAvgDuration: "평균 응답",
+  usageFailed: "실패",
+  usagePeriod7d: "7일",
+  usagePeriod30d: "30일",
+  usagePeriod90d: "90일",
+  usagePeriodAll: "전체",
+  usageEmpty: "사용 기록이 없습니다",
+  usageEmptyDesc: "요청을 보내면 통계가 쌓입니다.",
+  usageLoading: "불러오는 중...",
+  usageFailedLoad: "사용량을 불러오지 못했습니다",
+  usageClearConfirm:
+    "사용량 통계를 모두 삭제할까요? 되돌릴 수 없습니다.",
+  usageClearAll: "통계 삭제",
+
   // 스토리지 대시보드
   systemDashboard: "대시보드",
   storageDashboardDesc:
@@ -2121,6 +2234,26 @@ export const languageKorean = {
   storageOptimizeFailed: "정리 실패",
 
   storageCleanup: "SQLite 오버헤드 정리",
+
+  storageOrphan: "고아 미디어",
+  storageOrphanHeader: (count: number, size: number) =>
+    `${count}개 · ${(size / 1024 / 1024).toFixed(1)} MB`,
+  storageOrphanWhat:
+    "캐릭터·모듈·페르소나 어디에서도 참조하지 않는 이미지 파일입니다. 캐릭터를 지우거나 에셋을 교체할 때 남습니다.",
+  storageOrphanWhen:
+    "삭제된 파일은 복구할 수 없습니다. 중요한 데이터가 있다면 백업을 먼저 만드세요. 정리 후에는 위의 \"SQLite 오버헤드 정리\"까지 실행해야 파일 크기가 실제로 줄어듭니다.",
+  storageOrphanUnavailable:
+    "아직 검사할 수 없습니다. 데이터베이스가 서버 메모리에 올라온 뒤 새로고침하세요.",
+  storageOrphanPurge: "고아 미디어 정리",
+  storageOrphanPurging: "고아 미디어 정리 중...",
+  storageOrphanConfirm: (count: number, size: number) =>
+    `참조되지 않는 미디어 ${count}개(${(size / 1024 / 1024).toFixed(1)} MB)를 삭제할까요? 되돌릴 수 없습니다.`,
+  storageOrphanDone: (count: number, size: number) =>
+    `${count}개 삭제 (${(size / 1024 / 1024).toFixed(1)} MB).`,
+  storageOrphanFailed: "고아 미디어 정리 실패",
+  storageOrphanAutoClean: "부팅 시 자동 정리",
+  storageOrphanAutoCleanDesc:
+    "앱을 열 때마다 고아 미디어를 자동으로 지웁니다. 기본은 꺼짐 — 아직 알려지지 않은 참조까지 지울 수 있어 수동 정리를 권장합니다.",
 
   storageWalCleanup: "WAL 수동 정리",
   storageWalCleanupHeader: (walSize: number) =>
@@ -2280,6 +2413,24 @@ export const languageKorean = {
     "현재 데이터로 새 백업을 만들어 사용자 기기로 즉시 다운로드합니다.",
   backupLocalRestoreDesc: "사용자 기기의 백업 파일에서 복원합니다.",
 
+  backupSettingsOnly: "설정만 내보내기",
+  backupSettingsOnlyDesc:
+    "캐릭터와 채팅 기록, 인레이 이미지를 빼고 설정만 내보냅니다. 모듈, 플러그인, 프리셋, 페르소나, 로어북, 테마, API 키는 그대로 담깁니다. 새 인스턴스를 세팅할 때 쓰세요.",
+  backupSettingsOnlyEstimating: "용량 확인 중...",
+  backupSettingsOnlyConfirm: (size: string) =>
+    `새 인스턴스에 옮길 설정 백업을 만듭니다. 약 ${size}입니다.\n\n• 담기는 것: 설정, API 키, 모듈, 플러그인, 프리셋, 페르소나, 로어북, 테마\n• 빠지는 것: 캐릭터, 채팅 기록, 인레이 이미지\n\n복원하면 그 기기의 기존 데이터를 덮어씁니다. 캐릭터가 있는 기기보다는 새 인스턴스에 쓰는 것을 권장합니다.`,
+  backupSettingsOnlyBreakdown: (
+    baseSize: string,
+    moduleCount: number,
+    assetCount: number,
+    moduleSize: string,
+  ) =>
+    `새 인스턴스에 옮길 설정 백업을 만듭니다. 캐릭터와 채팅 기록, 인레이 이미지는 빠집니다.\n\n• 설정, API 키, 모듈, 플러그인, 프리셋, 페르소나, 로어북, 테마: ${baseSize}\n• 모듈 에셋 (모듈 ${moduleCount}개, 이미지 ${assetCount.toLocaleString()}장): ${moduleSize}\n\n에셋을 빼도 모듈 자체는 그대로 옮겨집니다. 다만 이미지가 비어 보이며, 새 인스턴스에서 해당 모듈을 다시 받으면 채워집니다.`,
+  backupSettingsOnlyWithModuleAssets: (size: string) => `모듈 에셋 포함 (${size})`,
+  backupSettingsOnlyWithoutModuleAssets: (size: string) => `설정만 (${size})`,
+  backupSettingsOnlyModuleAssetsSkipped:
+    "설정 백업을 저장했습니다.\n\n**모듈 에셋은 담기지 않았습니다.** 복원한 인스턴스에서 모듈 목록과 설정은 그대로 보이지만 이미지는 비어 있습니다. 해당 모듈을 다시 받으면 채워집니다.",
+
   relatedGithub: "GitHub",
   relatedGithubDesc: "Star를 눌러 프로젝트를 응원해주세요.",
   relatedFeedbackForm: "의견 보내기",
@@ -2301,6 +2452,7 @@ export const languageKorean = {
     responding: "응답 중…",
     retrying: "재시도 중…",
     stalled: "멈춤…",
+    background: "백그라운드 진행 중…",
     done: "완료",
     failed: "실패",
     aborted: "취소됨",

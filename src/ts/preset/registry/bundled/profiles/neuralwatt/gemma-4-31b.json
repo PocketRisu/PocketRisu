@@ -1,0 +1,59 @@
+{
+  "id": "neuralwatt:gemma-4-31b",
+  "version": 1,
+  "updatedAt": 1784964865000,
+  "displayName": "Gemma 4 31B",
+  "displayNameI18n": {
+    "ko": "Gemma 4 31B"
+  },
+  "providerBaseId": "neuralwatt",
+  "description": "Gemma 4 31B via NeuralWatt (gemma-4-31b).",
+  "descriptionI18n": {
+    "ko": "Gemma 4 31B (NeuralWatt, gemma-4-31b)."
+  },
+  "tags": [
+    "neuralwatt",
+    "gemma"
+  ],
+  "sortOrder": 548,
+  "modelId": "gemma-4-31b",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.neuralwatt.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools"
+  ],
+  "sourceUrls": [
+    "https://api.neuralwatt.com/v1/models",
+    "https://portal.neuralwatt.com/models"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 262128,
+    "notes": "Context length and max output per NeuralWatt /v1/models metadata.limits.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이와 최대 출력은 NeuralWatt /v1/models의 metadata.limits 기준."
+    },
+    "sourceUrls": [
+      "https://api.neuralwatt.com/v1/models"
+    ],
+    "maxOutputTokens": 16384
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

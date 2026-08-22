@@ -7,7 +7,7 @@ import { setDatabase, type Database, defaultSdDataFunc, getDatabase, appVer, nod
 import { checkRisuUpdate } from "./update";
 import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, selIdState, ReloadGUIPointer, bodyIntercepterStore, loadingOverlayStore, chatDeselected } from "./stores.svelte";
 import { loadPlugins } from "./plugins/plugins.svelte";
-import { alertConfirm, alertError, alertMd, alertNormalWait, alertSelect, alertTOS, waitAlert, notifySuccess, notifyError } from "./alert";
+import { alertConfirm, alertError, alertMd, alertNormalWait, alertSelect, alertTOS, waitAlert, notifySuccess, notifyError, notifyInfo } from "./alert";
 import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
@@ -27,22 +27,12 @@ import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import { isLocalNetworkUrl } from "./network/localNetwork";
 import { decodeProxyJobWsChunk, formatProxyStreamErrorMessage, parseProxyJobWsEvent } from "./network/proxyJobWs";
+import {
+    createRequestLogScope, recordRequestLog, fetchRequestLogs,
+    type RequestLogCategory, type RequestLogSource, type RequestLogRoute,
+} from "./requestLog";
 
 export const forageStorage = new AutoStorage()
-
-interface fetchLog {
-    body: string
-    header: string
-    response: string
-    success: boolean,
-    date: string
-    url: string
-    responseType?: string
-    chatId?: string
-    status?: number
-}
-
-let fetchLog: fetchLog[] = []
 
 export async function downloadFile(name: string, dat: Uint8Array | ArrayBuffer | string) {
     if (typeof (dat) === 'string') {
@@ -395,7 +385,11 @@ export async function saveDb() {
         }
     }
     // Cross-device single-writer lock: mirrors BroadcastChannel behavior
-    // across devices via server-side session check (423 → deactivate)
+    // across devices via server-side session check (423 → deactivate).
+    // With reload-on-return below, a write actually reaching 423 means TRUE
+    // simultaneous use of two devices — rare, and the attempted change cannot
+    // be saved — so it stays an explicit blocking modal, never an automatic
+    // reload that would eat the user's action without a word.
     window.addEventListener('risu-session-deactivated', () => {
         if (!gotChannel) {
             gotChannel = true
@@ -404,6 +398,43 @@ export async function saveDb() {
             })
         }
     })
+
+    // Reload-on-return: while this tab was hidden, another device may have
+    // taken the writer lock and changed data. Check the moment the user comes
+    // BACK — right then nothing is in progress, so a refresh costs nothing —
+    // instead of at the next write, where a 423 would eat the very change
+    // being saved. Only 'stale' reloads (the other device actually wrote);
+    // 'fresh' means our copy is still current and the next user action simply
+    // takes the lock back with no reload at all.
+    let lastLockReturnCheck = 0
+    const checkWriterLockOnReturn = () => {
+        const nowMs = Date.now()
+        if (nowMs - lastLockReturnCheck < 5000) return
+        lastLockReturnCheck = nowMs
+        void (async () => {
+            // Dynamic import: process/index.svelte imports this module, so a
+            // static import here would be circular. Already loaded → instant.
+            const { doingChat } = await import("./process/index.svelte")
+            if (get(doingChat)) return // never yank a running generation
+            const state = await forageStorage.getWriterLockState()
+            if (state !== 'stale') return
+            try { sessionStorage.setItem('risu-session-handoff-reload', '1') } catch { /* toast is best-effort */ }
+            location.reload()
+        })().catch(() => { /* status check failed — do nothing, write path 423 still guards */ })
+    }
+    window.addEventListener('focus', checkWriterLockOnReturn)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkWriterLockOnReturn()
+    })
+
+    // Post-handoff notice from a reload-on-return in the previous page life.
+    // Delayed so the toast container is mounted before it fires.
+    try {
+        if (sessionStorage.getItem('risu-session-handoff-reload')) {
+            sessionStorage.removeItem('risu-session-handoff-reload')
+            setTimeout(() => notifyInfo(language.sessionHandoffReload), 1500)
+        }
+    } catch { /* storage unavailable — skip the notice */ }
 
     const changeTracker: toSaveType = {
         character: [],
@@ -1149,20 +1180,6 @@ export function setUsingSw(value: boolean) {
     usingSw = value
 }
 
-/**
- * Retrieves fetch data for a given chat ID.
- * 
- * @param {string} id - The chat ID to search for in the fetch log.
- * @returns {fetchLog | null} - The fetch log entry if found, otherwise null.
- */
-export function getFetchData(id: string) {
-    for (const log of fetchLog) {
-        if (log.chatId === id) {
-            return log;
-        }
-    }
-    return null;
-}
 
 const knownHostes = ["localhost", "127.0.0.1", "0.0.0.0"];
 
@@ -1192,6 +1209,12 @@ interface GlobalFetchArgs {
     interceptor?: string;
     requestTimeoutMs?: number;
     networkRoute?: 'auto' | 'local_network';
+    /** Request-log classification. Defaults to the neutral 'other'/'other';
+     *  LLM call sites pass 'llm' plus the issuing part of the app so the log's
+     *  default filter and the usage statistics can tell them apart. */
+    logCategory?: RequestLogCategory;
+    logSource?: RequestLogSource;
+    logModel?: string;
 }
 
 /**
@@ -1207,43 +1230,6 @@ interface GlobalFetchResult {
     data: any;
     headers: { [key: string]: string };
     status: number;
-}
-
-/**
- * Adds a fetch log entry.
- * 
- * @param {Object} arg - The arguments for the fetch log entry.
- * @param {any} arg.body - The body of the request.
- * @param {{ [key: string]: string }} [arg.headers] - The headers of the request.
- * @param {any} arg.response - The response from the request.
- * @param {boolean} arg.success - Whether the request was successful.
- * @param {string} arg.url - The URL of the request.
- * @param {string} [arg.resType] - The response type.
- * @param {string} [arg.chatId] - The chat ID associated with the request.
- * @returns {number} - The index of the added fetch log entry.
- */
-export function addFetchLog(arg: {
-    body: any,
-    headers?: { [key: string]: string },
-    response: any,
-    success: boolean,
-    url: string,
-    resType?: string,
-    chatId?: string,
-    status?: number
-}): number {
-    fetchLog.unshift({
-        body: typeof (arg.body) === 'string' ? arg.body : JSON.stringify(arg.body, null, 2),
-        header: JSON.stringify(arg.headers ?? {}, null, 2),
-        response: typeof (arg.response) === 'string' ? arg.response : JSON.stringify(arg.response, null, 2),
-        responseType: arg.resType ?? 'json',
-        success: arg.success,
-        date: (new Date()).toLocaleTimeString(),
-        url: arg.url,
-        chatId: arg.chatId,
-        status: arg.status
-    });
-    return 0;
 }
 
 /**
@@ -1303,42 +1289,41 @@ export async function globalFetch(url: string, arg: GlobalFetchArgs = {}): Promi
 }
 
 /**
- * Adds a fetch log entry in the global fetch log.
- * 
+ * Records a completed globalFetch request in the server request log.
+ *
  * @param {any} response - The response data.
  * @param {boolean} success - Indicates if the fetch was successful.
  * @param {string} url - The URL of the fetch request.
  * @param {GlobalFetchArgs} arg - The arguments for the fetch request.
+ * @param {number} started - Epoch ms when the request was issued, for duration.
  */
-function addFetchLogInGlobalFetch(response: any, success: boolean, url: string, arg: GlobalFetchArgs, status?: number) {
-    try {
-        fetchLog.unshift({
-            body: JSON.stringify(arg.body, null, 2),
-            header: JSON.stringify(arg.headers ?? {}, null, 2),
-            response: JSON.stringify(response, null, 2),
-            success: success,
-            date: (new Date()).toLocaleTimeString(),
-            url: url,
-            chatId: arg.chatId,
-            status: status
-        })
+function addFetchLogInGlobalFetch(response: any, success: boolean, url: string, arg: GlobalFetchArgs, status: number | undefined, started: number) {
+    // Opt-in, same rule as fetchNative: untagged call sites (TTS polling,
+    // asset downloads, plugin traffic) are not worth a persisted row.
+    if (!arg.logCategory) return
+    const stringify = (value: unknown) => {
+        try {
+            return typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+        } catch {
+            return `${value}`
+        }
     }
-    catch {
-        fetchLog.unshift({
-            body: JSON.stringify(arg.body, null, 2),
-            header: JSON.stringify(arg.headers ?? {}, null, 2),
-            response: `${response}`,
-            success: success,
-            date: (new Date()).toLocaleTimeString(),
-            url: url,
-            chatId: arg.chatId,
-            status: status
-        })
-    }
-
-    if (fetchLog.length > 20) {
-        fetchLog.pop()
-    }
+    recordRequestLog({
+        timestamp: started,
+        category: arg.logCategory ?? 'other',
+        source: arg.logSource ?? 'other',
+        chatId: arg.chatId,
+        model: arg.logModel,
+        url,
+        method: arg.method ?? 'POST',
+        status,
+        success,
+        streaming: false,
+        durationMs: Date.now() - started,
+        requestHeaders: stringify(arg.headers ?? {}),
+        requestBody: stringify(arg.body),
+        responseBody: stringify(response),
+    })
 }
 
 /**
@@ -1350,11 +1335,12 @@ function addFetchLogInGlobalFetch(response: any, success: boolean, url: string, 
  */
 async function fetchWithPlainFetch(url: string, arg: GlobalFetchArgs): Promise<GlobalFetchResult> {
     try {
+        const started = Date.now();
         const headers = { 'Content-Type': 'application/json', ...arg.headers };
         const response = await fetch(new URL(url), { body: JSON.stringify(arg.body), headers, method: arg.method ?? "POST", signal: arg.abortSignal });
         const data = arg.rawResponse ? new Uint8Array(await response.arrayBuffer()) : await response.json();
         const ok = response.ok && response.status >= 200 && response.status < 300;
-        addFetchLogInGlobalFetch(data, ok, url, arg, response.status);
+        addFetchLogInGlobalFetch(data, ok, url, arg, response.status, started);
         return { ok, data, headers: Object.fromEntries(response.headers), status: response.status };
     } catch (error) {
         return { ok: false, data: `${error}`, headers: {}, status: 400 };
@@ -1370,11 +1356,12 @@ async function fetchWithPlainFetch(url: string, arg: GlobalFetchArgs): Promise<G
  */
 async function fetchWithUSFetch(url: string, arg: GlobalFetchArgs): Promise<GlobalFetchResult> {
     try {
+        const started = Date.now();
         const headers = { 'Content-Type': 'application/json', ...arg.headers };
         const response = await userScriptFetch(url, { body: JSON.stringify(arg.body), headers, method: arg.method ?? "POST", signal: arg.abortSignal });
         const data = arg.rawResponse ? new Uint8Array(await response.arrayBuffer()) : await response.json();
         const ok = response.ok && response.status >= 200 && response.status < 300;
-        addFetchLogInGlobalFetch(data, ok, url, arg, response.status);
+        addFetchLogInGlobalFetch(data, ok, url, arg, response.status, started);
         return { ok, data, headers: Object.fromEntries(response.headers), status: response.status };
     } catch (error) {
         return { ok: false, data: `${error}`, headers: {}, status: 400 };
@@ -1390,6 +1377,7 @@ async function fetchWithUSFetch(url: string, arg: GlobalFetchArgs): Promise<Glob
  */
 async function fetchWithProxy(url: string, arg: GlobalFetchArgs): Promise<GlobalFetchResult> {
     try {
+        const started = Date.now();
         const furl = `/proxy2`;
         arg.headers["Content-Type"] ??= arg.body instanceof URLSearchParams ? "application/x-www-form-urlencoded" : "application/json";
         const headers = {
@@ -1410,18 +1398,18 @@ async function fetchWithProxy(url: string, arg: GlobalFetchArgs): Promise<Global
 
         if (arg.rawResponse) {
             const data = new Uint8Array(await response.arrayBuffer());
-            addFetchLogInGlobalFetch("Uint8Array Response", isSuccess, url, arg, response.status);
+            addFetchLogInGlobalFetch("Uint8Array Response", isSuccess, url, arg, response.status, started);
             return { ok: isSuccess, data, headers: Object.fromEntries(response.headers), status: response.status };
         }
 
         const text = await response.text();
         try {
             const data = JSON.parse(text);
-            addFetchLogInGlobalFetch(data, isSuccess, url, arg, response.status);
+            addFetchLogInGlobalFetch(data, isSuccess, url, arg, response.status, started);
             return { ok: isSuccess, data, headers: Object.fromEntries(response.headers), status: response.status };
         } catch (error) {
             const errorMsg = text.startsWith('<!DOCTYPE') ? "Responded HTML. Is your URL, API key, and password correct?" : text;
-            addFetchLogInGlobalFetch(text, false, url, arg, response.status);
+            addFetchLogInGlobalFetch(text, false, url, arg, response.status, started);
             return { ok: false, data: errorMsg, headers: Object.fromEntries(response.headers), status: response.status };
         }
     } catch (error) {
@@ -1449,8 +1437,30 @@ export function getBasename(data: string) {
 }
 
 /**
+ * Extracts "assets/..." path references from an arbitrary value. Non-string
+ * values are serialized first so references nested inside plugin-stored JSON
+ * (objects, arrays) are found too.
+ *
+ * @param {unknown} value - The value to scan.
+ * @returns {string[]} - The asset paths found in the value.
+ */
+export function extractAssetRefs(value: unknown): string[] {
+    let text: string;
+    if (typeof value === 'string') {
+        text = value;
+    } else {
+        try {
+            text = JSON.stringify(value) ?? '';
+        } catch {
+            return [];
+        }
+    }
+    return Array.from(text.matchAll(/assets[/\\][\w-]+\.\w+/g), (m) => m[0]);
+}
+
+/**
  * Retrieves uncleanable resources from the database.
- * 
+ *
  * @param {Database} db - The database to retrieve uncleanable resources from.
  * @param {'basename'|'pure'} [uptype='basename'] - The type of uncleanable resources to retrieve.
  * @returns {string[]} - An array of uncleanable resources.
@@ -1485,6 +1495,11 @@ export function getUncleanables(db: Database, uptype: 'basename' | 'pure' = 'bas
             addUncleanable(s.path);
         }
     }
+    // Image-gen reference images hang off settings, not off a character. Missing
+    // them here meant cleanChunks deleted an asset the app still points at.
+    addUncleanable(db.NAIImgConfig?.character_image);
+    addUncleanable(db.NAIImgConfig?.image);
+    addUncleanable(db.wavespeedImage?.reference_image);
 
     for (const cha of db.characters) {
         if (cha.image) {
@@ -1512,6 +1527,9 @@ export function getUncleanables(db: Database, uptype: 'basename' | 'pure' = 'bas
                 addUncleanable(asset.uri);
             }
         }
+        // GPT-SoVITS reference audio is uploaded via saveAsset and read back on
+        // every TTS run — assetId holds the full "assets/..." path.
+        addUncleanable(cha.gptSoVitsConfig?.ref_audio_data?.assetId);
     }
 
     if (db.modules) {
@@ -1531,6 +1549,11 @@ export function getUncleanables(db: Database, uptype: 'basename' | 'pure' = 'bas
     if (db.personas) {
         db.personas.map((v) => {
             addUncleanable(v.icon);
+            // Legacy field: personas imported from character cards in older
+            // versions kept an `image` alongside `icon`. Nothing reads it today,
+            // but it is a live asset reference — omitting it here deleted the
+            // asset for good.
+            addUncleanable((v as unknown as { image?: string }).image);
 
             if(v.embeddedModule){
                 const assets = v.embeddedModule.assets
@@ -1552,6 +1575,17 @@ export function getUncleanables(db: Database, uptype: 'basename' | 'pure' = 'bas
                 addUncleanable(item.imgFile);
             }
         })
+    }
+
+    // Plugins can persist asset paths (from risuai.saveAsset) anywhere inside
+    // their storage — as plain strings or nested in JSON values — so scan the
+    // serialized text for "assets/..." references instead of assuming a structure.
+    if (db.pluginCustomStorage) {
+        for (const value of Object.values(db.pluginCustomStorage)) {
+            for (const ref of extractAssetRefs(value)) {
+                addUncleanable(ref);
+            }
+        }
     }
     return Array.from(uncleanable);
 }
@@ -1676,29 +1710,12 @@ export function checkCharOrder() {
 }
 
 /**
- * Retrieves the request log as a formatted string.
- * 
- * @returns {string} The formatted request log.
+ * Retrieves the most recent request logs. Kept for the plugin API (v3
+ * getFetchLogs), which has always been Promise-returning, so moving the
+ * storage server-side is invisible to plugins.
  */
-export function getRequestLog() {
-    let logString = ''
-    const b = '\n\`\`\`json\n'
-    const bend = '\n\`\`\`\n'
-
-    for (const log of fetchLog) {
-        logString += `## ${log.date}\n\n* Request URL\n\n${b}${log.url}${bend}\n\n* Request Body\n\n${b}${log.body}${bend}\n\n* Request Header\n\n${b}${log.header}${bend}\n\n`
-            + `* Response Body\n\n${b}${log.response}${bend}\n\n* Response Success\n\n${b}${log.success}${bend}\n\n`
-    }
-    return logString
-}
-
-/**
- * Retrieves the fetch logs array.
- *
- * @returns {fetchLog[]} The fetch logs array.
- */
-export function getFetchLogs() {
-    return fetchLog
+export async function getFetchLogs(limit = 20) {
+    return await fetchRequestLogs({ limit, bodies: true })
 }
 
 /**
@@ -1964,24 +1981,6 @@ export class AppendableBuffer {
 }
 
 /**
- * Pipes the fetch log to a readable stream.
- * @param {number} fetchLogIndex - The index of the fetch log.
- * @param {ReadableStream<Uint8Array>} readableStream - The readable stream to pipe.
- * @returns {ReadableStream<Uint8Array>} - The new readable stream.
- */
-const pipeFetchLog = (fetchLogIndex: number, readableStream: ReadableStream<Uint8Array>) => {
-    
-    const splited = readableStream.tee();
-    
-    (async () => {
-        const text = await (new Response(splited[0])).text()
-        fetchLog[fetchLogIndex].response = text
-    })()
-    
-    return splited[1]
-}
-
-/**
  * Fetches data from a given URL using native fetch or through a proxy.
  * @param {string} url - The URL to fetch data from.
  * @param {Object} arg - The arguments for the fetch request.
@@ -1997,7 +1996,7 @@ const pipeFetchLog = (fetchLogIndex: number, readableStream: ReadableStream<Uint
  * @returns {number} status - The response status code.
  * @throws {Error} - Throws an error if the request is aborted or if there is an error in the response.
  */
-export async function fetchNative(url: string, arg: {
+export interface FetchNativeArgs {
     body?: string | Uint8Array | ArrayBuffer,
     headers?: { [key: string]: string },
     method?: "POST" | "GET" | "PUT" | "DELETE",
@@ -2007,6 +2006,60 @@ export async function fetchNative(url: string, arg: {
     interceptor?: string
     requestTimeoutMs?: number
     networkRoute?: 'auto' | 'local_network'
+    /** Request-log classification; see GlobalFetchArgs for the same fields. */
+    logCategory?: RequestLogCategory
+    logSource?: RequestLogSource
+    logModel?: string
+    /** Reports which transport was actually used. Fires regardless of
+     *  logCategory, so a caller that logs at a higher level (the model-preset
+     *  path) can record the true route instead of guessing. */
+    onLogRoute?: (route: RequestLogRoute) => void
+}
+
+export async function fetchNative(url: string, arg: FetchNativeArgs): Promise<Response> {
+    // Logging is OPT-IN: only call sites that tag a category are recorded.
+    // Logging everything that passes through here was actively harmful —
+    // ComfyUI polls /history once a second, /view returns a PNG that would be
+    // text-decoded and stored, an MCP SSE connection stays open for the whole
+    // session, and makeProxiedFetch routes the model-preset path through here,
+    // which produced a second, untagged row for every preset request.
+    if (!arg.logCategory) {
+        return fetchNativeRaw(url, arg, { onRoute: arg.onLogRoute })
+    }
+    // Logging wraps the transport rather than living inside it: fetchNativeRaw
+    // returns from several branches (userscript / WS proxy job / proxy2 /
+    // direct), and the response body is a stream that must be tee'd exactly
+    // once. The scope handles both, and assembles the streamed text so the log
+    // records the real response instead of a "Streamed Fetch" placeholder.
+    const scope = createRequestLogScope({
+        category: arg.logCategory ?? 'other',
+        source: arg.logSource ?? 'other',
+        chatId: arg.chatId,
+        model: arg.logModel,
+        streaming: true,
+    })
+    const logged = scope.wrap(((_input: RequestInfo | URL, _init?: RequestInit) =>
+        fetchNativeRaw(url, arg, {
+            onRealBody: (body) => scope.setRequestBody(body),
+            onRoute: (route) => { scope.setRoute(route); arg.onLogRoute?.(route) },
+        })
+    ) as typeof fetch)
+    try {
+        return await logged(url, {
+            method: arg.method ?? 'POST',
+            headers: arg.headers,
+            body: arg.body as BodyInit | undefined,
+        })
+    } finally {
+        // Fire-and-forget: close() waits for the tee'd body to finish
+        // assembling, which outlives this return for a streamed response.
+        void scope.close()
+    }
+}
+
+async function fetchNativeRaw(url: string, arg: FetchNativeArgs, hooks?: {
+    onRealBody?: (body: string) => void,
+    onRoute?: (route: RequestLogRoute) => void,
 }): Promise<Response> {
     const useInterceptor = !!arg.interceptor
     if (arg.body === undefined && (arg.method === 'POST' || arg.method === 'PUT')) {
@@ -2045,15 +2098,10 @@ export async function fetchNative(url: string, arg: {
         throw new Error('Invalid body type')
     }
 
-    addFetchLog({
-        body: realBody ? new TextDecoder().decode(realBody) : '',
-        headers: arg.headers,
-        response: 'Streamed Fetch',
-        success: true,
-        url: url,
-        resType: 'stream',
-        chatId: arg.chatId,
-    })
+    // The logged body is the one actually sent — after any body interceptor
+    // rewrote it — which is why it is reported from here rather than from the
+    // wrapper's view of arg.body.
+    hooks?.onRealBody?.(realBody ? new TextDecoder().decode(realBody) : '')
     const useLocalNetworkRoute = arg.networkRoute === 'local_network' && isLocalNetworkUrl(url)
     const timeoutSignal = buildTimeoutSignal(arg.signal, arg.requestTimeoutMs)
     const requestSignal = timeoutSignal.signal
@@ -2065,6 +2113,7 @@ export async function fetchNative(url: string, arg: {
 
     try {
         if (window.userScriptFetch && !throughProxy) {
+            hooks?.onRoute?.('direct')
             return await window.userScriptFetch(url, {
                 body: realBody as any,
                 headers: headers,
@@ -2079,13 +2128,15 @@ export async function fetchNative(url: string, arg: {
             && arg.method === 'POST'
         if (useProxyJobWs) {
             try {
-                return await fetchViaProxyJobWs(url, {
+                const res = await fetchViaProxyJobWs(url, {
                     method: arg.method,
                     headers,
                     body: realBody,
                     signal: requestSignal,
                     requestTimeoutMs: arg.requestTimeoutMs,
                 })
+                hooks?.onRoute?.('proxy')
+                return res
             } catch (wsErr) {
                 console.warn('[ProxyJobWS] fallback to /proxy2 due to error:', wsErr)
             }
@@ -2093,6 +2144,7 @@ export async function fetchNative(url: string, arg: {
 
         // Local network non-streaming or WS fallback: go through /proxy2 directly
         if (useLocalNetworkRoute) {
+            hooks?.onRoute?.('proxy')
             return await fetchViaProxy2(url, headers, realBody, {
                 ...arg,
                 signal: requestSignal
@@ -2101,14 +2153,19 @@ export async function fetchNative(url: string, arg: {
 
         // Try direct fetch first (upstream behavior), fall back to proxy on CORS/network error
         try {
-            return await fetch(url, {
+            const res = await fetch(url, {
                 body: realBody as any,
                 headers: headers,
                 method: arg.method,
                 signal: requestSignal,
             })
+            hooks?.onRoute?.('direct')
+            return res
         } catch (e) {
             if (requestSignal?.aborted) throw e
+            // The route is only known once the direct attempt has failed, which
+            // is why it is reported here rather than guessed up front.
+            hooks?.onRoute?.('proxy')
             return await fetchViaProxy2(url, headers, realBody, {
                 ...arg,
                 signal: requestSignal

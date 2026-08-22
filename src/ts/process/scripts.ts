@@ -40,7 +40,7 @@ export function exportRegex(s?:customscript[]){
 
 export async function importRegex(o?:customscript[]):Promise<customscript[]>{
     o = o ?? []
-    const filedata = (await selectSingleFile(['json'])).data
+    const filedata = (await selectSingleFile(['json']))?.data
     if(!filedata){
         return o
     }

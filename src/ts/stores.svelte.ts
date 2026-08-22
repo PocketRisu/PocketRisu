@@ -76,6 +76,17 @@ export const SystemSubmenuIndex = writable(0)
 // mode gear button can deep-link to the Sidebar tab — see src/ts/routing
 // (AccessibilityTab) and Setting/Pages/AccessibilitySettings.svelte.
 export const AccessibilitySubmenuIndex = writable(0)
+// Sub-tab indices for the remaining tabbed settings pages. Stores (instead of
+// page-local $state) so the settings search can deep-link to a specific tab —
+// see src/ts/setting/searchIndex.ts (navigateToSearchResult).
+export const DisplaySubmenuIndex = writable(0)
+export const BotSubmenuIndex = writable(0)
+export const PromptPresetSubmenuIndex = writable(0)
+export const OtherBotsSubmenuIndex = writable(0)
+export const InlayGallerySubmenuIndex = writable(0)
+// List-view tab of the Model Preset page (Presets / API keys / Options).
+// Distinct from the editor's own sub-tabs, which stay page-local.
+export const ModelPresetListTabIndex = writable(0)
 export const ReloadGUIPointer = writable(0)
 export const ReloadChatPointer = writable({} as Record<number, number>)
 export const ScrollToMessageStore = $state({ value: -1 })

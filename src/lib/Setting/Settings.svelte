@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { AccessibilityIcon, ActivityIcon, PackageIcon, BotIcon, CodeIcon, CogIcon, ContactIcon, FlaskConicalIcon, ImageIcon, LanguagesIcon, MonitorIcon, MonitorSmartphoneIcon, Sailboat, ScrollTextIcon, UserIcon, CircleXIcon, KeyboardIcon, TruckIcon, FileBoxIcon, Volume2Icon } from "@lucide/svelte";
+    import { AccessibilityIcon, ActivityIcon, PackageIcon, BotIcon, CodeIcon, CogIcon, ContactIcon, FlaskConicalIcon, ImageIcon, LanguagesIcon, MonitorIcon, MonitorSmartphoneIcon, Sailboat, ScrollTextIcon, SearchIcon, UserIcon, CircleXIcon, KeyboardIcon, TruckIcon, FileBoxIcon, Volume2Icon } from "@lucide/svelte";
     import { language } from "src/lang";
     import DisplaySettings from "./Pages/DisplaySettings.svelte";
     import NotificationSoundSettings from "./Pages/NotificationSoundSettings.svelte";
@@ -28,6 +28,7 @@
     import RemoteAccessSettings from "./Pages/RemoteAccessSettings.svelte";
     import PluginDefinedIcon from "../Others/PluginDefinedIcon.svelte";
     import DevPanel from "src/lib/_dev/DevPanel.svelte";
+    import SettingsSearch from "./SettingsSearch.svelte";
 
     // Dev panel is opt-in via localStorage['risu-dev-panel']='1' in devtools.
     // Read once on mount — flag changes require reload. Gates both the menu
@@ -36,6 +37,7 @@
         && localStorage.getItem('risu-dev-panel') === '1';
 
     let openLoreList = $state(false)
+    let searchOpen = $state(false)
     if(window.innerWidth >= 900 && $SettingsMenuIndex === -1 && !$MobileGUI){
         $SettingsMenuIndex = 1
     }
@@ -48,7 +50,16 @@
                 class:w-full={window.innerWidth < 700 || $MobileGUI}
                 class:bg-darkbg={!$MobileGUI} class:bg-bgcolor={$MobileGUI}
             >
-                
+                <!-- Fake-input trigger: the actual search lives in a dialog
+                     (SettingsSearch) so the result list never reflows the
+                     sidebar. -->
+                <button
+                    class="flex items-center gap-2 border border-darkborderc hover:border-borderc rounded-md px-2 py-1.5 text-textcolor2 transition-colors"
+                    onclick={() => { searchOpen = true }}
+                >
+                    <SearchIcon size={16} class="shrink-0" />
+                    <span class="text-sm">{language.searchSettingsPlaceholder}</span>
+                </button>
                 {#if !$isLite}
                     <button class="flex gap-2 items-center hover:text-textcolor"
                         class:text-textcolor={$SettingsMenuIndex === 1 || $SettingsMenuIndex === 13}
@@ -314,6 +325,7 @@
 {#if openLoreList}
     <Lorepreset close={() => {openLoreList = false}} />
 {/if}
+<SettingsSearch bind:open={searchOpen} />
 <style>
     .setting-bg{
         background: linear-gradient(to right, var(--risu-theme-darkbg) 50%, var(--risu-theme-bgcolor) 50%);

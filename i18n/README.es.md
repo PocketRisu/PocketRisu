@@ -62,6 +62,7 @@ Para migrar desde una instalación existente de RisuAI, consulta la [guía de mi
 
 - **Múltiples proveedores de IA**: OpenAI, Claude, Gemini, DeepInfra, OpenRouter, Ollama y más
 - **Acceso multidispositivo**: Ejecuta un servidor y accede desde PC, tablet y smartphone a través de un navegador web
+- **Generación en el servidor**: El servidor sigue generando aunque la pantalla se apague o se pierda la conexión; al reconectarte, la respuesta completada se restaura automáticamente
 - **Almacenamiento unificado de datos**: Todos los datos (personajes, chats, ajustes, imágenes inlay) se guardan en una única base de datos SQLite en tu servidor (sin dependencias de la nube externa)
 - **Copia de seguridad fácil desde el servidor**: El servidor gestiona directamente la copia de seguridad y restauración; también se admite la exportación e importación de copias locales `.bin`
 - **Panel potente**: Uso del disco (por personaje / por módulo), espacio de snapshot recuperable, optimización de SQLite y más — todo en una pantalla

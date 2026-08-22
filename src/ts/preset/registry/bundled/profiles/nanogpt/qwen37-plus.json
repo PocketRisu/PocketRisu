@@ -1,0 +1,61 @@
+{
+  "id": "nanogpt:qwen37-plus",
+  "version": 1,
+  "updatedAt": 1784964727000,
+  "displayName": "Qwen3.7 Plus",
+  "displayNameI18n": {
+    "ko": "Qwen3.7 Plus"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "Qwen3.7 Plus via NanoGPT (qwen3.7-plus).",
+  "descriptionI18n": {
+    "ko": "Qwen3.7 Plus (NanoGPT, qwen3.7-plus)."
+  },
+  "tags": [
+    "nanogpt",
+    "qwen"
+  ],
+  "sortOrder": 539,
+  "modelId": "qwen3.7-plus",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

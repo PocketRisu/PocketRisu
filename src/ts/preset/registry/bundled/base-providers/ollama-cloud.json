@@ -1,6 +1,6 @@
 {
   "id": "ollama-cloud",
-  "version": 2,
+  "version": 3,
   "displayName": "Ollama Cloud",
   "adapterKind": "openai-compatible",
   "authKinds": [
@@ -36,6 +36,10 @@
       "description": "Cloud-hosted model. Local Ollama cloud models commonly use the :cloud suffix (e.g. gpt-oss:120b-cloud), while direct ollama.com API examples may use the bare model name (e.g. gpt-oss:120b). See https://ollama.com/search?c=cloud for the current list.",
       "required": true,
       "enum": [
+        {
+          "value": "glm-5.2:cloud",
+          "label": "GLM 5.2"
+        },
         {
           "value": "glm-5.1:cloud",
           "label": "GLM 5.1"

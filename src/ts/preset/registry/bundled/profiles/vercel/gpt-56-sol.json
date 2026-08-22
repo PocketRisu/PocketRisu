@@ -1,0 +1,59 @@
+{
+  "id": "vercel:gpt-56-sol",
+  "version": 1,
+  "updatedAt": 1784964781000,
+  "displayName": "GPT-5.6 Sol",
+  "displayNameI18n": {
+    "ko": "GPT-5.6 Sol"
+  },
+  "providerBaseId": "vercel",
+  "description": "GPT-5.6 Sol via Vercel AI Gateway (openai/gpt-5.6-sol).",
+  "descriptionI18n": {
+    "ko": "GPT-5.6 Sol (Vercel AI Gateway, openai/gpt-5.6-sol)."
+  },
+  "tags": [
+    "vercel",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 582,
+  "modelId": "openai/gpt-5.6-sol",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

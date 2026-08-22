@@ -3,20 +3,11 @@
     import Button from "src/lib/UI/GUI/Button.svelte";
     import { DBState } from 'src/ts/stores.svelte';
     import { alertMd, notifySuccess } from "src/ts/alert";
-    import { downloadFile, getRequestLog } from "src/ts/globalApi.svelte";
+    import { downloadFile } from "src/ts/globalApi.svelte";
     import { getDatabase } from "src/ts/storage/database.svelte";
     import { isNodeServer } from "src/ts/platform";
 
 </script>
-
-<Button
-    className="mt-4"
-    onclick={async () => {
-        alertMd(getRequestLog())
-    }}
->
-    {language.ShowLog}
-</Button>
 
 <Button
     className="mt-4"

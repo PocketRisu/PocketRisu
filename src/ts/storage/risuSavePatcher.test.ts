@@ -1057,6 +1057,52 @@ describe('fast-path — per-module granularity', () => {
         expect(liveHash).toBe(freshHash)
     })
 
+    test('character with a huge shifted lorebook does not trip the spread limit', async () => {
+        // Regression for the last surviving `patch.push(...ops)` in the
+        // per-character branch: deleting one entry from the front of a
+        // multi-thousand-entry character lorebook shifts every index, and
+        // fast-json-patch emits several ops per shifted entry. At ~30k
+        // entries that exceeds V8's spread-argument limit, so the old code
+        // threw RangeError before this was converted to an iterating push.
+        const entries = Array.from({ length: 30000 }, (_, k) => ({
+            key: `key-${k}`,
+            secondkey: `second-${k}`,
+            comment: `comment ${k}`,
+            content: `content for entry ${k}`,
+            insertorder: k,
+        }))
+        const db = dbWith([chr('a', { globalLore: entries })])
+        const p = new RisuSavePatcher()
+        await p.init(db)
+
+        const changed = clone(db)
+        changed.characters[0].globalLore.splice(0, 1)
+        const { patch } = await p.set(clone(changed), { ...emptyToSave(), character: ['a'] })
+        expect(patch.length).toBeGreaterThan(0)
+        for (const op of patch) {
+            expect(op.path.startsWith('/characters/0')).toBe(true)
+        }
+    })
+
+    test('character lorebook edit round-trips through applyPatch', async () => {
+        const { applyPatch: apply } = await import('fast-json-patch')
+        const entries = Array.from({ length: 50 }, (_, k) => ({
+            key: `key-${k}`, content: `content ${k}`, insertorder: k,
+        }))
+        const db = dbWith([chr('a', { globalLore: entries })])
+        const p = new RisuSavePatcher()
+        await p.init(db)
+
+        const changed = clone(db)
+        changed.characters[0].globalLore.splice(3, 1)
+        changed.characters[0].globalLore[0].content = 'edited'
+        const { patch } = await p.set(clone(changed), { ...emptyToSave(), character: ['a'] })
+
+        const serverState = JSON.parse(JSON.stringify(normalizeJSON(db)))
+        apply(serverState, patch)
+        expect(serverState.characters[0].globalLore).toEqual(normalizeJSON(clone(changed)).characters[0].globalLore)
+    })
+
     test('non-string module ids (1 vs "1") force the structural path — no key collision', async () => {
         const db = dbWith([chr('a')], { } as any)
         db.modules = [{ ...mod('x'), id: 1 as any }, { ...mod('y'), id: '1' }]

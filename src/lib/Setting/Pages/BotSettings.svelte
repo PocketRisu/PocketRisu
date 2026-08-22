@@ -6,7 +6,7 @@
     import { language } from "src/lang";
     import Help from "src/lib/Others/Help.svelte";
     
-    import { DBState } from 'src/ts/stores.svelte';
+    import { DBState, BotSubmenuIndex } from 'src/ts/stores.svelte';
     import { customProviderStore } from "src/ts/plugins/plugins.svelte";
     import { tokenizerList } from "src/ts/tokenizer";
     import ModelList from "src/lib/UI/ModelList.svelte";
@@ -88,7 +88,6 @@
         console.log('Vertex AI token cleared');
     }
 
-    let submenu = $state(0)
     let modelInfo = $derived(getModelInfo(DBState.db.aiModel))
     let subModelInfo = $derived(getModelInfo(DBState.db.subModel))
     let nanogptInputMode = $state<'list' | 'manual'>(DBState.db.nanogptRequestModel && !DBState.db.nanogptRequestModelName ? 'manual' : 'list')
@@ -117,9 +116,9 @@
     { label: language.model, value: 0 },
     { label: language.parameters, value: 1 },
     { label: language.customModels, value: 2 },
-]} bind:selected={submenu} />
+]} bind:selected={$BotSubmenuIndex} />
 
-{#if submenu === 0}
+{#if $BotSubmenuIndex === 0}
     <ShAlert variant="warning" className="mt-4">
         {#snippet icon()}<TriangleAlertIcon />{/snippet}
         {#snippet title()}{language.botSettingsLegacyTitle}{/snippet}
@@ -387,7 +386,7 @@
     <AuxModelSelectors />
 {/if}
 
-{#if submenu === 1}
+{#if $BotSubmenuIndex === 1}
     <ShAlert variant="warning" className="mt-4 mb-2">
         {#snippet icon()}<TriangleAlertIcon />{/snippet}
         {language.botSettingsParamScopeDesc}
@@ -538,7 +537,7 @@
     <SeparateParametersSection />
 {/if}
 
-{#if submenu === 2}
+{#if $BotSubmenuIndex === 2}
     <CustomModelsSettings noAccordion />
 {/if}
 

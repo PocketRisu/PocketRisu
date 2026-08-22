@@ -21,7 +21,7 @@ export interface alertData{
     type: 'error'|'normal'|'none'|'ask'|'wait'|'selectChar'
             |'input'|'wait2'|'markdown'|'select'|'login'
             |'tos'|'cardexport'|'requestdata'|'addchar'|'selectModule'
-            |'pukmakkurit'|'branches'|'progress'|'pluginconfirm'|'requestlogs'
+            |'pukmakkurit'|'branches'|'progress'|'pluginconfirm'
             |'confirmMulti',
     msg: string,
     submsg?: string
@@ -297,13 +297,20 @@ export async function alertConfirm(msg:string){
  *
  * @returns index of the picked action, or -1 if cancelled.
  */
-export async function alertConfirmMulti(prompt:string, actions:(string | AlertAction)[]){
+/**
+ * @param prompt Short heading. Rendered as the dialog title, so keep it to a line.
+ * @param actions Buttons, in order. The dialog always adds its own Cancel.
+ * @param detail Optional body text below the title, for anything longer than a
+ *               heading (breakdowns, consequences). Newlines are preserved.
+ */
+export async function alertConfirmMulti(prompt:string, actions:(string | AlertAction)[], detail?:string){
     const normalized: AlertAction[] = actions.map(a =>
         typeof a === 'string' ? { label: a, variant: 'default' } : a
     )
     alertStoreImported.set({
         'type': 'confirmMulti',
         'msg': prompt,
+        'submsg': detail,
         'actions': normalized,
     })
 
@@ -399,13 +406,6 @@ export function alertRequestData(info:AlertGenerationInfoStoreData){
     alertStoreImported.set({
         'type': 'requestdata',
         'msg': info.genInfo.generationId ?? 'none'
-    })
-}
-
-export function alertRequestLogs(){
-    alertStoreImported.set({
-        'type': 'requestlogs',
-        'msg': ''
     })
 }
 

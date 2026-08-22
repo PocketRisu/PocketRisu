@@ -1,0 +1,55 @@
+{
+  "id": "lightning-ai:gemma-4-31b",
+  "version": 1,
+  "updatedAt": 1784964865000,
+  "displayName": "Gemma 4 31B",
+  "displayNameI18n": {
+    "ko": "Gemma 4 31B"
+  },
+  "providerBaseId": "lightning-ai",
+  "description": "Gemma 4 31B via Lightning AI (lightning-ai/gemma-4-31B-it).",
+  "descriptionI18n": {
+    "ko": "Gemma 4 31B (Lightning AI, lightning-ai/gemma-4-31B-it)."
+  },
+  "tags": [
+    "lightning-ai",
+    "gemma"
+  ],
+  "sortOrder": 737,
+  "modelId": "lightning-ai/gemma-4-31B-it",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://lightning.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://lightning.ai/api/v1/models",
+    "https://lightning.ai/docs/overview/model-apis"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 131072,
+    "sourceUrls": [
+      "https://lightning.ai/api/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

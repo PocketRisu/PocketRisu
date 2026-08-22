@@ -1,0 +1,61 @@
+{
+  "id": "llmgateway:gemini-35-flash-lite",
+  "version": 1,
+  "updatedAt": 1784964953000,
+  "displayName": "Gemini 3.5 Flash-Lite",
+  "displayNameI18n": {
+    "ko": "Gemini 3.5 Flash-Lite"
+  },
+  "providerBaseId": "llmgateway",
+  "description": "Gemini 3.5 Flash-Lite via LLM Gateway (gemini-3.5-flash-lite).",
+  "descriptionI18n": {
+    "ko": "Gemini 3.5 Flash-Lite (LLM Gateway, gemini-3.5-flash-lite)."
+  },
+  "tags": [
+    "llmgateway",
+    "gemini"
+  ],
+  "sortOrder": 591,
+  "modelId": "gemini-3.5-flash-lite",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.llmgateway.io/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://docs.llmgateway.io/",
+    "https://api.llmgateway.io/v1/models",
+    "https://github.com/theopenco/llmgateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://api.llmgateway.io/v1/models"
+    ],
+    "notes": "Context length per LLM Gateway GET /v1/models; the gateway does not expose a per-model max output token limit.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 LLM Gateway의 GET /v1/models 기준. 게이트웨이는 모델별 최대 출력 토큰 한도를 노출하지 않습니다."
+    }
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

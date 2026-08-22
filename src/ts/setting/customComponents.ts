@@ -33,6 +33,7 @@ import PromptTemplateBlock from 'src/lib/Setting/Pages/PromptPreset/PromptTempla
 import PromptToolsBlock from 'src/lib/Setting/Pages/PromptPreset/PromptToolsBlock.svelte';
 import PromptRegexBlock from 'src/lib/Setting/Pages/PromptPreset/PromptRegexBlock.svelte';
 import ModelRegistryRefresh from 'src/lib/Setting/Pages/Model/ModelRegistryRefresh.svelte';
+import ModuleModelBindingList from 'src/lib/Setting/Pages/Model/ModuleModelBindingList.svelte';
 
 /**
  * Registry of custom components.
@@ -57,6 +58,7 @@ export const customComponents: Record<string, Component<any>> = {
     'PromptToolsBlock': PromptToolsBlock,
     'PromptRegexBlock': PromptRegexBlock,
     'ModelRegistryRefresh': ModelRegistryRefresh,
+    'ModuleModelBindingList': ModuleModelBindingList,
     // Add more as we migrate complex settings
 } as const;
 

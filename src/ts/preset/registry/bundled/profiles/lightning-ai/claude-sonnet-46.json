@@ -1,6 +1,6 @@
 {
   "id": "lightning-ai:claude-sonnet-46",
-  "version": 1,
+  "version": 2,
   "updatedAt": 1781104476429,
   "displayName": "Claude Sonnet 4.6",
   "displayNameI18n": {
@@ -16,7 +16,7 @@
     "anthropic",
     "claude"
   ],
-  "sortOrder": 712,
+  "sortOrder": 718,
   "modelId": "anthropic/claude-sonnet-4-6",
   "endpoint": {
     "kind": "static",

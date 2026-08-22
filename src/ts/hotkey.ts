@@ -1,11 +1,14 @@
 import { get } from "svelte/store"
-import { alertMd, alertSelect, alertWait, doingAlert, alertRequestLogs } from "./alert"
+import { alertClear, alertMd, alertSelect, alertWait, doingAlert } from "./alert"
 import { getDatabase  } from "./storage/database.svelte"
-import { alertStore, DBState, MobileGUIStack, MobileSideBar, openPersonaList, personaSelectCallback, openPresetList, openHypaV3PresetList, openThemePresetList, OpenRealmStore, PlaygroundStore, QuickSettings, SafeModeStore, selectedCharID, settingsOpen } from "./stores.svelte"
+import { alertStore, DBState, MobileGUIStack, MobileSideBar, openPersonaList, personaSelectCallback, openPresetList, openModelPresetList, openHypaV3PresetList, openThemePresetList, OpenRealmStore, PlaygroundStore, QuickSettings, SafeModeStore, selectedCharID, settingsOpen } from "./stores.svelte"
 import { language } from "src/lang"
 import { updateTextThemeAndCSS } from "./gui/colorscheme"
 import { defaultHotkeys } from "./defaulthotkeys"
 import { doingChat, previewBody, sendChat } from "./process/index.svelte"
+import { endAllGenerations } from "./process/generationState"
+import { RISU_SIDEBAR_DRAG_TYPE } from "./dragTypes"
+import { openSettings, SettingsRoute, SystemTab } from "./routing"
 
 export function initHotkey(){
     document.addEventListener('keydown', async (ev) => {
@@ -84,6 +87,10 @@ export function initHotkey(){
                     personaSelectCallback.set(null)
                     break
                 }
+                case 'modelSelect':{
+                    openModelPresetList.set(!get(openModelPresetList))
+                    break
+                }
                 case 'toggleCSS':{
                     SafeModeStore.set(!get(SafeModeStore))
                     updateTextThemeAndCSS()
@@ -94,10 +101,7 @@ export function initHotkey(){
                         return {name: v.name, i}
                     }).sort((a, b) => a.name.localeCompare(b.name))
                     const currentIndex = sorted.findIndex(v => v.i === get(selectedCharID))
-                    if(currentIndex === 0){
-                        return
-                    }
-                    if(currentIndex >= sorted.length - 1){
+                    if(currentIndex <= 0){
                         return
                     }
                     selectedCharID.set(sorted[currentIndex - 1].i)
@@ -110,12 +114,11 @@ export function initHotkey(){
                         return {name: v.name, i}
                     }).sort((a, b) => a.name.localeCompare(b.name))
                     const currentIndex = sorted.findIndex(v => v.i === get(selectedCharID))
-                    if(currentIndex === 0){
-                        return
-                    }
                     if(currentIndex >= sorted.length - 1){
                         return
                     }
+                    // currentIndex === -1 (nothing selected) intentionally falls through
+                    // to sorted[0], matching the previous behaviour.
                     selectedCharID.set(sorted[currentIndex + 1].i)
                     PlaygroundStore.set(0)
                     OpenRealmStore.set(false)
@@ -132,19 +135,31 @@ export function initHotkey(){
                     alertWait("Loading...")
                     ev.preventDefault()
                     ev.stopPropagation()
-                    await sendChat(-1, {
-                        previewPrompt: true
-                    })
+                    try {
+                        await sendChat(-1, {
+                            previewPrompt: true
+                        })
 
-                    let md = ''
-                    md += '### Prompt\n'
-                    md += '```json\n' + JSON.stringify(JSON.parse(previewBody), null, 2).replaceAll('```', '\\`\\`\\`') + '\n```\n'
-                    doingChat.set(false)
-                    alertMd(md)
+                        let md = ''
+                        md += '### Prompt\n'
+                        md += '```json\n' + JSON.stringify(JSON.parse(previewBody), null, 2).replaceAll('```', '\\`\\`\\`') + '\n```\n'
+                        alertMd(md)
+                    } catch (error) {
+                        // alertWait above opens a deliberately non-closable dialog
+                        // (no X, ESC and outside click blocked). On the success path
+                        // alertMd replaces it, but a throw would otherwise leave the
+                        // user trapped in it until a reload.
+                        alertClear()
+                        throw error
+                    } finally {
+                        // Without this a throw from sendChat/JSON.parse left the
+                        // generation state locked.
+                        endAllGenerations()
+                    }
                     return
                 }
                 case 'toggleLog':{
-                    alertRequestLogs()
+                    openSettings(SettingsRoute.System, SystemTab.RequestLogs)
                     break
                 }
                 case 'quickSettings':{
@@ -230,7 +245,7 @@ export function initHotkey(){
     document.addEventListener('dragover', (ev) => {
         if (ev.ctrlKey && !ev.shiftKey && !ev.altKey) {
             const types = ev.dataTransfer?.types || []
-            const isCharacterDrag = types.includes('application/x-risu-internal')
+            const isCharacterDrag = types.includes(RISU_SIDEBAR_DRAG_TYPE)
             
             if (isCharacterDrag) {
                 const db = getDatabase()

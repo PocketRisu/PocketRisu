@@ -836,3 +836,42 @@ describe('previewChatRequest (no network)', () => {
         expect((prepared.body.tools as unknown[]).length).toBe(1)
     })
 })
+
+describe('streaming usage opt-in', () => {
+    const drain = async (gen: AsyncGenerator<unknown>) => { for await (const _ of gen) { /* drain */ } }
+
+    test('does not send stream_options by default', async () => {
+        const { fetchImpl, calls } = captureFetch(() => sseResponse(['data: [DONE]\n\n']))
+        await drain(streamChatRequest(
+            makePreset(),
+            { messages: userMessages, fetchImpl },
+            { apiKey: 'sk-test' },
+        ) as AsyncGenerator<unknown>)
+        // A strict OpenAI-compatible server can 400 on an unknown field, so the
+        // default request must stay byte-identical to before the feature.
+        expect(calls[0].body.stream_options).toBeUndefined()
+        expect(calls[0].body.stream).toBe(true)
+    })
+
+    test('asks for usage when the caller opted in', async () => {
+        const { fetchImpl, calls } = captureFetch(() => sseResponse(['data: [DONE]\n\n']))
+        await drain(streamChatRequest(
+            makePreset(),
+            { messages: userMessages, fetchImpl, collectStreamUsage: true },
+            { apiKey: 'sk-test' },
+        ) as AsyncGenerator<unknown>)
+        expect(calls[0].body.stream_options).toEqual({ include_usage: true })
+    })
+
+    test('never sends it on a non-streaming request', async () => {
+        const { fetchImpl, calls } = captureFetch(jsonResponse({
+            choices: [{ message: { role: 'assistant', content: 'x' }, finish_reason: 'stop' }],
+        }))
+        await sendChatRequest(
+            makePreset(),
+            { messages: userMessages, fetchImpl, collectStreamUsage: true },
+            { apiKey: 'sk-test' },
+        )
+        expect(calls[0].body.stream_options).toBeUndefined()
+    })
+})

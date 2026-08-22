@@ -1,0 +1,60 @@
+{
+  "id": "neuralwatt:kimi-k27-code",
+  "version": 1,
+  "updatedAt": 1781835416168,
+  "displayName": "Kimi K2.7 Code",
+  "displayNameI18n": {
+    "ko": "Kimi K2.7 Code"
+  },
+  "providerBaseId": "neuralwatt",
+  "description": "Kimi K2.7 Code via NeuralWatt (kimi-k2.7-code).",
+  "descriptionI18n": {
+    "ko": "Kimi K2.7 Code (NeuralWatt, kimi-k2.7-code)."
+  },
+  "tags": [
+    "neuralwatt",
+    "kimi"
+  ],
+  "sortOrder": 545,
+  "modelId": "kimi-k2.7-code",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.neuralwatt.com/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://api.neuralwatt.com/v1/models",
+    "https://portal.neuralwatt.com/models"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 262128,
+    "notes": "Context length per NeuralWatt /v1/models; max_output_tokens reported null.",
+    "notesI18n": {
+      "ko": "컨텍스트 길이는 NeuralWatt /v1/models 기준; max_output_tokens는 null로 보고됨."
+    },
+    "sourceUrls": [
+      "https://api.neuralwatt.com/v1/models"
+    ]
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

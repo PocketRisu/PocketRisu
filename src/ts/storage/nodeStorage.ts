@@ -10,6 +10,23 @@ import { alertInput, waitAlert, notifyError } from "../alert"
 import { decodeRisuSave, encodeRisuSaveLegacy } from "./risuSave"
 import { normalizeChat } from "./database.svelte"
 
+// ── User-gesture recency for the write lock ─────────────────────────────────
+// The server moves the single-writer lock only on writes that follow a real
+// user gesture (x-user-active header). The app also writes automatically —
+// boot housekeeping, the flush-on-hide keepalive — and those must never move
+// the lock: a phone tab going to background fires a flush, and without this
+// distinction it silently stole the lock from the device actually in use.
+const USER_GESTURE_WINDOW_MS = 15_000
+let lastUserGestureAt = 0
+if (typeof window !== 'undefined') {
+    const markGesture = () => { lastUserGestureAt = Date.now() }
+    window.addEventListener('pointerdown', markGesture, { capture: true, passive: true })
+    window.addEventListener('keydown', markGesture, { capture: true, passive: true })
+}
+function isUserActive(): boolean {
+    return Date.now() - lastUserGestureAt < USER_GESTURE_WINDOW_MS
+}
+
 // Custom error class for database conflict detection
 export class ConflictError extends Error {
     currentEtag: string
@@ -37,12 +54,45 @@ export interface PatchItemResult {
     chatGuardRejected?: boolean
 }
 
+export interface ExportBackupOptions {
+    /** Strip NodeOnly-only inlay namespaces so upstream RisuAI can import it. */
+    target?: 'upstream'
+    /** Drop characters, chats and inlay images — a seed for a fresh instance. */
+    mode?: 'settings'
+    /**
+     * Carry asset-pack module images. Defaults to true; set false to leave out
+     * what is usually the bulk of a settings backup. Only meaningful with
+     * `mode: 'settings'`.
+     */
+    moduleAssets?: boolean
+}
+
+/** Size breakdown backing the settings-only confirm dialog. */
+export interface SettingsBackupEstimate {
+    dbBytes: number
+    baseAssets: { count: number, bytes: number }
+    moduleAssets: { count: number, bytes: number, moduleCount: number }
+}
+
 export class NodeStorage{
     private static readonly BULK_WRITE_CLIENT_BATCH = 20
 
-    // Unique per page load — used for cross-device single-writer lock
-    private static sessionId: string =
-        crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2))
+    // Cross-device single-writer lock identity. Persisted in sessionStorage so
+    // a reload or an OS tab restore of the SAME tab keeps the same identity —
+    // a phone tab resurrected in the background must not look like a new
+    // device (which used to silently steal the write lock from a PC
+    // mid-session). Still per-tab: a genuinely new tab gets a new id, and
+    // same-device multi-tab is handled by the BroadcastChannel lock.
+    private static sessionId: string = (() => {
+        const KEY = 'risu-writer-session-id'
+        const minted = crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2))
+        try {
+            const stored = sessionStorage.getItem(KEY)
+            if (stored) return stored
+            sessionStorage.setItem(KEY, minted)
+        } catch { /* storage unavailable (rare privacy modes) — per-load id */ }
+        return minted
+    })()
 
     _lastDbEtag: string | null = null
     authChecked = false
@@ -164,6 +214,7 @@ export class NodeStorage{
         const headers = new Headers(init.headers)
         headers.set('risu-auth', await this.createAuth())
         headers.set('x-session-id', NodeStorage.sessionId)
+        if (isUserActive()) headers.set('x-user-active', '1')
 
         const response = await fetch(input, {
             ...init,
@@ -323,6 +374,20 @@ export class NodeStorage{
         this._lastDbEtag = etag
     }
 
+    /** Writer-lock state of THIS session (side-effect free; reload-on-return
+     *  check). 'stale' = another device wrote after this page booted — our
+     *  in-memory copy is outdated and must reload before writing again. */
+    async getWriterLockState(): Promise<'free' | 'active' | 'fresh' | 'stale' | 'unknown'> {
+        try {
+            const res = await this.authFetch('/api/session/lock-status')
+            if (!res.ok) return 'unknown'
+            const data = await res.json()
+            return data?.state ?? 'unknown'
+        } catch {
+            return 'unknown'
+        }
+    }
+
     async patchItem(key: string, patchData: { patch: any[], expectedHash: string }): Promise<PatchItemResult> {
         const da = await this.authFetch('/api/patch', {
             method: "POST",
@@ -348,6 +413,11 @@ export class NodeStorage{
             return { success: false, etag: currentEtag, chatGuardRejected: rejectedByChatGuard }
         }
         if (da.status < 200 || da.status >= 300) {
+            // Surface the server's error detail — without this the browser
+            // console shows nothing while every save silently falls back to
+            // a full write.
+            const body = await da.text().catch(() => '')
+            console.error(`[Patch] Server rejected patch (${da.status}):`, body)
             return { success: false }
         }
         const data = await da.json()
@@ -414,13 +484,22 @@ export class NodeStorage{
         }
     }
 
-    async exportBackup(opts?: { target?: 'upstream' }): Promise<Response> {
-        const url = opts?.target === 'upstream'
-            ? '/api/backup/export?target=upstream'
-            : '/api/backup/export'
+    async exportBackup(opts?: ExportBackupOptions): Promise<Response> {
+        const params = new URLSearchParams()
+        if (opts?.target === 'upstream') params.set('target', 'upstream')
+        if (opts?.mode === 'settings') params.set('mode', 'settings')
+        if (opts?.moduleAssets === false) params.set('moduleAssets', '0')
+        const query = params.toString()
+        const url = query ? `/api/backup/export?${query}` : '/api/backup/export'
         const da = await this.authFetch(url)
         if (da.status < 200 || da.status >= 300) throw `backup export error: ${da.status}`
         return da
+    }
+
+    async settingsBackupEstimate(): Promise<SettingsBackupEstimate> {
+        const da = await this.authFetch('/api/backup/export/settings-estimate')
+        if (da.status < 200 || da.status >= 300) throw `settings estimate error: ${da.status}`
+        return await da.json()
     }
 
     async prepareImport(size: number): Promise<void> {
@@ -452,6 +531,7 @@ export class NodeStorage{
             xhr.setRequestHeader('content-type', 'application/x-risu-backup')
             xhr.setRequestHeader('risu-auth', authHeader)
             xhr.setRequestHeader('x-session-id', NodeStorage.sessionId)
+            if (isUserActive()) xhr.setRequestHeader('x-user-active', '1')
             // Opt into NDJSON streaming so the server keeps the response socket
             // alive during long post-upload work — prevents reverse-proxy 502s.
             xhr.setRequestHeader('accept', 'application/x-ndjson')
@@ -692,6 +772,7 @@ export class NodeStorage{
             xhr.setRequestHeader('content-type', 'application/zip')
             xhr.setRequestHeader('risu-auth', authHeader)
             xhr.setRequestHeader('x-session-id', NodeStorage.sessionId)
+            if (isUserActive()) xhr.setRequestHeader('x-user-active', '1')
 
             xhr.upload.onprogress = (event) => {
                 if (event.lengthComputable) {
