@@ -260,9 +260,11 @@ export async function runScripted(code:string, arg:{
                     return
                 }
                 const realValue = JSON.parse(value)
+                const previousMessages = ScriptingEngineState.chat.message
 
-                ScriptingEngineState.chat.message = realValue.map((v) => {
+                ScriptingEngineState.chat.message = realValue.map((v, index) => {
                     return {
+                        ...previousMessages[index],
                         role: v.role,
                         data: v.data
                     }
