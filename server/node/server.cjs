@@ -3800,6 +3800,25 @@ app.post('/api/patch', async (req, res, next) => {
                 return;
             }
 
+            // A diff-based client can legitimately send an empty patch. Keep
+            // the current revision in that case and skip clone/apply/save work.
+            if (patch.length === 0) {
+                if (decodedKey === 'database/database.bin' && !dbEtag) {
+                    dbEtag = computeBufferEtag(Buffer.from(encodeRisuSaveLegacy(dbCache[filePath])));
+                }
+                const responsePayload = {
+                    success: true,
+                    appliedOperations: 0,
+                    etag: decodedKey === 'database/database.bin' ? dbEtag : undefined,
+                };
+                const persistWarning = currentPersistWarning();
+                if (persistWarning) {
+                    responsePayload.persistWarning = persistWarning;
+                }
+                res.send(responsePayload);
+                return;
+            }
+
             // Apply patch to in-memory database (clone first to prevent partial
             // mutation on failure). structuredClone instead of a JSON round-trip:
             // stringifying the whole DB into one JS string hits V8's ~512MB
@@ -3856,10 +3875,12 @@ app.post('/api/patch', async (req, res, next) => {
                 }
             }, SAVE_INTERVAL);
 
-            // Update ETag after successful patch (based on stripped version)
+            // The ETag is only used as an opaque revision token for conflict
+            // detection. Avoid re-encoding and hashing the entire stripped DB
+            // after every successful patch just to mint the next revision.
             patchStage = 'etag';
             if (decodedKey === 'database/database.bin') {
-                dbEtag = computeBufferEtag(Buffer.from(encodeRisuSaveLegacy(dbCache[filePath])));
+                dbEtag = `rev-${nodeCrypto.randomUUID()}`;
             }
 
             const responsePayload = {
