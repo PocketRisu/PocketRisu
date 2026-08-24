@@ -34,6 +34,37 @@ function collectTouchedTopLevelKeys(patch) {
     return { keys, touchesRoot };
 }
 
+function collectPluginStorageChildKeys(patch) {
+    const keys = new Set();
+    let touchesStorageRoot = false;
+    let referencesStorage = false;
+
+    for (const op of Array.isArray(patch) ? patch : []) {
+        for (const field of ['path', 'from']) {
+            const pointer = op?.[field];
+            if (typeof pointer !== 'string' || !pointer.startsWith('/') || pointer === '') continue;
+
+            const firstSlash = pointer.indexOf('/', 1);
+            const rawTop = firstSlash === -1 ? pointer.slice(1) : pointer.slice(1, firstSlash);
+            if (decodePointerSegment(rawTop) !== 'pluginCustomStorage') continue;
+
+            referencesStorage = true;
+            if (firstSlash === -1) {
+                touchesStorageRoot = true;
+                continue;
+            }
+
+            const childEnd = pointer.indexOf('/', firstSlash + 1);
+            const rawChild = childEnd === -1
+                ? pointer.slice(firstSlash + 1)
+                : pointer.slice(firstSlash + 1, childEnd);
+            keys.add(decodePointerSegment(rawChild));
+        }
+    }
+
+    return { keys, touchesStorageRoot, referencesStorage };
+}
+
 function createPatchHashCache(calculateHash) {
     if (typeof calculateHash !== 'function') {
         throw new TypeError('calculateHash must be a function');
@@ -41,20 +72,83 @@ function createPatchHashCache(calculateHash) {
 
     const states = new WeakMap();
 
-    function isObjectRoot(database) {
-        return database !== null && typeof database === 'object' && !Array.isArray(database);
+    function isObjectRoot(value) {
+        return value !== null && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    function buildPluginStorageState(storage) {
+        if (!isObjectRoot(storage)) {
+            return { childHashes: null, fullHash: calculateHash(storage) };
+        }
+
+        const childHashes = new Map();
+        for (const key in storage) {
+            childHashes.set(key, calculateHash(storage[key]));
+        }
+        return { childHashes, fullHash: null };
+    }
+
+    function composePluginStorageHash(storage, state) {
+        if (!isObjectRoot(storage) || state.childHashes === null) {
+            return state.fullHash ?? calculateHash(storage);
+        }
+
+        let objectHash = SEED_OBJECT;
+        for (const key in storage) {
+            let childHash = state.childHashes.get(key);
+            if (childHash === undefined && !state.childHashes.has(key)) {
+                childHash = calculateHash(storage[key]);
+                state.childHashes.set(key, childHash);
+            }
+            objectHash += Math.imul(calculateHash(key), PRIME_MULTIPLIER) + childHash;
+        }
+        return objectHash >>> 0;
+    }
+
+    function updatePluginStorageState(previousStorage, nextStorage, patch, previousState) {
+        const { keys, touchesStorageRoot, referencesStorage } = collectPluginStorageChildKeys(patch);
+        if (
+            touchesStorageRoot
+            || !referencesStorage
+            || !isObjectRoot(previousStorage)
+            || !isObjectRoot(nextStorage)
+            || !previousState
+            || previousState.childHashes === null
+        ) {
+            return buildPluginStorageState(nextStorage);
+        }
+
+        const childHashes = new Map(previousState.childHashes);
+        for (const key of keys) {
+            if (Object.prototype.hasOwnProperty.call(nextStorage, key)) {
+                childHashes.set(key, calculateHash(nextStorage[key]));
+            } else {
+                childHashes.delete(key);
+            }
+        }
+        return { childHashes, fullHash: null };
     }
 
     function buildState(database) {
         if (!isObjectRoot(database)) {
-            return { valueHashes: null, fullHash: calculateHash(database) };
+            return {
+                valueHashes: null,
+                fullHash: calculateHash(database),
+                pluginStorageState: null,
+            };
         }
 
         const valueHashes = new Map();
+        let pluginStorageState = null;
         for (const key in database) {
-            valueHashes.set(key, calculateHash(database[key]));
+            if (key === 'pluginCustomStorage') {
+                pluginStorageState = buildPluginStorageState(database[key]);
+                valueHashes.set(key, composePluginStorageHash(database[key], pluginStorageState));
+            } else {
+                valueHashes.set(key, calculateHash(database[key]));
+            }
         }
-        return { valueHashes, fullHash: null };
+        return { valueHashes, fullHash: null, pluginStorageState };
     }
 
     function getState(database) {
@@ -76,7 +170,12 @@ function createPatchHashCache(calculateHash) {
         for (const key in database) {
             let valueHash = state.valueHashes.get(key);
             if (valueHash === undefined && !state.valueHashes.has(key)) {
-                valueHash = calculateHash(database[key]);
+                if (key === 'pluginCustomStorage') {
+                    state.pluginStorageState = buildPluginStorageState(database[key]);
+                    valueHash = composePluginStorageHash(database[key], state.pluginStorageState);
+                } else {
+                    valueHash = calculateHash(database[key]);
+                }
                 state.valueHashes.set(key, valueHash);
             }
             rootHash += Math.imul(calculateHash(key), PRIME_MULTIPLIER) + valueHash;
@@ -103,14 +202,30 @@ function createPatchHashCache(calculateHash) {
             nextState = buildState(nextDatabase);
         } else {
             const valueHashes = new Map(previousState.valueHashes);
+            let pluginStorageState = previousState.pluginStorageState;
+
             for (const key of keys) {
                 if (Object.prototype.hasOwnProperty.call(nextDatabase, key)) {
-                    valueHashes.set(key, calculateHash(nextDatabase[key]));
+                    if (key === 'pluginCustomStorage') {
+                        pluginStorageState = updatePluginStorageState(
+                            previousDatabase?.pluginCustomStorage,
+                            nextDatabase.pluginCustomStorage,
+                            patch,
+                            previousState.pluginStorageState,
+                        );
+                        valueHashes.set(
+                            key,
+                            composePluginStorageHash(nextDatabase.pluginCustomStorage, pluginStorageState),
+                        );
+                    } else {
+                        valueHashes.set(key, calculateHash(nextDatabase[key]));
+                    }
                 } else {
                     valueHashes.delete(key);
+                    if (key === 'pluginCustomStorage') pluginStorageState = null;
                 }
             }
-            nextState = { valueHashes, fullHash: null };
+            nextState = { valueHashes, fullHash: null, pluginStorageState };
         }
 
         states.set(nextDatabase, nextState);
@@ -123,4 +238,5 @@ function createPatchHashCache(calculateHash) {
 module.exports = {
     createPatchHashCache,
     collectTouchedTopLevelKeys,
+    collectPluginStorageChildKeys,
 };
