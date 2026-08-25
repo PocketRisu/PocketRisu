@@ -29,6 +29,7 @@ import { isMobile } from 'src/ts/platform'
     import MainMenu from '../UI/MainMenu.svelte';
     import AssetInput from './AssetInput.svelte';
     import { scrollWithinContainer } from './scrollWithin';
+    import { preserveChatScrollAnchor, suspendChatScrollAnchor } from './chatScrollAnchor';
     import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
     import { v4 } from 'uuid';
@@ -256,6 +257,10 @@ import { isMobile } from 'src/ts/platform'
     async function scrollToMessage(index: number){
         // Forces the loading of past messages not rendered on the screen
         isScrollingToMessage = true
+        const chatContainer = document.querySelector('.default-chat-screen') as HTMLElement | null;
+        const resumeScrollAnchor = chatContainer
+            ? suspendChatScrollAnchor(chatContainer)
+            : () => {}
         try {
             const totalMessages = currentChat.length
             const neededLoadPages = totalMessages - index + 5
@@ -273,7 +278,6 @@ import { isMobile } from 'src/ts/platform'
                 await sleep(100)
             }
 
-            const chatContainer = document.querySelector('.default-chat-screen') as HTMLElement | null;
             const preIndex = Math.max(0, index - 3)
             const preElement = document.querySelector(`[data-chat-index="${preIndex}"]`)
             // Scroll within the chat container only — raw scrollIntoView climbs to
@@ -316,6 +320,7 @@ import { isMobile } from 'src/ts/platform'
                 }, 2000)
             }
         } finally {
+            resumeScrollAnchor()
             isScrollingToMessage = false
         }
     }
@@ -1265,6 +1270,7 @@ import { isMobile } from 'src/ts/platform'
              resizes, and the sticky composer inside this col-reverse scroller gets misanchored
              (bar floats up with a gap below). PWA/standalone has no URL bar, hence unaffected. -->
         <div class="h-full w-full flex flex-col-reverse overflow-y-auto overscroll-y-contain relative default-chat-screen"
+            use:preserveChatScrollAnchor
             class:nodeonly-standard={DBState.db.theme === ''}
             class:no-chat-width-wide={DBState.db.theme === '' && DBState.db.nodeOnlyStandardChatWidth === 'wide'}
             class:no-chat-width-full={DBState.db.theme === '' && DBState.db.nodeOnlyStandardChatWidth === 'full'}

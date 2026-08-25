@@ -663,12 +663,38 @@ function trimmer(str:string){
     return str.trim().replace(/[_ -.]/g, '')
 }
 
-const blobUrlCache = new Map<string, { url: string; type: string }>()
+type InlayCacheEntry = {
+    height?: number
+    loadPromise?: Promise<InlayCacheEntry>
+    retryAt?: number
+    retryCount?: number
+    status: 'error' | 'loading' | 'ready'
+    type: string
+    url: string
+    width?: number
+}
+
+const blobUrlCache = new Map<string, InlayCacheEntry>()
 const inlayImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']
+const INLAY_RETRY_DELAY_MS = 3000
+const MAX_INLAY_RETRY_COUNT = 5
 
 /** Build a direct-serve URL for a KV key via /api/asset/ */
 function assetUrl(kvKey: string): string {
     return `/api/asset/${Buffer.from(kvKey, 'utf-8').toString('hex')}`
+}
+
+function getInlayDimensions(entry?: InlayCacheEntry): { height: number, width: number } | null {
+    const height = Math.round(entry?.height ?? 0)
+    const width = Math.round(entry?.width ?? 0)
+    if (height <= 0 || width <= 0) return null
+    return { height, width }
+}
+
+function getInlayImageSizeAttributes(entry?: InlayCacheEntry): string {
+    const dimensions = getInlayDimensions(entry)
+    if (!dimensions) return ''
+    return ` width="${dimensions.width}" height="${dimensions.height}"`
 }
 
 function createMissingInlayPlaceholder(id: string): HTMLDivElement {
@@ -698,8 +724,8 @@ export function parseInlayAssets(data:string){
             let prefix = inlayType !== 'inlay' ? `<div class="risu-inlay-image">` : ''
             let postfix = inlayType !== 'inlay' ? `</div>\n\n` : ''
 
-            let cached = blobUrlCache.get(id)
-            if(!cached){
+            const cached = blobUrlCache.get(id)
+            if(!cached || cached.status !== 'ready'){
                 // If not in memory cache, inject placeholder
                 const placeholder = `${prefix}<div data-inlay-id="${id}" data-inlay-type="${inlayType}" class="risu-inlay-placeholder risu-loading-spinner" style="width: 100%; min-height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.1); border-radius: 8px;"></div>${postfix}`
                 data = data.replace(inlay, placeholder)
@@ -714,7 +740,7 @@ export function parseInlayAssets(data:string){
                         data = data.replace(inlay, '')
                         break
                     }
-                    data = data.replace(inlay, `${prefix}<img src="${url}"/>${postfix}`)
+                    data = data.replace(inlay, `${prefix}<img src="${url}"${getInlayImageSizeAttributes(cached)}/>${postfix}`)
                     break
                 case 'video':
                     data = data.replace(inlay, `${prefix}<video controls><source src="${url}" type="video/mp4"></video>${postfix}`)
@@ -728,125 +754,243 @@ export function parseInlayAssets(data:string){
     return data
 }
 
+function createLoadingInlayEntry(
+    id: string,
+    state: Partial<Pick<InlayCacheEntry, 'height' | 'retryCount' | 'width'>> = {},
+): InlayCacheEntry {
+    return {
+        ...state,
+        status: 'loading',
+        type: 'image',
+        url: assetUrl(`inlay/${id}`),
+    }
+}
+
+function createFailedInlayEntry(entry: InlayCacheEntry, retryable: boolean): InlayCacheEntry {
+    const retryCount = (entry.retryCount ?? 0) + 1
+    const retryDelay = Math.min(INLAY_RETRY_DELAY_MS * (2 ** Math.min(retryCount - 1, 4)), 30000)
+    const shouldRetry = retryable && retryCount <= MAX_INLAY_RETRY_COUNT
+    return {
+        height: entry.height,
+        status: 'error',
+        type: 'image',
+        url: entry.url,
+        retryAt: shouldRetry ? Date.now() + retryDelay : undefined,
+        retryCount,
+        width: entry.width,
+    }
+}
+
+/**
+ * Load/probe an asset once per id. A loading entry is deliberately not a
+ * renderable cache hit: LightBoard can remount the same message before this
+ * promise settles, and that remount must keep its placeholder in-flow.
+ */
+function ensureInlayLoaded(id: string, entry: InlayCacheEntry): Promise<InlayCacheEntry> {
+    if (entry.status !== 'loading' || entry.type !== 'image') return Promise.resolve(entry)
+    if (entry.loadPromise) return entry.loadPromise
+
+    const loadPromise = new Promise<InlayCacheEntry>((resolve) => {
+        const probe = document.createElement('img')
+        let settled = false
+
+        const settle = (result: InlayCacheEntry) => {
+            if (settled) return
+            settled = true
+            probe.onload = null
+            probe.onerror = null
+
+            // Do not let a late image/HEAD result overwrite a newer entry.
+            if (blobUrlCache.get(id) === entry) blobUrlCache.set(id, result)
+            resolve(blobUrlCache.get(id) ?? result)
+        }
+
+        const handleLoad = () => {
+            const width = probe.naturalWidth || entry.width
+            const height = probe.naturalHeight || entry.height
+            settle({
+                status: 'ready',
+                type: 'image',
+                url: entry.url,
+                width: width || undefined,
+                height: height || undefined,
+            })
+        }
+
+        probe.onload = handleLoad
+        // Legacy assets may not have inlay_info. Probe their Content-Type only
+        // after image loading fails, and share that result with every waiter.
+        probe.onerror = async () => {
+            try {
+                const head = await fetch(entry.url, { method: 'HEAD' })
+                if (!head.ok) {
+                    settle(createFailedInlayEntry(entry, head.status !== 404 && head.status !== 410))
+                    return
+                }
+                const contentType = head.headers.get('content-type') || ''
+                if (contentType.startsWith('video/')) {
+                    settle({ status: 'ready', type: 'video', url: entry.url })
+                } else if (contentType.startsWith('audio/')) {
+                    settle({ status: 'ready', type: 'audio', url: entry.url })
+                } else {
+                    // The image GET may have failed transiently even when HEAD
+                    // succeeds (including a normal image Content-Type).
+                    settle(createFailedInlayEntry(entry, true))
+                }
+            } catch {
+                settle(createFailedInlayEntry(entry, true))
+            }
+        }
+
+        probe.src = entry.url
+        if (probe.complete && probe.naturalWidth > 0) queueMicrotask(handleLoad)
+    })
+
+    entry.loadPromise = loadPromise
+    return loadPromise
+}
+
+function createReadyInlayElement(entry: InlayCacheEntry): HTMLElement | null {
+    switch (entry.type) {
+        case 'image': {
+            const img = document.createElement('img')
+            img.style.animation = 'risu-fade-in 0.3s ease-out'
+            const dimensions = getInlayDimensions(entry)
+            if (dimensions) {
+                img.width = dimensions.width
+                img.height = dimensions.height
+            }
+            img.src = entry.url
+            return img
+        }
+        case 'video': {
+            const video = document.createElement('video')
+            video.controls = true
+            const source = document.createElement('source')
+            source.src = entry.url
+            source.type = 'video/mp4'
+            video.appendChild(source)
+            return video
+        }
+        case 'audio': {
+            const audio = document.createElement('audio')
+            audio.controls = true
+            const source = document.createElement('source')
+            source.src = entry.url
+            source.type = 'audio/mpeg'
+            audio.appendChild(source)
+            return audio
+        }
+        default:
+            return null
+    }
+}
+
 // Global resolve queue for inlay placeholders
 const resolveQueue: { el: HTMLElement, id: string, type: string }[] = []
+const resolvingInlayPlaceholders = new WeakSet<HTMLElement>()
 let isResolvingPlaceholders = false
+
+async function resolveQueuedInlay(el: HTMLElement, id: string) {
+    try {
+        let entry = blobUrlCache.get(id) ?? createLoadingInlayEntry(id)
+        if (!blobUrlCache.has(id)) blobUrlCache.set(id, entry)
+        if (entry.status === 'error' && entry.retryAt !== undefined && entry.retryAt <= Date.now()) {
+            const retryEntry = createLoadingInlayEntry(id, {
+                height: entry.height,
+                retryCount: entry.retryCount,
+                width: entry.width,
+            })
+            if (blobUrlCache.get(id) === entry) blobUrlCache.set(id, retryEntry)
+            entry = blobUrlCache.get(id) ?? retryEntry
+        }
+        // Preserve the existing hide-images fast path: do not download or
+        // decode an image that will be removed immediately.
+        if (DBState.db.hideAllImages && entry.type === 'image') {
+            el.remove()
+            return
+        }
+        if (entry.status === 'loading') entry = await ensureInlayLoaded(id, entry)
+
+        // The message may have been remounted while the shared load was in
+        // flight. Never let an old waiter replace a new placeholder.
+        if (!el.parentNode || el.dataset.inlayId !== id) return
+        if (DBState.db.hideAllImages && entry.type === 'image') {
+            el.remove()
+            return
+        }
+        if (entry.status !== 'ready') {
+            if (entry.retryAt !== undefined) {
+                const retryDelay = Math.max(0, entry.retryAt - Date.now())
+                setTimeout(() => {
+                    if (!el.parentNode || el.dataset.inlayId !== id) return
+                    void resolveQueuedInlay(el, id)
+                }, retryDelay)
+                return
+            }
+            el.replaceWith(createMissingInlayPlaceholder(id))
+            return
+        }
+
+        const replacement = createReadyInlayElement(entry)
+        if (replacement) el.replaceWith(replacement)
+    } catch (e) {
+        console.error(`[Inlay] Failed to load ${id}`, e)
+        if (el.parentNode) el.replaceWith(createMissingInlayPlaceholder(id))
+    }
+}
 
 async function processInlayQueue() {
     if (isResolvingPlaceholders || resolveQueue.length === 0) return
     isResolvingPlaceholders = true
 
-    while (resolveQueue.length > 0) {
-        const batch = resolveQueue.splice(0, 20)
+    try {
+        while (resolveQueue.length > 0) {
+            const batch = resolveQueue.splice(0, 20)
+            const unknownIds = Array.from(new Set(
+                batch
+                    .filter(({ id }) => !blobUrlCache.has(id))
+                    .map(({ id }) => id)
+            ))
 
-        const unknownIds = batch
-            .filter(({ id }) => !blobUrlCache.has(id))
-            .map(({ id }) => id)
-
-        if (unknownIds.length > 0) {
-            if (DBState.db.inlayImagePriority) {
-                // Fast path: assume image, let img.onerror handle video/audio
-                for (const id of unknownIds) {
-                    blobUrlCache.set(id, { url: assetUrl(`inlay/${id}`), type: 'image' })
-                }
-            } else {
-                // Accurate path: fetch type info first
-                try {
-                    const infos = await getInlayInfosBatch(unknownIds)
-                    for (const id of unknownIds) {
-                        const type = infos[id]?.type ?? 'image'
-                        blobUrlCache.set(id, { url: assetUrl(`inlay/${id}`), type })
-                    }
-                } catch {
-                    for (const id of unknownIds) {
-                        blobUrlCache.set(id, { url: assetUrl(`inlay/${id}`), type: 'image' })
-                    }
-                }
-            }
-        }
-
-        for (const { el, id } of batch) {
-            try {
-                if (!el.parentNode) continue
-
-                const cached = blobUrlCache.get(id)
-                const url = cached?.url ?? assetUrl(`inlay/${id}`)
-                const type = cached?.type ?? 'image'
-                if (!cached) blobUrlCache.set(id, { url, type })
-
-                switch (type) {
-                    case 'image':
-                        if (DBState.db.hideAllImages) { el.remove(); break }
-                        const img = document.createElement('img')
-                        img.src = url
-                        img.style.animation = 'risu-fade-in 0.3s ease-out'
-                        // Fallback for legacy inlays without inlay_info:
-                        // if <img> fails, probe Content-Type and swap to video/audio
-                        img.onerror = async () => {
-                            try {
-                                const head = await fetch(url, { method: 'HEAD' })
-                                const ct = head.headers.get('content-type') || ''
-                                if (ct.startsWith('video/')) {
-                                    blobUrlCache.set(id, { url, type: 'video' })
-                                    const video = document.createElement('video')
-                                    video.controls = true
-                                    const src = document.createElement('source')
-                                    src.src = url; src.type = ct
-                                    video.appendChild(src)
-                                    img.replaceWith(video)
-                                } else if (ct.startsWith('audio/')) {
-                                    blobUrlCache.set(id, { url, type: 'audio' })
-                                    const audio = document.createElement('audio')
-                                    audio.controls = true
-                                    const src = document.createElement('source')
-                                    src.src = url; src.type = ct
-                                    audio.appendChild(src)
-                                    img.replaceWith(audio)
-                                } else {
-                                    img.replaceWith(createMissingInlayPlaceholder(id))
-                                }
-                            } catch {
-                                img.replaceWith(createMissingInlayPlaceholder(id))
-                            }
+            if (unknownIds.length > 0) {
+                if (DBState.db.inlayImagePriority) {
+                    // Fast path: assume image, let the shared probe detect media.
+                    for (const id of unknownIds) blobUrlCache.set(id, createLoadingInlayEntry(id))
+                } else {
+                    // Accurate path: fetch type and dimensions first.
+                    try {
+                        const infos = await getInlayInfosBatch(unknownIds)
+                        for (const id of unknownIds) {
+                            const info = infos[id]
+                            const type = info?.type ?? 'image'
+                            blobUrlCache.set(id, {
+                                status: type === 'image' ? 'loading' : 'ready',
+                                url: assetUrl(`inlay/${id}`),
+                                type,
+                                height: info?.height,
+                                width: info?.width,
+                            })
                         }
-                        el.replaceWith(img)
-                        break
-                    case 'video': {
-                        const video = document.createElement('video')
-                        video.controls = true
-                        const source = document.createElement('source')
-                        source.src = url
-                        source.type = 'video/mp4'
-                        video.appendChild(source)
-                        el.replaceWith(video)
-                        break
+                    } catch {
+                        for (const id of unknownIds) blobUrlCache.set(id, createLoadingInlayEntry(id))
                     }
-                    case 'audio': {
-                        const audio = document.createElement('audio')
-                        audio.controls = true
-                        const source = document.createElement('source')
-                        source.src = url
-                        source.type = 'audio/mpeg'
-                        audio.appendChild(source)
-                        el.replaceWith(audio)
-                        break
-                    }
-                }
-            } catch (e) {
-                console.error(`[Inlay] Failed to load ${id}`, e)
-                if (el.parentNode) {
-                    el.replaceWith(createMissingInlayPlaceholder(id))
                 }
             }
-        }
-    }
 
-    isResolvingPlaceholders = false
+            // Start all loads concurrently; each duplicate id shares one probe.
+            for (const { el, id } of batch) void resolveQueuedInlay(el, id)
+        }
+    } finally {
+        isResolvingPlaceholders = false
+        if (resolveQueue.length > 0) void processInlayQueue()
+    }
 }
 
 export function resolveInlayPlaceholders(root: HTMLElement) {
     if (!root) return
-    const placeholders = Array.from(root.querySelectorAll('[data-inlay-id]')) as HTMLElement[]
+    const placeholders = (Array.from(root.querySelectorAll('[data-inlay-id]')) as HTMLElement[])
+        .filter((el) => !resolvingInlayPlaceholders.has(el))
     if (placeholders.length === 0) return
 
     const observer = new IntersectionObserver((entries) => {
@@ -864,7 +1008,10 @@ export function resolveInlayPlaceholders(root: HTMLElement) {
         })
     }, { rootMargin: '200px' }) // Start loading a bit before they scroll into view
 
-    placeholders.forEach(el => observer.observe(el))
+    placeholders.forEach(el => {
+        resolvingInlayPlaceholders.add(el)
+        observer.observe(el)
+    })
 }
 
 export interface simpleCharacterArgument{
