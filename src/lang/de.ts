@@ -1337,5 +1337,14 @@ export const languageGerman = {
     httpInsecureWarningBody: "Einige Funktionen wie Plugins funktionieren möglicherweise nicht. Verwenden Sie den Fernzugriff für eine HTTPS-Verbindung.",
     httpInsecureOpenRemoteAccess: "Einstellungen öffnen",
 
+    modelPresetFolderDefault: "Neuer Ordner",
+    modelPresetFolderName: "Ordnername",
+    modelPresetFolderRename: "Ordner umbenennen",
+    modelPresetFolderDelete: "Ordner löschen",
+    modelPresetFolderDeleteConfirm: "Diesen Ordner löschen? Die darin enthaltenen Presets bleiben an derselben Position.",
+    modelPresetFolderEmpty: "Keine Presets in diesem Ordner",
+    modelPresetDropCreateFolder: "Ordner erstellen",
+    modelPresetDropIntoFolder: "In Ordner verschieben",
+
     selectBotHint: "Wählen Sie einen Bot zum Chatten",
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

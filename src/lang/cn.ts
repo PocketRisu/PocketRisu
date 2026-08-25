@@ -1337,5 +1337,14 @@ export const languageChinese = {
     httpInsecureWarningBody: "插件等部分功能可能无法使用。请使用远程访问功能以建立 HTTPS 连接。",
     httpInsecureOpenRemoteAccess: "打开设置",
 
+    modelPresetFolderDefault: "新建文件夹",
+    modelPresetFolderName: "文件夹名称",
+    modelPresetFolderRename: "重命名文件夹",
+    modelPresetFolderDelete: "删除文件夹",
+    modelPresetFolderDeleteConfirm: "要删除此文件夹吗？其中的预设将保留在当前位置。",
+    modelPresetFolderEmpty: "此文件夹中没有预设",
+    modelPresetDropCreateFolder: "创建文件夹",
+    modelPresetDropIntoFolder: "移动到文件夹",
+
     selectBotHint: "选择一个机器人开始聊天",
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

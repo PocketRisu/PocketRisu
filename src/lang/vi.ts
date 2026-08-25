@@ -1337,5 +1337,14 @@ export const languageVietnamese = {
     httpInsecureWarningBody: "Một số tính năng như plugin có thể không hoạt động. Hãy dùng tính năng Truy cập từ xa để có kết nối HTTPS.",
     httpInsecureOpenRemoteAccess: "Mở cài đặt",
 
+    modelPresetFolderDefault: "Thư mục mới",
+    modelPresetFolderName: "Tên thư mục",
+    modelPresetFolderRename: "Đổi tên thư mục",
+    modelPresetFolderDelete: "Xóa thư mục",
+    modelPresetFolderDeleteConfirm: "Xóa thư mục này? Các cài đặt sẵn bên trong sẽ vẫn ở cùng vị trí.",
+    modelPresetFolderEmpty: "Không có cài đặt sẵn trong thư mục này",
+    modelPresetDropCreateFolder: "Tạo thư mục",
+    modelPresetDropIntoFolder: "Di chuyển vào thư mục",
+
     selectBotHint: "Chọn một bot để bắt đầu trò chuyện",
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;

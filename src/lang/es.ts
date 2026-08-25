@@ -1337,5 +1337,14 @@ export const languageSpanish = {
     httpInsecureWarningBody: "Algunas funciones como los plugins pueden no funcionar. Usa la función de Acceso Remoto para una conexión HTTPS.",
     httpInsecureOpenRemoteAccess: "Abrir configuración",
 
+    modelPresetFolderDefault: "Nueva carpeta",
+    modelPresetFolderName: "Nombre de la carpeta",
+    modelPresetFolderRename: "Renombrar carpeta",
+    modelPresetFolderDelete: "Eliminar carpeta",
+    modelPresetFolderDeleteConfirm: "¿Eliminar esta carpeta? Sus preajustes permanecerán en la misma posición.",
+    modelPresetFolderEmpty: "No hay preajustes en esta carpeta",
+    modelPresetDropCreateFolder: "Crear carpeta",
+    modelPresetDropIntoFolder: "Mover a la carpeta",
+
     selectBotHint: "Selecciona un bot para empezar a chatear",
 } satisfies DeepPartial<typeof import('./en').languageEnglish>;
