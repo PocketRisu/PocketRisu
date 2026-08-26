@@ -702,6 +702,7 @@ type InlayCacheEntry = { url: string; type: string; width?: number; height?: num
 type InlayDimensions = { width: number; height: number }
 
 const blobUrlCache = new Map<string, InlayCacheEntry>()
+const inlayDimensionRequests = new Map<string, Promise<InlayDimensions | undefined>>()
 const inlayImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']
 
 /** Build a direct-serve URL for a KV key via /api/asset/ */
@@ -727,6 +728,55 @@ function applyInlayDimensions(img: HTMLImageElement, source: { width?: number; h
     if(!dimensions) return
     img.setAttribute('width', String(dimensions.width))
     img.setAttribute('height', String(dimensions.height))
+}
+
+function requestInlayDimensions(ids: string[]) {
+    const idsToRequest = ids.filter((id) => !inlayDimensionRequests.has(id))
+    if(idsToRequest.length === 0) return
+
+    const infosRequest = getInlayInfosBatch(idsToRequest)
+    for(const id of idsToRequest){
+        const request = infosRequest.then((infos) => {
+            const cached = blobUrlCache.get(id)
+            if(!cached || cached.type !== 'image') return undefined
+
+            const dimensions = getInlayDimensions(infos[id])
+            if(!dimensions) return undefined
+            cached.width = dimensions.width
+            cached.height = dimensions.height
+            return dimensions
+        }).catch(() => undefined)
+
+        inlayDimensionRequests.set(id, request)
+        void request.finally(() => {
+            if(inlayDimensionRequests.get(id) === request){
+                inlayDimensionRequests.delete(id)
+            }
+        })
+    }
+}
+
+function applyPendingInlayDimensions(img: HTMLImageElement, id: string, cached: InlayCacheEntry | undefined) {
+    img.removeAttribute('data-inlay-image-id')
+    if(DBState.db.hideAllImages || cached?.type !== 'image' || img.getAttribute('src') !== cached.url) return
+
+    applyInlayDimensions(img, cached)
+    if(getInlayDimensions(cached)) return
+
+    const request = inlayDimensionRequests.get(id)
+    if(!request) return
+    void request.then((dimensions) => {
+        const current = blobUrlCache.get(id)
+        if(
+            dimensions
+            && img.isConnected
+            && !DBState.db.hideAllImages
+            && current?.type === 'image'
+            && img.getAttribute('src') === current.url
+        ){
+            applyInlayDimensions(img, dimensions)
+        }
+    })
 }
 
 function createMissingInlayPlaceholder(id: string): HTMLDivElement {
@@ -756,7 +806,7 @@ export function parseInlayAssets(data:string){
             let prefix = inlayType !== 'inlay' ? `<div class="risu-inlay-image">` : ''
             let postfix = inlayType !== 'inlay' ? `</div>\n\n` : ''
 
-            let cached = blobUrlCache.get(id)
+            const cached = blobUrlCache.get(id)
             if(!cached){
                 // If not in memory cache, inject placeholder
                 const placeholder = `${prefix}<div data-inlay-id="${id}" data-inlay-type="${inlayType}" class="risu-inlay-placeholder risu-loading-spinner" style="width: 100%; min-height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.1); border-radius: 8px;"></div>${postfix}`
@@ -772,7 +822,10 @@ export function parseInlayAssets(data:string){
                         data = data.replace(inlay, '')
                         break
                     }
-                    data = data.replace(inlay, `${prefix}<img src="${url}"${getInlayDimensionAttributes(cached)}/>${postfix}`)
+                    const pendingDimensionAttribute = !getInlayDimensions(cached) && inlayDimensionRequests.has(id)
+                        ? ` data-inlay-image-id="${id}"`
+                        : ''
+                    data = data.replace(inlay, `${prefix}<img src="${url}"${getInlayDimensionAttributes(cached)}${pendingDimensionAttribute}/>${postfix}`)
                     break
                 case 'video':
                     data = data.replace(inlay, `${prefix}<video controls><source src="${url}" type="video/mp4"></video>${postfix}`)
@@ -796,13 +849,10 @@ async function processInlayQueue() {
 
     while (resolveQueue.length > 0) {
         const batch = resolveQueue.splice(0, 20)
-        // <img> elements inserted below, so late-arriving dimensions can still
-        // reserve their box before the image finishes decoding.
-        const insertedImages = new Map<string, HTMLImageElement[]>()
 
-        const unknownIds = batch
+        const unknownIds = Array.from(new Set(batch
             .filter(({ id }) => !blobUrlCache.has(id))
-            .map(({ id }) => id)
+            .map(({ id }) => id)))
 
         if (unknownIds.length > 0) {
             if (DBState.db.inlayImagePriority) {
@@ -810,22 +860,9 @@ async function processInlayQueue() {
                 for (const id of unknownIds) {
                     blobUrlCache.set(id, { url: assetUrl(`inlay/${id}`), type: 'image' })
                 }
-                // Dimensions are fetched without blocking the image load; when
-                // they arrive, size the already-inserted <img> so it doesn't
-                // jump from 0 height once decoded.
-                getInlayInfosBatch(unknownIds).then((infos) => {
-                    for (const id of unknownIds) {
-                        const cached = blobUrlCache.get(id)
-                        if(!cached) continue
-                        const dimensions = getInlayDimensions(infos[id])
-                        if(!dimensions) continue
-                        cached.width = dimensions.width
-                        cached.height = dimensions.height
-                        for (const img of insertedImages.get(id) ?? []) {
-                            if (img.isConnected) applyInlayDimensions(img, dimensions)
-                        }
-                    }
-                }).catch(() => {})
+                // Keep one metadata request available to every render of this
+                // id until its intrinsic dimensions have reached the cache.
+                requestInlayDimensions(unknownIds)
             } else {
                 // Accurate path: fetch type info first
                 try {
@@ -858,8 +895,7 @@ async function processInlayQueue() {
                         if (DBState.db.hideAllImages) { el.remove(); break }
                         const img = document.createElement('img')
                         img.src = url
-                        applyInlayDimensions(img, cached)
-                        insertedImages.set(id, [...(insertedImages.get(id) ?? []), img])
+                        applyPendingInlayDimensions(img, id, cached)
                         img.style.animation = 'risu-fade-in 0.3s ease-out'
                         // Fallback for legacy inlays without inlay_info:
                         // if <img> fails, probe Content-Type and swap to video/audio
@@ -927,6 +963,13 @@ async function processInlayQueue() {
 
 export function resolveInlayPlaceholders(root: HTMLElement) {
     if (!root) return
+
+    const pendingDimensionImages = Array.from(root.querySelectorAll<HTMLImageElement>('img[data-inlay-image-id]'))
+    for(const img of pendingDimensionImages){
+        const id = img.getAttribute('data-inlay-image-id')
+        if(id) applyPendingInlayDimensions(img, id, blobUrlCache.get(id))
+    }
+
     const placeholders = Array.from(root.querySelectorAll('[data-inlay-id]')) as HTMLElement[]
     if (placeholders.length === 0) return
 
@@ -1037,7 +1080,7 @@ export async function ParseMarkdown(
 
 const trimPurifyConfig = {
     ADD_TAGS: ["iframe", "style", "risu-style", "x-em", 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'msqrt'],
-    ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "risu-ctrl" ,"risu-btn", 'risu-trigger', 'risu-mark', 'risu-id', 'x-hl-lang', 'x-hl-text', 'data-inlay-id', 'data-inlay-type'],
+    ADD_ATTR: ["allow", "allowfullscreen", "frameborder", "scrolling", "risu-ctrl" ,"risu-btn", 'risu-trigger', 'risu-mark', 'risu-id', 'x-hl-lang', 'x-hl-text', 'data-inlay-id', 'data-inlay-type', 'data-inlay-image-id'],
 }
 
 // LRU cache for DOMPurify + decodeStyle results.
