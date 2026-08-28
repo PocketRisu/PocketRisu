@@ -64,6 +64,7 @@ export interface SelectOption {
     descriptionKey?: string;
     /** Optional condition — when provided, the option is only shown if this returns true */
     condition?: (ctx: SettingContext) => boolean;
+
 }
 
 /**
@@ -161,6 +162,12 @@ export interface SettingItem {
      * @param ctx - Contains db, modelInfo, and subModelInfo
      */
     condition?: (ctx: SettingContext) => boolean;
+
+    /**
+     * Condition function for disabling an otherwise visible input.
+     * Return true to disable it.
+     */
+    disabled?: boolean | ((ctx: SettingContext) => boolean);
     
     /** Type-specific options */
     options?: SettingOptions;

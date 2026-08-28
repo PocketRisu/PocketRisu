@@ -1580,6 +1580,7 @@ export const languageKorean = {
   modelPresetTabTest: "테스트",
   modelPresetTabModules: "모듈 분리 바인딩",
   moduleModelBindingEnable: "모듈별 모델 지정 사용",
+  lightBoardModuleBindingCompatibilityMode: "라이트보드 호환성 모드",
   moduleModelBindingUnset: "지정 안 함",
   moduleModelBindingEmpty: "모델을 호출하는 모듈이 없습니다.",
   moduleModelBindingDangling: "지정된 프리셋을 찾을 수 없습니다. 다시 선택하거나, 프리셋을 다시 불러오면 연결됩니다.",

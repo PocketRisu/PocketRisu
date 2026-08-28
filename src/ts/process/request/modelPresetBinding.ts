@@ -2,6 +2,10 @@ import { getDatabase, type Chat, type Database } from 'src/ts/storage/database.s
 import type { AdapterCredential } from 'src/ts/preset/adapter'
 import { VISION_CAPABLE_ADAPTER_KINDS, type ModelPreset } from 'src/ts/preset/types'
 import type { ModelModeExtended } from './shared'
+import {
+    getModuleBindingPresetId,
+    resolveModuleRoutingSignature,
+} from '../moduleModelBinding'
 
 /**
  * P4 dual-regime resolution (plan v6 §7, model-preset-p4-task).
@@ -43,6 +47,7 @@ export function resolveChatModelBinding(
     chat: Chat | null | undefined,
     mode: ModelModeExtended,
     moduleId?: string,
+    messages?: readonly { content?: string }[],
 ): ResolvedBinding {
     const db = getDatabase()
     const lock = db.nodeOnlyModelModeLock ?? 'none'
@@ -57,8 +62,21 @@ export function resolveChatModelBinding(
     // chat only ever takes this path when the user opted in. Dangling ids fall
     // through to normal resolution rather than blocking.
     if (moduleId && db.moduleModelBindingsEnabled) {
-        const bound = findPreset(db.moduleModelBindings?.[moduleId], db.modelPresets ?? [])
-        if (bound) return { kind: 'modelPreset', preset: bound }
+        const modules = db.modules ?? []
+        // A delegated module request can carry LightBoard's stable marker. It
+        // wins only when it resolves to one installed namespace; otherwise the
+        // actual script owner keeps the existing behaviour.
+        const routedModuleId = resolveModuleRoutingSignature(moduleId, messages, modules)
+        const candidateModuleIds = [routedModuleId, moduleId].filter((id): id is string => !!id)
+        for (const candidateModuleId of candidateModuleIds) {
+            const module = modules.find((entry) => entry.id === candidateModuleId)
+            const bound = findPreset(
+                getModuleBindingPresetId(module, db.moduleModelBindings)
+                    ?? db.moduleModelBindings?.[candidateModuleId],
+                db.modelPresets ?? [],
+            )
+            if (bound) return { kind: 'modelPreset', preset: bound }
+        }
     }
 
     // Effective regime. A global lock forces every chat into one regime; 'none'

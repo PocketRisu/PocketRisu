@@ -123,6 +123,48 @@ describe('resolveChatModelBinding — per-module override', () => {
         expect(resolveChatModelBinding(presetChat, 'model', 'mod-1'))
             .toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
     })
+
+    test('a LightBoard routing signature selects the delegated module binding', () => {
+        mockDb.modules = [
+            { id: 'lightboard-owner', namespace: 'lightboard' },
+            { id: 'illustration', namespace: 'lb-xnai' },
+        ]
+        mockDb.moduleModelBindings = {
+            'lightboard-owner': 'p-main',
+            'namespace:lb-xnai': 'p-module',
+        }
+
+        expect(resolveChatModelBinding(
+            classicChat,
+            'otherAx',
+            'lightboard-owner',
+            [{ content: 'internal prompt\n[lb-routing/lb-xnai]' }],
+        )).toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
+    })
+
+    test('an unknown or ambiguous routing signature keeps the owner binding', () => {
+        mockDb.modules = [{ id: 'lightboard-owner', namespace: 'lightboard' }]
+        mockDb.moduleModelBindings = { 'lightboard-owner': 'p-module' }
+
+        expect(resolveChatModelBinding(
+            classicChat,
+            'otherAx',
+            'lightboard-owner',
+            [{ content: '[lb-routing/lb-xnai]\n[lb-routing/lb-news]' }],
+        )).toEqual({ kind: 'modelPreset', preset: MODULE_PRESET })
+    })
+
+    test('a routing signature is ignored without a module-owned request', () => {
+        mockDb.modules = [{ id: 'illustration', namespace: 'lb-xnai' }]
+        mockDb.moduleModelBindings = { 'namespace:lb-xnai': 'p-module' }
+
+        expect(resolveChatModelBinding(
+            classicChat,
+            'otherAx',
+            undefined,
+            [{ content: '[lb-routing/lb-xnai]' }],
+        )).toEqual({ kind: 'classic' })
+    })
 })
 
 function presetWith(opts: { schema?: any[]; userValues?: any; defaults?: any } = {}) {

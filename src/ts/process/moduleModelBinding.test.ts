@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { listModelCallingModules } from './moduleModelBinding'
+import {
+    getModuleBindingPresetId,
+    isLightBoardModule,
+    listModelCallingModules,
+    migrateModuleBindingKeys,
+    resolveModuleRoutingSignature,
+} from './moduleModelBinding'
 
 function mod(id: string, opts: { lowLevelAccess?: boolean; effects?: string[] } = {}) {
     return {
@@ -40,10 +46,95 @@ describe('listModelCallingModules', () => {
         expect(listModelCallingModules([mod('a', { lowLevelAccess: true })])).toEqual([])
     })
 
+    test('includes LightBoard extensions without direct LLM access as binding slots', () => {
+        const extension = mod('illustration')
+        extension.namespace = 'lb-xnai'
+        expect(listModelCallingModules([extension])).toEqual([extension])
+    })
+
+    test('keeps namespace-less legacy LightBoard packages visible as binding slots', () => {
+        const legacy = mod('legacy')
+        legacy.name = '🔦라이트보드 NPC LIST'
+        expect(isLightBoardModule(legacy)).toBe(true)
+        expect(listModelCallingModules([legacy])).toEqual([legacy])
+    })
+
+    test('hides every LightBoard slot when compatibility mode is disabled', () => {
+        const base = mod('base', { lowLevelAccess: true, effects: ['runLLM'] })
+        base.namespace = 'lightboard'
+        const extension = mod('illustration')
+        extension.namespace = 'lb-xnai'
+        const normal = mod('normal', { lowLevelAccess: true, effects: ['runLLM'] })
+
+        expect(listModelCallingModules([base, extension, normal], false)).toEqual([normal])
+    })
+
     test('keeps installed order and drops the rest', () => {
         const a = mod('a', { lowLevelAccess: true, effects: ['runLLM'] })
         const b = mod('b', { lowLevelAccess: true, effects: ['v2SetVar'] })
         const c = mod('c', { lowLevelAccess: true, effects: ['triggercode'] })
         expect(listModelCallingModules([a, b, c])).toEqual([a, c])
+    })
+})
+
+describe('module binding identity', () => {
+    test('prefers a namespace binding over the legacy UUID binding', () => {
+        const module = mod('uuid-1', { lowLevelAccess: true })
+        module.namespace = 'lb-xnai'
+        expect(getModuleBindingPresetId(module, {
+            'uuid-1': 'legacy-preset',
+            'namespace:lb-xnai': 'stable-preset',
+        })).toBe('stable-preset')
+    })
+
+    test('migrates live UUID bindings without deleting orphaned entries', () => {
+        const module = mod('uuid-1', { lowLevelAccess: true })
+        module.namespace = 'lb-xnai'
+        const bindings = { 'uuid-1': 'preset-1', 'old-uuid': 'preset-orphan' }
+
+        expect(migrateModuleBindingKeys([module], bindings)).toBe(true)
+        expect(bindings).toEqual({
+            'namespace:lb-xnai': 'preset-1',
+            'old-uuid': 'preset-orphan',
+        })
+    })
+
+    test('matches one exact LightBoard routing signature to a module namespace', () => {
+        const owner = mod('owner', { lowLevelAccess: true })
+        owner.namespace = 'lightboard'
+        const illustration = mod('illustration', { lowLevelAccess: true })
+        illustration.namespace = 'lb-xnai'
+
+        expect(resolveModuleRoutingSignature(
+            owner.id,
+            [{ content: 'generated request\n[lb-routing/lb-xnai]' }],
+            [owner, illustration],
+        )).toBe('illustration')
+    })
+
+    test('rejects multiple routing signatures', () => {
+        const owner = mod('owner', { lowLevelAccess: true })
+        owner.namespace = 'lightboard'
+        const illustration = mod('illustration', { lowLevelAccess: true })
+        illustration.namespace = 'lb-xnai'
+
+        expect(resolveModuleRoutingSignature(
+            owner.id,
+            [{ content: '[lb-routing/lb-xnai]\n[lb-routing/lb-news]' }],
+            [owner, illustration],
+        )).toBeUndefined()
+    })
+
+    test('rejects a LightBoard marker from another module owner', () => {
+        const owner = mod('owner', { lowLevelAccess: true })
+        owner.namespace = 'another-module'
+        const illustration = mod('illustration', { lowLevelAccess: true })
+        illustration.namespace = 'lb-xnai'
+
+        expect(resolveModuleRoutingSignature(
+            owner.id,
+            [{ content: '[lb-routing/lb-xnai]' }],
+            [owner, illustration],
+        )).toBeUndefined()
     })
 })

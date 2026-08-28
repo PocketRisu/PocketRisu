@@ -1793,6 +1793,7 @@ export const languageChineseTraditional = {
     "modelPresetTabTest": "測試",
     "modelPresetTabModules": "模組綁定",
     "moduleModelBindingEnable": "各模組模型綁定",
+    "lightBoardModuleBindingCompatibilityMode": "LightBoard 相容模式",
     "moduleModelBindingUnset": "未指定",
     "moduleModelBindingEmpty": "沒有會呼叫模型的已安裝模組。",
     "moduleModelBindingDangling": "指定的預設已不存在。請另選一個，或重新匯入該預設以重新連結。",

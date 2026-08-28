@@ -402,7 +402,7 @@ export async function requestChatDataMain(arg:requestDataArgument, model:ModelMo
     // is forced — fallbacks are classic model ids.
     if(!arg.staticModel){
         const currentChat = getCurrentChat()
-        const binding = resolveChatModelBinding(currentChat, model, arg.moduleId)
+        const binding = resolveChatModelBinding(currentChat, model, arg.moduleId, arg.formated)
         if(binding.kind === 'modelPreset'){
             return requestModelPreset(targ, applyPromptPresetParams(binding.preset, currentChat, model), abortSignal, model)
         }

@@ -15,6 +15,9 @@
     let { item, ctx }: Props = $props();
 
     let localValue: any = $state(untrack(() => getSettingValue(item, ctx)));
+    let disabled = $derived(
+        typeof item.disabled === 'function' ? item.disabled(ctx) : (item.disabled ?? false),
+    );
 
     // Sync: DB → local (one-way read)
     $effect(() => {
@@ -36,7 +39,7 @@
 {#if ctx.layout === 'row'}
     <SettingRowLayout {item}>
         {#snippet control()}
-            <ShSwitch checked={!!localValue} onCheckedChange={(v) => (localValue = v)} />
+            <ShSwitch checked={!!localValue} {disabled} onCheckedChange={(v) => (localValue = v)} />
         {/snippet}
     </SettingRowLayout>
 {:else}

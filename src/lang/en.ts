@@ -1455,6 +1455,7 @@ export const languageEnglish = {
     modelPresetTabTest: "Test",
     modelPresetTabModules: "Module Binding",
     moduleModelBindingEnable: "Per-Module Model Binding",
+    lightBoardModuleBindingCompatibilityMode: "LightBoard Compatibility Mode",
     moduleModelBindingUnset: "Not set",
     moduleModelBindingEmpty: "No installed module makes model calls.",
     moduleModelBindingDangling: "The assigned preset no longer exists. Pick another, or re-import the preset to reconnect.",

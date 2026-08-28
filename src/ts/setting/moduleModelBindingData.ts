@@ -17,6 +17,14 @@ export const moduleModelBindingItems: SettingItem[] = [
         keywords: ['module', 'per-module', 'module binding', 'lua', 'trigger', 'script', '모듈', '모듈별', '모듈 분리 바인딩', '바인딩', '루아', '트리거', '스크립트'],
     },
     {
+        id: 'modelPreset.lightBoardModuleBindingCompatibilityMode',
+        type: 'check',
+        labelKey: 'lightBoardModuleBindingCompatibilityMode',
+        bindKey: 'lightBoardModuleBindingCompatibilityMode',
+        disabled: (ctx) => !ctx.db.moduleModelBindingsEnabled,
+        keywords: ['lightboard', 'light board', 'compatibility', '라이트보드', '호환성'],
+    },
+    {
         // The per-module rows are dynamic (one per installed module that can
         // call a model), so they cannot be declared as static items.
         id: 'modelPreset.moduleModelBindingList',

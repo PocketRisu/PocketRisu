@@ -17,6 +17,7 @@ import { normalizeTranslatorPresetState, type TranslatorPreset } from '../transl
 import { safeStructuredClone } from '../polyfill';
 import { v4 as uuidv4 } from 'uuid';
 import { applyModelPresetDefaults } from '../preset/dbDefaults';
+import { migrateModuleBindingKeys } from '../process/moduleModelBinding';
 import type { ApiKeyPoolEntry, ModelBindingFields, ModelBindingSet, ModelPreset, ModelPresetMigrationSummary, RegistryCache } from '../preset/types';
 import { emptyModelBinding } from '../preset/types';
 import { isChatStub } from './chatStub';
@@ -730,7 +731,9 @@ export function setDatabase(data:Database){
     data.showPersonaInSidebar ??= true
     data.nodeOnlyModelModeLock ??= 'none'
     data.moduleModelBindingsEnabled ??= false
+    data.lightBoardModuleBindingCompatibilityMode ??= true
     data.moduleModelBindings ??= {}
+    migrateModuleBindingKeys(data.modules, data.moduleModelBindings)
     data.disableMobileDragDrop ??= false
     data.disableToggleBinding ??= false
     data.hideAllImages ??= false
@@ -1469,6 +1472,9 @@ export interface Database{
     // moduleModelBindingsEnabled is the master switch. Off (default) skips the
     // override branch entirely, so behaviour is byte-identical to before.
     moduleModelBindingsEnabled?: boolean
+    // Shows LightBoard's delegated extension modules as selectable binding
+    // slots. Kept on by default to preserve the expanded slot list.
+    lightBoardModuleBindingCompatibilityMode?: boolean
     moduleModelBindings?: Record<string, string>
     modelPresetMigrationVersion?: number
     modelPresetMigrationAppliedAt?: number
