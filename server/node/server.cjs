@@ -7235,42 +7235,50 @@ app.post('/api/self-update', async (req, res) => {
                 // Windows: use a .bat script to apply bin/, finalize version, and restart.
                 // A bat script can replace bin/node.exe after the Node process exits,
                 // avoiding file-lock issues that a Node child process would hit.
+                //
+                // cmd.exe parses .bat files in the OEM code page (e.g. CP949 on Korean
+                // Windows), not UTF-8, so any non-ASCII path (Korean user name, "바탕 화면")
+                // written literally into the script would be mangled and every command
+                // would fail. Keep the script pure ASCII and pass paths through environment
+                // variables, which reach cmd.exe as UTF-16 via CreateProcessW.
                 const batScript = path.join(os.tmpdir(), `risu-restart-${Date.now()}.bat`);
                 const utmp = path.join(appDir, '.update-tmp');
-                const binDir = path.join(appDir, 'bin');
-                const binBackup = path.join(utmp, 'old-bin');
                 const batLines = [
                     '@echo off',
                     'timeout /t 3 /nobreak >nul',
                     // Apply staged bin/: backup current → copy new → on failure restore backup
-                    `if exist "${path.join(utmp, 'new-bin')}\\" (`,
-                    `  if exist "${binDir}\\" (`,
-                    `    xcopy /E /I /Y "${binDir}\\*" "${binBackup}\\" >nul`,
-                    `  )`,
-                    `  xcopy /E /I /Y "${path.join(utmp, 'new-bin')}\\*" "${binDir}\\" >nul`,
-                    `  if errorlevel 1 (`,
-                    `    echo [Update] bin/ copy failed, restoring backup...`,
-                    `    if exist "${binBackup}\\" (`,
-                    `      xcopy /E /I /Y "${binBackup}\\*" "${binDir}\\" >nul`,
-                    `    )`,
-                    `    echo [Update] bin/ restored. Staged files kept for retry.`,
-                    `    goto start`,
-                    `  )`,
-                    `)`,
+                    'if exist "%RISU_UTMP%\\new-bin\\" (',
+                    '  if exist "%RISU_APP_DIR%\\bin\\" (',
+                    '    xcopy /E /I /Y "%RISU_APP_DIR%\\bin\\*" "%RISU_UTMP%\\old-bin\\" >nul',
+                    '  )',
+                    '  xcopy /E /I /Y "%RISU_UTMP%\\new-bin\\*" "%RISU_APP_DIR%\\bin\\" >nul',
+                    '  if errorlevel 1 (',
+                    '    echo [Update] bin/ copy failed, restoring backup...',
+                    '    if exist "%RISU_UTMP%\\old-bin\\" (',
+                    '      xcopy /E /I /Y "%RISU_UTMP%\\old-bin\\*" "%RISU_APP_DIR%\\bin\\" >nul',
+                    '    )',
+                    '    echo [Update] bin/ restored. Staged files kept for retry.',
+                    '    goto start',
+                    '  )',
+                    ')',
                     // Finalize version marker only after successful bin/ copy
-                    `if exist "${path.join(utmp, 'latest-version')}" (`,
-                    `  copy /Y "${path.join(utmp, 'latest-version')}" "${path.join(appDir, '.installed-version')}" >nul`,
-                    `)`,
+                    'if exist "%RISU_UTMP%\\latest-version" (',
+                    '  copy /Y "%RISU_UTMP%\\latest-version" "%RISU_APP_DIR%\\.installed-version" >nul',
+                    ')',
                     // Cleanup .update-tmp (includes old-bin backup)
-                    `rmdir /s /q "${utmp}" 2>nul`,
+                    'rmdir /s /q "%RISU_UTMP%" 2>nul',
                     ':start',
                     // Start server with correct working directory
-                    `cd /d "${appDir}"`,
-                    `start "" "${path.join(appDir, 'bin', 'node.exe')}" "${path.join(appDir, 'server', 'node', 'server.cjs')}"`,
+                    'cd /d "%RISU_APP_DIR%"',
+                    'start "" "%RISU_APP_DIR%\\bin\\node.exe" "%RISU_APP_DIR%\\server\\node\\server.cjs"',
                     'exit /b 0',
                 ];
-                writeFileSync(batScript, batLines.join('\r\n'));
-                spawn('cmd.exe', ['/c', batScript], { detached: true, stdio: 'ignore' }).unref();
+                writeFileSync(batScript, batLines.join('\r\n'), 'ascii');
+                spawn('cmd.exe', ['/c', batScript], {
+                    detached: true,
+                    stdio: 'ignore',
+                    env: Object.assign({}, process.env, { RISU_APP_DIR: appDir, RISU_UTMP: utmp }),
+                }).unref();
             } else {
                 // Unix: Node restart helper with port-check to avoid clashing with process managers
                 const restartScript = path.join(os.tmpdir(), `risu-restart-${Date.now()}.cjs`);
