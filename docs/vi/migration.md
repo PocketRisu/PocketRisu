@@ -27,6 +27,11 @@ Xuất tệp sao lưu `.bin` từ RisuAI hiện có, sau đó nhập vào Pocket
 1. **Trong RisuAI hiện có**: Cài đặt > Sao lưu > "Lưu bản sao lưu cục bộ" để xuất tệp `.bin`.
 2. **Trong PocketRisu**: Cài đặt > Di chuyển dữ liệu > "Nhập bản sao lưu cục bộ Risu gốc" để nhập tệp `.bin`.
 
+> ⚠️ **Nếu bạn dùng RisuAI web khi đã đăng nhập tài khoản** (dữ liệu được đồng bộ lên máy chủ RisuAI), tệp tạo bằng "Lưu bản sao lưu cục bộ" có cơ sở dữ liệu đã mã hóa nên PocketRisu không đọc được. Việc nhập sẽ bị từ chối kèm giải thích. Hãy xuất theo một trong hai cách sau:
+> - **Đăng xuất rồi sao lưu** (khuyến nghị): Cài đặt > Tài khoản > Đăng xuất sẽ chuyển dữ liệu về trình duyệt (thiết bị). Sau đó "Lưu bản sao lưu cục bộ" sẽ tạo bản sao lưu bình thường, bao gồm cả tài nguyên.
+> - **Sao lưu một phần**: dùng được khi đang đăng nhập và không mã hóa, nhưng chỉ gồm ảnh đại diện của nhân vật.
+
+
 
 ---
 

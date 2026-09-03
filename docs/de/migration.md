@@ -27,6 +27,11 @@ Exportieren Sie eine `.bin`-Backup-Datei aus dem bestehenden RisuAI und importie
 1. **Im bestehenden RisuAI**: Einstellungen > Backup > "Lokales Backup speichern", um eine `.bin`-Datei zu exportieren.
 2. **In PocketRisu**: Einstellungen > Datenmigration > "Original Risu Local Backup importieren", um die `.bin`-Datei zu importieren.
 
+> ⚠️ **Wenn Sie Web-RisuAI mit einem angemeldeten Konto nutzen** (Ihre Daten werden mit dem RisuAI-Server synchronisiert), ist die Datenbank in einer mit "Lokales Backup speichern" erstellten Datei verschlüsselt und kann von PocketRisu nicht gelesen werden. Der Import wird mit einer Erklärung abgelehnt. Exportieren Sie stattdessen auf eine dieser Arten:
+> - **Abmelden, dann sichern** (empfohlen): Einstellungen > Konto > Abmelden verschiebt Ihre Daten in den Browser (Gerät). "Lokales Backup speichern" erzeugt danach ein normales Backup inklusive Assets.
+> - **Teilweises Backup**: auch angemeldet verfügbar und nicht verschlüsselt, enthält aber nur die Profilbilder der Charaktere.
+
+
 
 ---
 

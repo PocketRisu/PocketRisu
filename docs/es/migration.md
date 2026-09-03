@@ -27,6 +27,11 @@ Exporte un archivo de copia de seguridad `.bin` desde RisuAI existente y luego i
 1. **En RisuAI existente**: Configuración > Copia de seguridad > "Guardar copia local" para exportar un archivo `.bin`.
 2. **En PocketRisu**: Configuración > Migración de datos > "Importar copia local de Risu original" para importar el archivo `.bin`.
 
+> ⚠️ **Si usa RisuAI web con una cuenta iniciada** (sus datos se sincronizan con el servidor de RisuAI), el archivo creado con "Guardar copia local" tiene la base de datos cifrada y PocketRisu no puede leerla. La importación se rechaza con una explicación. Exporte de una de estas formas:
+> - **Cerrar sesión y luego hacer la copia** (recomendado): Configuración > Cuenta > Cerrar sesión mueve sus datos al navegador (dispositivo). Después, "Guardar copia local" genera una copia normal, con recursos incluidos.
+> - **Copia parcial**: disponible con la sesión iniciada y sin cifrar, pero solo incluye las imágenes de perfil de los personajes.
+
+
 
 ---
 

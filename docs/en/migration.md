@@ -25,6 +25,11 @@ Export a `.bin` backup file from existing RisuAI, then import it into PocketRisu
 1. **In existing RisuAI**: Settings > Backup > "Save Local Backup" to export a `.bin` file.
 2. **In PocketRisu**: Settings > Data Migration > "Import Original Risu Local Backup" to import the `.bin` file.
 
+> ⚠️ **If you use web RisuAI logged in to an account** (your data is synced to the RisuAI server), a file made with "Save Local Backup" has an encrypted database that PocketRisu cannot read. The import is rejected with an explanation. Export it one of these ways instead:
+> - **Log out, then back up** (recommended): Settings > Account > Logout moves your data into the browser (device). "Save Local Backup" then produces a normal backup, assets included.
+> - **Partial Backup**: available while logged in and not encrypted, but it only includes character profile images.
+
+
 
 ---
 
