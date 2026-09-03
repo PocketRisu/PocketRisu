@@ -77,6 +77,17 @@ export class StorageRequestError extends Error {
     }
 }
 
+// Thrown by importBackup when the server rejects a backup. `code` is the
+// server's machine-readable reason (e.g. BACKUP_ENCRYPTED) so the UI can show
+// a localized explanation instead of the raw message.
+export class BackupImportError extends Error {
+    constructor(message: string, public readonly code: string | null = null) {
+        super(message)
+        this.name = 'BackupImportError'
+        Object.setPrototypeOf(this, BackupImportError.prototype)
+    }
+}
+
 // Warning the server attaches to /api/patch responses when the most recent
 // debounced persist failed (Stage 1 visibility — see issues.md).
 export interface PersistWarning {
@@ -866,6 +877,7 @@ export class NodeStorage{
             let leftover = ''
             let result: {ok: boolean, assetsRestored: number, coldStorageFailed?: number} | null = null
             let serverErrorMsg: string | null = null
+            let serverErrorCode: string | null = null
 
             const drainNdjson = () => {
                 const text = xhr.responseText
@@ -886,6 +898,7 @@ export class NodeStorage{
                         result = msg
                     } else if (msg.type === 'error') {
                         serverErrorMsg = typeof msg.message === 'string' ? msg.message : 'backup import failed'
+                        serverErrorCode = typeof msg.code === 'string' ? msg.code : null
                     }
                     // Ignore 'heartbeat' and unknown event types.
                 }
@@ -904,7 +917,7 @@ export class NodeStorage{
                     return
                 }
                 drainNdjson()
-                if (serverErrorMsg) reject(new Error(serverErrorMsg))
+                if (serverErrorMsg) reject(new BackupImportError(serverErrorMsg, serverErrorCode))
                 else if (result) resolve(result)
                 else reject(new Error('backup import: no result received'))
             }

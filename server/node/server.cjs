@@ -2532,6 +2532,41 @@ function parseBackupChunk(buffer, onEntry) {
     return buffer.subarray(offset);
 }
 
+// ─── Backup import guards ───────────────────────────────────────────────────
+
+function backupImportError(message, code) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
+
+// Upstream RisuAI (web build, account sync) has encrypted database.risudat in
+// its local backups since v2026.6.102 (kwaroran/RisuAI d0548267). The key is
+// fetched from sv.risuai.xyz per backup and is not obtainable from here.
+const BACKUP_ENCRYPTED_MESSAGE =
+    'This backup was exported from RisuAI while logged in to a web account (sync), so its database is encrypted and cannot be imported. ' +
+    'In RisuAI, log out of the account (your data is moved to the device) or use Partial Backup, then export again. Your existing database was not replaced.';
+
+// decodeRisuSave has lenient fallbacks that can turn random bytes into a
+// msgpack primitive instead of throwing, so the result must also be an object.
+async function assertBackupDatabaseDecodable(raw) {
+    let decoded;
+    try {
+        decoded = await decodeRisuSave(raw);
+    } catch (error) {
+        throw backupImportError(
+            `Backup database could not be decoded (${error?.message || error}). The file may be corrupted or encrypted. Your existing database was not replaced.`,
+            'BACKUP_DATABASE_UNREADABLE'
+        );
+    }
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+        throw backupImportError(
+            'Backup database is not a RisuAI database. The file may be corrupted or encrypted. Your existing database was not replaced.',
+            'BACKUP_DATABASE_UNREADABLE'
+        );
+    }
+}
+
 // ─── Shared backup import logic ─────────────────────────────────────────────
 // Accepts any async iterable of Buffer chunks (HTTP request body, file stream, etc.)
 async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0, onProgress = null } = {}) {
@@ -2542,7 +2577,14 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     let pendingChunks = [];
     let pendingTotal = 0;
     let nextEntryThreshold = 8;
-    let hasDatabase = false;
+    // database.risudat is held back and written only after the whole stream
+    // was read and the payload proved decodable (see below the loop).
+    let pendingDatabase = null;
+    // Set when the upstream encryption marker is seen. The upload is then
+    // only drained: replying while the client is still sending makes the
+    // browser (and Node's fetch) report a connection reset instead of
+    // delivering the error event, so the rejection waits for the stream end.
+    let encryptedMarker = false;
     let assetsRestored = 0;
     let bytesReceived = 0;
     let batchCount = 0;
@@ -2588,7 +2630,10 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     }
 
     await flushPendingDb();
-    createBackupAndRotate();
+    // Always snapshot the live database right before it is replaced. The
+    // default cooldown could skip this when an autosave snapshot landed
+    // within the last few minutes, leaving no pre-import copy to restore.
+    createBackupAndRotate({ force: true });
 
     sqliteDb.pragma('synchronous = OFF');
 
@@ -2635,6 +2680,7 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
             pendingTotal = 0;
 
             const remaining = parseBackupChunk(buffer, (name, data) => {
+                if (encryptedMarker) return;
                 if (seenEntryNames.has(name)) {
                     throw new Error(`Duplicate backup entry: ${name}`);
                 }
@@ -2700,17 +2746,32 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
                     }
                 } else if (name.startsWith('inlay_thumb/')) {
                     // Skip deprecated thumbnail entries from legacy backups
+                } else if (name === 'encryption.risudat') {
+                    // Upstream RisuAI (web build, account sync) writes this
+                    // marker when database.risudat is AES-GCM encrypted with
+                    // a key only sv.risuai.xyz hands out. We cannot read it,
+                    // and storing the ciphertext bricked the instance on the
+                    // next boot, so nothing after this marker is stored and
+                    // the import is rejected once the upload has been read.
+                    let meta = null;
+                    try { meta = JSON.parse(data.toString('utf-8')); } catch (_) {}
+                    if (meta?.type === 'account') {
+                        encryptedMarker = true;
+                    }
+                    // Unknown marker shape: upstream ignores it and loads the
+                    // database as-is, so do the same — the decode check
+                    // below the loop still guards against garbage.
                 } else {
                     const storageKey = resolveBackupStorageKey(name);
-                    const storageValue = storageKey.startsWith('coldstorage/')
-                        ? encodeColdStorageCanonicalBuffer(
-                            parseColdStorageJsonBuffer(data, name, { allowPlainJson: true }).coldData
-                        )
-                        : data;
-                    kvSet(storageKey, storageValue);
                     if (storageKey === 'database/database.bin') {
-                        hasDatabase = true;
+                        pendingDatabase = data;
                     } else {
+                        const storageValue = storageKey.startsWith('coldstorage/')
+                            ? encodeColdStorageCanonicalBuffer(
+                                parseColdStorageJsonBuffer(data, name, { allowPlainJson: true }).coldData
+                            )
+                            : data;
+                        kvSet(storageKey, storageValue);
                         assetsRestored += 1;
                     }
                 }
@@ -2743,12 +2804,22 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
             }
         }
 
+        if (encryptedMarker) {
+            throw backupImportError(BACKUP_ENCRYPTED_MESSAGE, 'BACKUP_ENCRYPTED');
+        }
         if (pendingTotal > 0) {
             throw new Error('Backup stream ended with incomplete entry');
         }
-        if (!hasDatabase) {
+        if (!pendingDatabase) {
             throw new Error('Backup does not contain database.risudat');
         }
+        // Prove the database decodes before it replaces the live blob. Up to
+        // v1.11.2 the bytes were committed first and decoded only afterwards,
+        // so an unreadable payload (encrypted upstream backup, corrupt file)
+        // left /api/read failing with 500 on every boot — infinite loading
+        // with no way back from the UI.
+        await assertBackupDatabaseDecodable(pendingDatabase);
+        kvSet('database/database.bin', pendingDatabase);
         for (const [id, info] of legacyInlayInfoMap.entries()) {
             if (importedInlayIds.has(id) && !importedSidecarIds.has(id)) {
                 writeStagingSidecarSync(id, info);
@@ -5016,7 +5087,7 @@ app.post('/api/backup/import', async (req, res, next) => {
     } catch (error) {
         if (wantsNdjson && res.headersSent) {
             try {
-                res.write(JSON.stringify({ type: 'error', message: error?.message || 'backup import failed' }) + '\n');
+                res.write(JSON.stringify({ type: 'error', message: error?.message || 'backup import failed', code: error?.code }) + '\n');
                 res.end();
             } catch (_) {}
         } else {

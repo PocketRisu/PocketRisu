@@ -330,10 +330,23 @@ export function LoadLocalBackup(){
             const file = input.files[0];
             input.remove();
             alertWait(`Loading local Backup... (Uploading ${file.name})`);
-            const result = await forageStorage.importBackup(file, (loaded, total) => {
-                const progress = total > 0 ? ((loaded / total) * 100).toFixed(2) : '0.00'
-                alertWait(`Loading local Backup... (${progress}%)`)
-            })
+            let result: Awaited<ReturnType<typeof forageStorage.importBackup>>
+            try {
+                result = await forageStorage.importBackup(file, (loaded, total) => {
+                    const progress = total > 0 ? ((loaded / total) * 100).toFixed(2) : '0.00'
+                    alertWait(`Loading local Backup... (${progress}%)`)
+                })
+            } catch (error) {
+                // The server rejected the file before replacing the database
+                // (encrypted upstream account backup, corrupt payload, ...).
+                // Explain why instead of surfacing it as an uncaught error.
+                console.error(error)
+                const code = (error as { code?: unknown })?.code
+                alertError(code === 'BACKUP_ENCRYPTED'
+                    ? language.errors.backupEncryptedAccount
+                    : String((error as Error)?.message ?? error))
+                return
+            }
             if (result.coldStorageFailed && result.coldStorageFailed > 0) {
                 alertError(`Warning: ${result.coldStorageFailed} character(s) could not be restored from cold storage. The imported save may be incomplete. The app will now reload.`)
                 await waitAlert()

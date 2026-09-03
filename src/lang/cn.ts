@@ -31,6 +31,7 @@ export const languageChinese = {
         "requestLogRemoved": "该请求记录已被删除。",
         "requestLogRemovedDesc": "当客户端刷新或加载时，该请求记录会被删除。",
         "vertexAuthError": "Vertex AI 身份验证详情缺失。",
+        "backupEncryptedAccount": "此备份是在网页版 RisuAI 登录账号（同步）的状态下导出的，数据库已被加密，PocketRisu 无法读取。请在 RisuAI 中退出账号（数据会转移到设备），或使用部分备份后重新导出再导入。现有数据未被更改。",
         "coldStorageWriteFailed": "冷存储写入失败。您的聊天数据已被保留。",
         "coldStorageVerifyFailed": "冷存储验证失败。您的聊天数据已被保留。"
     },

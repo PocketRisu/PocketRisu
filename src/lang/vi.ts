@@ -31,6 +31,7 @@ export const languageVietnamese = {
         "requestLogRemoved": "This request log is removed.",
         "requestLogRemovedDesc": "This request log removes when client is refreshed or reloaded.",
         "vertexAuthError": "Thiếu thông tin xác thực Vertex AI.",
+        "backupEncryptedAccount": "Bản sao lưu này được xuất từ RisuAI khi đang đăng nhập tài khoản web (đồng bộ), nên cơ sở dữ liệu đã được mã hóa và PocketRisu không thể đọc. Trong RisuAI, hãy đăng xuất tài khoản (dữ liệu sẽ được chuyển về thiết bị) hoặc dùng Sao lưu một phần, rồi xuất lại bản sao lưu. Dữ liệu hiện có của bạn không bị thay thế.",
         "coldStorageWriteFailed": "Ghi vào bộ nhớ lạnh thất bại. Dữ liệu trò chuyện của bạn đã được bảo toàn.",
         "coldStorageVerifyFailed": "Xác minh bộ nhớ lạnh thất bại. Dữ liệu trò chuyện của bạn đã được bảo toàn."
     },
