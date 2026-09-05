@@ -4,6 +4,7 @@ import { getDatabase } from "../../storage/database.svelte";
 import { getModelInfo, LLMFlags, LLMFormat } from "src/ts/model/modellist";
 import { asBuffer } from "../../util";
 import { NodeStorage } from "../../storage/nodeStorage";
+import { forageStorage } from "../../globalApi.svelte";
 import {
     type InlayAssetMeta,
     buildInlayMeta,
@@ -557,6 +558,22 @@ export function getCharacterChatIndex(): CharacterChatIndexItem[] {
             name: getSafeCharacterName(char?.name, chaId, i),
         })
     }
+    // Deactivated characters keep their chat ids in the stub, so their inlay
+    // images are not mistaken for "orphan character/chat" entries.
+    const archived = Array.isArray(db?.nodeOnlyArchivedCharacters) ? db.nodeOnlyArchivedCharacters : []
+    for (let i = 0; i < archived.length; i++) {
+        const stub = archived[i]
+        const chaId = typeof stub?.chaId === 'string' ? stub.chaId : ''
+        if (!chaId || result.some((c) => c.chaId === chaId)) continue
+        const chatIds = Array.isArray(stub?.chatIds) ? stub.chatIds : []
+        result.push({
+            chaId,
+            chats: chatIds
+                .filter((id): id is string => typeof id === 'string' && id.length > 0)
+                .map((id, chatIndex) => ({ id, name: getSafeChatName(undefined, id, chatIndex) })),
+            name: getSafeCharacterName(stub?.name, chaId, characters.length + i),
+        })
+    }
     return result
 }
 
@@ -664,13 +681,40 @@ export type InlayScanResult = {
 const INLAY_REF_REGEX = /\{\{(?:inlay|inlayed|inlayeddata)::(.+?)\}\}/g
 
 /**
- * Scan all chat messages in the database and count how many times each inlay ID is referenced.
- * This is a synchronous read from the in-memory DB state — no async I/O needed.
+ * Count inlay references in every chat message.
+ *
+ * The browser only holds bodies for chats it has opened (lazy loading leaves
+ * the rest as placeholders with `message: []`), and deactivated characters'
+ * chats are not in the browser at all — so the authoritative scan runs on the
+ * server (fullChatStore + archive index). The local scan is merged in for
+ * chats edited in this tab that the server may not have received yet.
+ * Rejects when the server scan fails: callers must then treat the result as
+ * unknown, never as "nothing is referenced".
  */
-export function scanInlayReferences(): InlayScanResult {
+export async function scanInlayReferences(): Promise<InlayScanResult> {
+    const storage = forageStorage.realStorage as NodeStorage
+    const server = await storage.fetchInlayReferences()
+    const local = scanLocalInlayReferences()
+    // Null-prototype map so an id like "constructor" still counts as referenced.
+    const refCounts: Record<string, number> = Object.assign(Object.create(null), server.refCounts)
+    for (const [id, count] of Object.entries(local.refCounts)) {
+        refCounts[id] = Math.max(refCounts[id] ?? 0, count)
+    }
+    return {
+        scannedAt: Date.now(),
+        totalMessages: Math.max(server.totalMessages, local.totalMessages),
+        refCounts,
+    }
+}
+
+/**
+ * Scan the chat messages currently loaded in the browser. Placeholder chats
+ * contribute nothing, so this alone under-counts — see scanInlayReferences.
+ */
+export function scanLocalInlayReferences(): InlayScanResult {
     const db = getDatabase()
     const characters = Array.isArray(db?.characters) ? db.characters : []
-    const refCounts: Record<string, number> = {}
+    const refCounts: Record<string, number> = Object.create(null)
     let totalMessages = 0
 
     for (const char of characters) {

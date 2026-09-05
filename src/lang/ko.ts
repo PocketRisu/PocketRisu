@@ -537,6 +537,8 @@ export const languageKorean = {
     inlayFilterOrphanMessage: "메시지에 없음",
     inlayScanMessages: "메시지 스캔",
     inlayScanning: "스캔 중...",
+    inlayScanFailed: "메시지 스캔에 실패해 미참조 목록을 표시하지 않습니다",
+    inlayDeleteSkippedReferenced: "다시 스캔한 결과 참조가 확인된 {count}개는 삭제에서 제외했습니다",
     inlayScanDone: "{count}개 메시지 스캔 완료",
   },
   confirm: "확인",
@@ -608,6 +610,17 @@ export const languageKorean = {
   chatLoadInitialPages: "채팅 초기 로딩 개수",
   chatLoadAdditionalPages: "채팅 추가 로딩 개수",
   removeCharacter: "캐릭터 삭제",
+  deactivateCharacter: "캐릭터 비활성화",
+  deactivateCharacterConfirm: (name: string) =>
+    `"${name}" 캐릭터와 채팅을 비활성화합니다.\n\n목록에는 남지만 열 수 없고, 플러그인·스크립트·검색·데이터셋 내보내기에서는 삭제된 것처럼 보입니다. 데이터는 서버에 보관되며 언제든 다시 활성화할 수 있습니다.\n\n비활성화할까요?`,
+  deactivateCharacterDone: "캐릭터를 비활성화했습니다.",
+  deactivateCharacterUnsaved: "아직 서버에 저장되지 않은 채팅이 있어 비활성화할 수 없습니다. 잠시 후 다시 시도하세요.",
+  deactivateCharacterFailed: "비활성화에 실패했습니다: ",
+  activateCharacterConfirm: (name: string) => `"${name}" 캐릭터가 비활성화되어 있습니다. 활성화할까요?`,
+  activateCharacterMissing: "보관된 캐릭터 데이터를 찾을 수 없어 활성화할 수 없습니다. 서버 로그와 스토리지 대시보드를 확인하세요.",
+  activateCharacterFailed: "활성화에 실패했습니다: ",
+  activateCharacterRemoveStub: "이 캐릭터를 목록에서 제거할까요? (다른 데이터는 삭제되지 않습니다)",
+  deactivatedBadge: "비활성화",
   exportCharacter: "캐릭터 엑스포트",
   characterPackage: "캐릭터 패키지",
   characterPackageExport: "패키지 내보내기",
@@ -2255,6 +2268,9 @@ export const languageKorean = {
     "캐릭터별 원격 동기화 캐시 (remotes/{chaId}.local.bin).",
   storageRowKvColdStorage: "콜드 스토리지",
   storageRowKvColdStorageDesc: "레거시·휴면 저장 영역. 보통 비어 있습니다.",
+  storageRowKvArchive: "비활성화 캐릭터",
+  storageRowKvArchiveDesc:
+    "비활성화한 캐릭터의 본문(채팅·에셋 목록 포함)과 색인. 활성화해도 자동으로 지워지지 않으며, 백업 내보내기에는 항상 완전한 캐릭터로 포함됩니다.",
   storageRowKvUncategorized: "기타 데이터",
   storageRowKvUncategorizedDesc:
     "위 분류에 들어가지 않는 키. 마이그레이션 잔여물이나 임시 항목 등이 여기 잡힙니다.",
@@ -2361,6 +2377,17 @@ export const languageKorean = {
   storageCharactersChat: "채팅",
   storageCharactersTrashed: "휴지통",
   storageCharactersGoTo: "이 캐릭터로 이동",
+  storageCharactersDeactivated: "비활성화",
+  storageArchiveOrphanHeader: (count: number, size: number) =>
+    `참조되지 않는 비활성화 데이터: ${count}개, ${(size / 1024 / 1024).toFixed(1)} MB`,
+  storageArchiveOrphanDesc:
+    "다시 활성화했거나 삭제·백업 복원으로 목록에서 빠진 캐릭터의 보관 데이터입니다. 스냅샷 복원에 대비해 자동으로 지우지 않습니다.",
+  storageArchiveOrphanPurge: "보관 데이터 정리",
+  storageArchiveOrphanConfirm: (count: number, size: number) =>
+    `참조되지 않는 비활성화 데이터 ${count}개(${(size / 1024 / 1024).toFixed(1)} MB)를 삭제할까요? 이 데이터를 가리키는 옛 스냅샷은 복원 후 해당 캐릭터를 열 수 없게 됩니다. 되돌릴 수 없습니다.`,
+  storageArchiveOrphanDone: (count: number, size: number) =>
+    `비활성화 데이터 ${count}개(${(size / 1024 / 1024).toFixed(1)} MB)를 정리했습니다.`,
+  storageCharactersDeactivatedMissing: "비활성화 · 데이터 없음",
   storageCharactersOrphan: (count: number, size: number) =>
     `고아 미디어 (어떤 캐릭터도 참조하지 않음): ${count}개, ${(size / 1024 / 1024).toFixed(1)} MB`,
   storageCharactersEmpty: "캐릭터 없음",
@@ -2527,6 +2554,7 @@ export const languageKorean = {
   recentChatsTitle: "최근 대화",
   noRecentChatsDesc: "아직 대화한 봇이 없어요",
   hideRecentChats: "대화 목록 숨기기",
+  hideDeactivatedCharacters: "비활성화된 캐릭터 숨기기",
 
   showRequestStatus: "요청 상태 표시",
   requestStatus: {

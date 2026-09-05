@@ -1852,6 +1852,15 @@ export function checkCharOrder() {
             }
         }
     }
+    // Deactivated characters are not in db.characters but keep their place
+    // (and folder) in the order list so the sidebar can render them dimmed.
+    for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
+        if (!stub?.chaId) continue
+        charIdList.push(stub.chaId)
+        if (!ordered.includes(stub.chaId)) {
+            db.characterOrder.push(stub.chaId)
+        }
+    }
 
 
     for (let i = 0; i < db.characterOrder.length; i++) {

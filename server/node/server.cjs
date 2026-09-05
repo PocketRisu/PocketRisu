@@ -882,6 +882,21 @@ async function persistDbCacheWithChats(filePath, decodedKey) {
             delete dbCache[filePath];
             throw err;
         }
+        // A character that came back from the archive without /activate in
+        // this process (e.g. server restarted in between) still has bodiless
+        // `_stub` chats after reassembly. Writing them would strand the
+        // character; its payload is intact in kv, so refuse and let the
+        // client re-activate.
+        const unmerged = findUnmergedArchivedChats(fullDb);
+        if (unmerged.length > 0) {
+            const err = new Error(
+                `persist aborted: ${unmerged.length} deactivated character(s) returned without their chats — `
+                + `re-activate them. sample=[${unmerged.slice(0, 3).join(', ')}]`
+            );
+            recordPersistFailure(err, 'persistDbCacheWithChats:archive-unmerged');
+            delete dbCache[filePath];
+            throw err;
+        }
     }
 
     const data = Buffer.from(encodeRisuSaveLegacy(fullDb));
@@ -2644,6 +2659,9 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     kvDelPrefix('inlay_meta/');
     kvDelPrefix('inlay_info/');
     kvDelPrefix('coldstorage/');
+    // archive/ and archive-meta/ rows are deliberately NOT wiped: the imported
+    // database is inlined and references none of them, and the pre-import
+    // snapshot may still. They become orphan rows for the dashboard purge.
     // NOTE: plugin-storage/ is NOT cleared here — see the final COMMIT below.
     // Composer drafts are session/device-local and not carried in the backup;
     // wipe stale ones so an old snapshot's chats don't resurrect later drafts.
@@ -4060,6 +4078,16 @@ app.post('/api/write', async (req, res, next) => {
                     // eslint-disable-next-line no-var
                     var persistedEtag;
                     const incomingDb = await decodeRisuSave(fileContent);
+                    const archiveConflict = findArchiveConflicts(dbCache[DB_HEX_KEY], incomingDb, null);
+                    if (archiveConflict) {
+                        logger.warn(`[Write] Rejected: ${archiveConflict}`);
+                        res.status(409).send({
+                            error: `Write rejected: ${archiveConflict}`,
+                            code: 'ARCHIVE_GUARD_REJECTED',
+                            currentEtag: dbEtag ?? undefined,
+                        });
+                        return;
+                    }
                     await ensureChatStore();
                     const fullDb = hydrateDatabaseForDisk(incomingDb);
 
@@ -4438,6 +4466,28 @@ app.post('/api/patch', async (req, res, next) => {
                     return;
                 }
             }
+            // Deactivated-character guard: a chaId lives either in `characters`
+            // or in `nodeOnlyArchivedCharacters`, never both; and a character
+            // that returns from the archive must have had its chats registered
+            // by /activate in this process, otherwise persist would write
+            // bodiless `_stub` chats. 409 so the client re-activates/rebases.
+            if (decodedKey === 'database/database.bin') {
+                const archiveConflict = findArchiveConflicts(dbCache[filePath], next, patch);
+                if (archiveConflict) {
+                    logger.warn(`[Patch] Rejected: ${archiveConflict}`);
+                    let currentEtag;
+                    try {
+                        currentEtag = computeBufferEtag(Buffer.from(encodeRisuSaveLegacy(dbCache[filePath])));
+                        dbEtag = currentEtag;
+                    } catch {}
+                    res.status(409).send({
+                        error: `Patch rejected: ${archiveConflict}`,
+                        code: 'ARCHIVE_GUARD_REJECTED',
+                        currentEtag,
+                    });
+                    return;
+                }
+            }
             if (decodedKey === 'database/database.bin') {
                 databasePatchHashCache.update(dbCache[filePath], next, patch);
             }
@@ -4744,6 +4794,7 @@ function stripToSettingsOnly(dbObj) {
         ...dbObj,
         characters: [],
         characterOrder: [],
+        nodeOnlyArchivedCharacters: [],
     };
 }
 
@@ -4817,19 +4868,28 @@ async function buildSettingsOnlyPlan({ includeModuleAssets = true } = {}) {
 async function buildFullExportDbValue() {
     const raw = kvGet('database/database.bin');
     if (!raw) return null;
-    if (pluginStorage.list().length === 0) return raw;
+    const hasPluginRows = pluginStorage.list().length > 0;
+    const hasArchive = kvList(ARCHIVE_META_PREFIX).length > 0 || kvList(ARCHIVE_PREFIX).length > 0;
+    if (!hasPluginRows && !hasArchive) return raw;
     const dbObj = await decodeRisuSave(raw);
-    const fromDb = dbObj.pluginCustomStorage;
-    const merged = pluginStorage.readAll();
-    if (fromDb && typeof fromDb === 'object') {
-        for (const key of Object.keys(fromDb)) {
-            Object.defineProperty(merged, key, {
-                value: Object.getOwnPropertyDescriptor(fromDb, key).value,
-                enumerable: true, writable: true, configurable: true,
-            });
+    if (hasPluginRows) {
+        const fromDb = dbObj.pluginCustomStorage;
+        const merged = pluginStorage.readAll();
+        if (fromDb && typeof fromDb === 'object') {
+            for (const key of Object.keys(fromDb)) {
+                Object.defineProperty(merged, key, {
+                    value: Object.getOwnPropertyDescriptor(fromDb, key).value,
+                    enumerable: true, writable: true, configurable: true,
+                });
+            }
         }
+        dbObj.pluginCustomStorage = merged;
     }
-    dbObj.pluginCustomStorage = merged;
+    // Deactivated characters travel inline: a .bin must be a complete legacy
+    // database for upstream RisuAI and older PocketRisu builds, which know
+    // nothing about the archive. Throws when a payload is missing rather than
+    // shipping a backup that would import as a lost character.
+    await inlineArchivedCharacters(dbObj);
     return Buffer.from(encodeRisuSaveLegacy(dbObj));
 }
 
@@ -5718,6 +5778,9 @@ function clearExistingData() {
     // (importBackupFromSource) already clears these; the save-folder path did not,
     // leaving orphans that no dashboard or Optimize pass ever reclaims.
     kvDelPrefix('coldstorage/');
+    // archive/ and archive-meta/ rows are deliberately NOT wiped: the imported
+    // database is inlined and references none of them, and the pre-import
+    // snapshot may still. They become orphan rows for the dashboard purge.
     // Plugin storage is a full replace too: the incoming save folder either
     // carries its own plugin-storage/ rows (INSERT OR REPLACE lands them
     // after this delete, inside the same transaction) or has the data inside
@@ -5950,6 +6013,511 @@ app.post('/api/migrate/save-folder/cleanup/execute', async (req, res, next) => {
     }
 });
 
+// ── Character archive (user-facing: deactivate / activate) ─────────────────
+// A deactivated character leaves `characters` for the small stub list
+// `nodeOnlyArchivedCharacters`. Its full body — chats inline, asset arrays
+// inline (manifest hydrated) — lives in kv `archive/<chaId>/<archivedAt>`
+// (chunk-routed, see db.cjs) with a sidecar index
+// `archive-meta/<chaId>/<archivedAt>` holding the asset references for the
+// orphan sweep and sizes for the dashboard.
+//
+// Invariants:
+// - Pointers never leave the server: every .bin export re-inlines archived
+//   characters (inlineArchivedCharacters), so upstream RisuAI and older
+//   PocketRisu builds only ever see a complete legacy database.
+// - Rows are immutable and never deleted automatically. Each deactivation
+//   writes a new `<archivedAt>` row and the stub names its own row, so a
+//   restored database.bin snapshot resolves to the exact body it was taken
+//   with — never to a newer deactivation, never to nothing. Rows no longer
+//   referenced by the live database are "orphan" and reclaimed only by the
+//   dashboard's explicit purge (same policy as assets/*). Backup import does
+//   not touch them either: the imported database is inlined and references
+//   no rows, and the pre-import snapshot may still.
+// - The endpoints below only write/read rows. Moving the character between
+//   `characters` and the stub list is done by the client through the normal
+//   /api/patch path, so dbCache, hashes and etag stay in one flow.
+const ARCHIVE_PREFIX = 'archive/';
+const ARCHIVE_META_PREFIX = 'archive-meta/';
+const ARCHIVE_FORMAT_VERSION = 1;
+
+function isArchivableChaId(chaId) {
+    return typeof chaId === 'string' && chaId.length > 0 && chaId.length <= 256
+        && !chaId.includes('/') && chaId !== '§temp' && chaId !== '§playground';
+}
+function isValidArchivedAt(v) {
+    return Number.isInteger(v) && v > 0;
+}
+function archiveRowId(chaId, archivedAt) { return `${chaId}/${archivedAt}`; }
+function archiveKey(chaId, archivedAt) { return ARCHIVE_PREFIX + archiveRowId(chaId, archivedAt); }
+function archiveMetaKey(chaId, archivedAt) { return ARCHIVE_META_PREFIX + archiveRowId(chaId, archivedAt); }
+
+// `<prefix><chaId>/<archivedAt>` → { chaId, archivedAt } or null.
+function parseArchiveRowKey(key, prefix) {
+    if (typeof key !== 'string' || !key.startsWith(prefix)) return null;
+    const rowId = key.slice(prefix.length);
+    const slash = rowId.lastIndexOf('/');
+    if (slash <= 0) return null;
+    const chaId = rowId.slice(0, slash);
+    const archivedAt = Number(rowId.slice(slash + 1));
+    if (!isArchivableChaId(chaId) || !isValidArchivedAt(archivedAt)) return null;
+    return { chaId, archivedAt, rowId };
+}
+
+function archivedStubsOf(dbObj) {
+    const list = dbObj?.nodeOnlyArchivedCharacters;
+    return Array.isArray(list)
+        ? list.filter((s) => s && typeof s.chaId === 'string' && isValidArchivedAt(s.archivedAt))
+        : [];
+}
+
+function hasArchivePayload(chaId, archivedAt) {
+    return (kvSize(archiveKey(chaId, archivedAt)) || 0) > 0;
+}
+function listArchivePayloadKeysFor(chaId) {
+    return kvList(ARCHIVE_PREFIX + chaId + '/');
+}
+function hasAnyArchivePayload(chaId) {
+    return listArchivePayloadKeysFor(chaId).length > 0;
+}
+
+// Parsed archive-meta row, or null when absent. Throws on a malformed row.
+function readArchiveMeta(chaId, archivedAt) {
+    const raw = kvGet(archiveMetaKey(chaId, archivedAt));
+    if (!raw) return null;
+    const meta = JSON.parse(Buffer.from(raw).toString('utf-8'));
+    if (!meta || typeof meta !== 'object' || meta.chaId !== chaId || meta.archivedAt !== archivedAt || !Array.isArray(meta.assetRefs)) {
+        throw new Error(`archive index malformed: ${archiveRowId(chaId, archivedAt)}`);
+    }
+    return meta;
+}
+
+function listArchiveMetas() {
+    const out = [];
+    for (const key of kvList(ARCHIVE_META_PREFIX)) {
+        const parsed = parseArchiveRowKey(key, ARCHIVE_META_PREFIX);
+        if (!parsed) throw new Error(`archive index key malformed: ${key}`);
+        const meta = readArchiveMeta(parsed.chaId, parsed.archivedAt);
+        if (meta) out.push(meta);
+    }
+    return out;
+}
+
+// Decoded payload row, or null when absent. Throws when the row exists but is
+// not a payload for this character/version.
+async function decodeArchivePayload(chaId, archivedAt) {
+    const raw = kvGet(archiveKey(chaId, archivedAt));
+    if (!raw) return null;
+    const payload = normalizeJSON(await decodeRisuSave(raw));
+    const character = payload?.character;
+    if (!character || typeof character !== 'object' || character.chaId !== chaId
+        || payload.archivedAt !== archivedAt || !Array.isArray(character.chats)) {
+        throw new Error(`archive payload malformed: ${archiveRowId(chaId, archivedAt)}`);
+    }
+    return { payload, bytes: raw.length };
+}
+
+function buildArchivedCharacterStub(character, { archivedAt, bytes }) {
+    const chats = Array.isArray(character.chats) ? character.chats : [];
+    const stub = {
+        chaId: character.chaId,
+        name: typeof character.name === 'string' ? character.name : '',
+        image: typeof character.image === 'string' ? character.image : '',
+        tags: Array.isArray(character.tags) ? character.tags.filter((t) => typeof t === 'string') : [],
+        lastInteraction: typeof character.lastInteraction === 'number' ? character.lastInteraction : 0,
+        archivedAt,
+        bytes,
+        chatCount: chats.length,
+        chatIds: chats.map((c) => c?.id).filter((id) => typeof id === 'string'),
+    };
+    if (typeof character.nickname === 'string') stub.nickname = character.nickname;
+    if (typeof character.creation_date === 'number') stub.creation_date = character.creation_date;
+    return stub;
+}
+
+function referencedArchiveRowIds(dbObj) {
+    return new Set(archivedStubsOf(dbObj).map((s) => archiveRowId(s.chaId, s.archivedAt)));
+}
+
+// Asset references of every archive row, added to `uncleanable`. Mirrors
+// addLiveManifestRefs: an unreadable index row throws, and a stub the
+// database still points at whose payload or index is gone throws too — a
+// partial view must never turn into a purge. Orphan rows (no stub) still
+// count: they are kept until explicitly purged, so their assets are kept.
+function addArchivedCharacterRefs(uncleanable, dbObj) {
+    const referenced = referencedArchiveRowIds(dbObj);
+    const indexed = new Set();
+    for (const meta of listArchiveMetas()) {
+        const rowId = archiveRowId(meta.chaId, meta.archivedAt);
+        indexed.add(rowId);
+        if (referenced.has(rowId) && !hasArchivePayload(meta.chaId, meta.archivedAt)) {
+            throw new Error(`deactivated character payload missing: ${meta.name || rowId}`);
+        }
+        for (const ref of meta.assetRefs) {
+            const bn = statsBasename(ref);
+            if (bn) uncleanable.add(bn);
+        }
+    }
+    for (const rowId of referenced) {
+        if (!indexed.has(rowId)) throw new Error(`deactivated character index missing: ${rowId}`);
+    }
+}
+
+// Archive rows the live database no longer points at (re-activated, deleted,
+// or replaced by a backup import). Sizes are logical (chunk-aware).
+function listOrphanArchiveRows(dbObj) {
+    const referenced = referencedArchiveRowIds(dbObj);
+    const payloads = [];
+    const metas = [];
+    let bytes = 0;
+    for (const key of kvList(ARCHIVE_PREFIX)) {
+        const parsed = parseArchiveRowKey(key, ARCHIVE_PREFIX);
+        if (parsed && referenced.has(parsed.rowId)) continue;
+        const size = kvSize(key) || 0;
+        payloads.push({ key, size });
+        bytes += size;
+    }
+    for (const key of kvList(ARCHIVE_META_PREFIX)) {
+        const parsed = parseArchiveRowKey(key, ARCHIVE_META_PREFIX);
+        if (parsed && referenced.has(parsed.rowId)) continue;
+        metas.push(key);
+    }
+    return { payloads, metas, bytes };
+}
+
+function purgeOrphanArchiveRows(dbObj) {
+    const orphan = listOrphanArchiveRows(dbObj);
+    sqliteDb.transaction(() => {
+        // kvDel routes through the chunk store so chunked payloads drop their
+        // manifests too; the index rows are plain kv.
+        for (const it of orphan.payloads) kvDel(it.key);
+        for (const key of orphan.metas) kvDel(key);
+    })();
+    return { deleted: orphan.payloads.length, metas: orphan.metas.length, bytes: orphan.bytes };
+}
+
+// Full legacy-shaped character for one dbCache entry: chats merged from
+// fullChatStore, asset arrays hydrated from the manifest store. Refuses when
+// any chat body is unavailable — archiving a stub would lose the chat.
+async function hydrateCharacterForArchive(character) {
+    await ensureChatStore();
+    const full = hydrateDatabaseForDisk({ characters: [character] }).characters[0];
+    const bodiless = (full.chats || []).filter((c) => c && (c._stub === true || !Array.isArray(c.message)));
+    if (bodiless.length > 0) {
+        const err = new Error(`${bodiless.length} chat(s) of "${character.name}" have no body on the server; save them first`);
+        err.code = 'ARCHIVE_CHATS_UNAVAILABLE';
+        throw err;
+    }
+    return normalizeJSON(full);
+}
+
+// Re-inline deactivated characters into a decoded database (export path).
+// Mutates and returns dbObj. Throws when any referenced row is missing.
+async function inlineArchivedCharacters(dbObj) {
+    const stubs = archivedStubsOf(dbObj);
+    if (stubs.length > 0) {
+        if (!Array.isArray(dbObj.characters)) dbObj.characters = [];
+        const present = new Set(dbObj.characters.map((c) => c?.chaId).filter(Boolean));
+        const missing = [];
+        for (const stub of stubs) {
+            if (present.has(stub.chaId)) continue;
+            let decoded = null;
+            try { decoded = await decodeArchivePayload(stub.chaId, stub.archivedAt); } catch { decoded = null; }
+            if (!decoded) {
+                missing.push(stub.name || stub.chaId);
+                continue;
+            }
+            dbObj.characters.push(decoded.payload.character);
+            present.add(stub.chaId);
+        }
+        if (missing.length > 0) {
+            const err = new Error(`Deactivated character data missing: ${missing.join(', ')}`);
+            err.code = 'ARCHIVE_PAYLOAD_MISSING';
+            throw err;
+        }
+    }
+    if ('nodeOnlyArchivedCharacters' in dbObj) delete dbObj.nodeOnlyArchivedCharacters;
+    return dbObj;
+}
+
+function patchTouchesCharacterLists(patch) {
+    if (!Array.isArray(patch)) return true;
+    return patch.some((op) => typeof op?.path === 'string'
+        && (op.path === '' || op.path.startsWith('/characters') || op.path.startsWith('/nodeOnlyArchivedCharacters')));
+}
+
+// Returns a human-readable conflict, or null. `prev` may be undefined (cold
+// write). `patch` null means "assume the lists were touched".
+function findArchiveConflicts(prev, next, patch) {
+    if (!next || typeof next !== 'object') return null;
+    if (!patchTouchesCharacterLists(patch)) return null;
+    const archived = new Set(archivedStubsOf(next).map((s) => s.chaId));
+    const nextChars = Array.isArray(next.characters) ? next.characters : [];
+    if (archived.size > 0) {
+        for (const c of nextChars) {
+            if (c?.chaId && archived.has(c.chaId)) return `character ${c.chaId} is both active and deactivated`;
+        }
+    }
+    const prevIds = new Set((Array.isArray(prev?.characters) ? prev.characters : []).map((c) => c?.chaId).filter(Boolean));
+    for (const c of nextChars) {
+        if (!c?.chaId || prevIds.has(c.chaId)) continue;
+        if (!hasAnyArchivePayload(c.chaId)) continue;
+        const hasStubChat = Array.isArray(c.chats) && c.chats.some((ch) => ch && ch._stub === true);
+        if (hasStubChat && !(fullChatStore && fullChatStore.has(c.chaId))) {
+            return `character ${c.chaId} returned from the archive without activation`;
+        }
+    }
+    return null;
+}
+
+// Characters in a reassembled (disk-shaped) database that still carry `_stub`
+// chats AND have an archive row — the activation-without-chats case.
+function findUnmergedArchivedChats(fullDb) {
+    const out = [];
+    for (const c of Array.isArray(fullDb?.characters) ? fullDb.characters : []) {
+        if (!c?.chaId || !Array.isArray(c.chats)) continue;
+        if (!c.chats.some((ch) => ch && ch._stub === true)) continue;
+        if (hasAnyArchivePayload(c.chaId)) out.push(c.chaId);
+    }
+    return out;
+}
+
+function jsonLength(value) {
+    try { return JSON.stringify(value).length; } catch { return 0; }
+}
+
+// `{{inlay::id}}` / `{{inlayed::id}}` / `{{inlayeddata::id}}` references in
+// chat messages. Mirrors INLAY_REF_REGEX in src/ts/process/files/inlays.ts.
+const INLAY_REF_RE = /\{\{(?:inlay|inlayed|inlayeddata)::(.+?)\}\}/g;
+
+function addInlayRefCounts(refCounts, chats) {
+    let messages = 0;
+    for (const chat of Array.isArray(chats) ? chats : []) {
+        if (!Array.isArray(chat?.message)) continue;
+        for (const msg of chat.message) {
+            if (typeof msg?.data !== 'string') continue;
+            messages++;
+            INLAY_REF_RE.lastIndex = 0;
+            let m;
+            while ((m = INLAY_REF_RE.exec(msg.data)) !== null) {
+                refCounts[m[1]] = (refCounts[m[1]] ?? 0) + 1;
+            }
+        }
+    }
+    return messages;
+}
+
+// Which inlay images are still referenced by a chat message. The client
+// cannot answer this itself: lazy-loaded chats are placeholders with no
+// messages in the browser, and deactivated characters' chats live only in
+// their archive rows (their counts come from archive-meta, orphan rows
+// included — kept rows keep their images). Fails closed: an unreadable index
+// makes the whole request fail rather than under-count.
+app.get('/api/inlays/references', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    try {
+        const result = await queueStorageOperation(async () => {
+            await ensureChatStore();
+            // Null-prototype map: an id such as "constructor" must still count.
+            const refCounts = Object.create(null);
+            let totalMessages = 0;
+            let chats = 0;
+            for (const charChats of fullChatStore.values()) {
+                const list = Array.from(charChats.values());
+                chats += list.length;
+                totalMessages += addInlayRefCounts(refCounts, list);
+            }
+            let archived = 0;
+            for (const meta of listArchiveMetas()) {
+                archived++;
+                const refs = meta.inlayRefs;
+                // Fail closed: an index row without inlay counts cannot vouch
+                // for its chats, and skipping it would under-count.
+                if (!refs || typeof refs !== 'object') {
+                    throw new Error(`archive index lacks inlay references: ${archiveRowId(meta.chaId, meta.archivedAt)}`);
+                }
+                for (const [id, count] of Object.entries(refs)) {
+                    if (typeof count === 'number' && count > 0) refCounts[id] = (refCounts[id] ?? 0) + count;
+                }
+            }
+            return { scannedAt: Date.now(), totalMessages, refCounts, sources: { chats, archived } };
+        });
+        res.json(result);
+    } catch (err) {
+        logger.warn(`[Inlay] reference scan failed: ${err?.message || err}`);
+        res.status(500).json({ error: `Inlay reference scan failed: ${err?.message || err}` });
+    }
+});
+
+app.post('/api/characters/:chaId/archive', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    if (!checkActiveSession(req, res)) return;
+    const chaId = req.params.chaId;
+    if (!isArchivableChaId(chaId)) {
+        return res.status(400).json({ error: 'Invalid character id', code: 'ARCHIVE_BAD_ID' });
+    }
+    try {
+        await queueStorageOperation(async () => {
+            await flushPendingDb();
+            if (!(await loadDbCacheIfMissing())) {
+                return res.status(404).json({ error: 'No database', code: 'ARCHIVE_NO_DB' });
+            }
+            const db = dbCache[DB_HEX_KEY];
+            const character = (Array.isArray(db.characters) ? db.characters : []).find((c) => c?.chaId === chaId);
+            if (!character) {
+                return res.status(404).json({ error: 'Character not found', code: 'ARCHIVE_CHARACTER_NOT_FOUND' });
+            }
+            if (archivedStubsOf(db).some((s) => s.chaId === chaId)) {
+                return res.status(409).json({ error: 'Character is already deactivated', code: 'ARCHIVE_ALREADY' });
+            }
+            let full;
+            try {
+                full = await hydrateCharacterForArchive(character);
+            } catch (err) {
+                if (err?.code === 'ARCHIVE_CHATS_UNAVAILABLE') {
+                    return res.status(409).json({ error: err.message, code: err.code });
+                }
+                throw err;
+            }
+            // New row per deactivation; never overwrite an existing version.
+            let archivedAt = Date.now();
+            while (kvSize(archiveKey(chaId, archivedAt)) || kvGet(archiveMetaKey(chaId, archivedAt))) archivedAt++;
+            const payload = { v: ARCHIVE_FORMAT_VERSION, chaId, archivedAt, character: full };
+            const encoded = Buffer.from(encodeRisuSaveLegacy(payload));
+            kvSet(archiveKey(chaId, archivedAt), encoded);
+            // Read back before anything depends on it: the next step (the client
+            // dropping the character from `characters`) is only safe if this
+            // row decodes to exactly what we hydrated.
+            try {
+                const verified = await decodeArchivePayload(chaId, archivedAt);
+                if (!verified || calculateHash(verified.payload.character) !== calculateHash(full)) {
+                    throw new Error('read-back does not match');
+                }
+            } catch (err) {
+                kvDel(archiveKey(chaId, archivedAt));
+                logger.error(`[Archive] verification failed for ${chaId}:`, err?.message || err);
+                return res.status(500).json({ error: `Archive verification failed: ${err?.message || err}`, code: 'ARCHIVE_VERIFY_FAILED' });
+            }
+            const { chats: fullChats, ...card } = full;
+            const meta = {
+                v: ARCHIVE_FORMAT_VERSION,
+                chaId,
+                archivedAt,
+                name: typeof full.name === 'string' ? full.name : '',
+                image: typeof full.image === 'string' ? full.image : '',
+                bytes: encoded.length,
+                chatCount: Array.isArray(fullChats) ? fullChats.length : 0,
+                chatIds: (Array.isArray(fullChats) ? fullChats : []).map((c) => c?.id).filter((id) => typeof id === 'string'),
+                cardBytes: jsonLength(card),
+                chatBytes: jsonLength(fullChats),
+                // Same walker as the live sweep, so the two can never disagree
+                // about which fields hold asset references.
+                assetRefs: Array.from(buildUncleanableSet({ characters: [full] })),
+                // Inlay references of the archived chats, for /api/inlays/references.
+                inlayRefs: (() => { const counts = Object.create(null); addInlayRefCounts(counts, fullChats); return counts; })(),
+            };
+            kvSet(archiveMetaKey(chaId, archivedAt), Buffer.from(JSON.stringify(meta), 'utf-8'));
+            logger.info(`[Archive] deactivated ${chaId}@${archivedAt} (${encoded.length} bytes, ${meta.chatCount} chats, ${meta.assetRefs.length} asset refs)`);
+            res.json({ ok: true, stub: buildArchivedCharacterStub(full, { archivedAt, bytes: encoded.length }) });
+        });
+    } catch (err) { next(err); }
+});
+
+app.post('/api/characters/:chaId/activate', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    if (!checkActiveSession(req, res)) return;
+    const chaId = req.params.chaId;
+    if (!isArchivableChaId(chaId)) {
+        return res.status(400).json({ error: 'Invalid character id', code: 'ARCHIVE_BAD_ID' });
+    }
+    try {
+        await queueStorageOperation(async () => {
+            await flushPendingDb();
+            if (!(await loadDbCacheIfMissing())) {
+                return res.status(404).json({ error: 'No database', code: 'ARCHIVE_NO_DB' });
+            }
+            const db = dbCache[DB_HEX_KEY];
+            if ((Array.isArray(db.characters) ? db.characters : []).some((c) => c?.chaId === chaId)) {
+                return res.status(409).json({ error: 'Character is already active', code: 'ARCHIVE_ALREADY_ACTIVE' });
+            }
+            // Which version: the client's stub (its view of the database) or,
+            // failing that, the stub in our own view.
+            const requested = req.body && typeof req.body === 'object' ? req.body.archivedAt : undefined;
+            const stub = archivedStubsOf(db).find((s) => s.chaId === chaId);
+            const archivedAt = isValidArchivedAt(requested) ? requested : stub?.archivedAt;
+            if (!isValidArchivedAt(archivedAt)) {
+                return res.status(404).json({ error: 'Character is not deactivated', code: 'ARCHIVE_PAYLOAD_MISSING' });
+            }
+            let decoded;
+            try {
+                decoded = await decodeArchivePayload(chaId, archivedAt);
+            } catch (err) {
+                logger.error(`[Archive] payload unreadable for ${chaId}@${archivedAt}:`, err?.message || err);
+                return res.status(400).json({ error: err?.message || 'Archive payload unreadable', code: 'ARCHIVE_PAYLOAD_INVALID' });
+            }
+            if (!decoded) {
+                return res.status(404).json({ error: 'Deactivated character data is missing', code: 'ARCHIVE_PAYLOAD_MISSING' });
+            }
+            const full = decoded.payload.character;
+            assignMissingChatIds({ characters: [full] });
+            await ensureChatStore();
+            const charChats = new Map();
+            for (const chat of full.chats) {
+                if (!chat || chat._stub === true || !Array.isArray(chat.message)) continue;
+                charChats.set(chat.id, chat);
+            }
+            fullChatStore.set(chaId, charChats);
+            // Client view: chats as stubs, asset array as a manifest descriptor.
+            // `reconcile` reuses the live manifest when the content is unchanged.
+            const clientView = stripDatabaseForClient({ characters: [full] }, { reconcileManifests: true }).characters[0];
+            logger.info(`[Archive] activated ${chaId}@${archivedAt} (${charChats.size} chats registered); row retained`);
+            res.json({ ok: true, character: normalizeJSON(clientView) });
+        });
+    } catch (err) { next(err); }
+});
+
+// Every deactivated character as a full legacy-shaped object — for the
+// client-assembled partial backup, which must carry them like the server
+// export does. Missing rows fail the whole request (same rule as export).
+app.get('/api/characters/archived/inline', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    try {
+        const result = await queueStorageOperation(async () => {
+            await flushPendingDb();
+            if (!(await loadDbCacheIfMissing())) return { characters: [] };
+            const shell = { characters: [], nodeOnlyArchivedCharacters: archivedStubsOf(dbCache[DB_HEX_KEY]) };
+            await inlineArchivedCharacters(shell);
+            return { characters: shell.characters };
+        });
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.send(Buffer.from(encodeRisuSaveLegacy(result)));
+    } catch (err) {
+        if (err?.code === 'ARCHIVE_PAYLOAD_MISSING') {
+            return res.status(409).json({ error: err.message, code: err.code });
+        }
+        next(err);
+    }
+});
+
+// Explicit reclaim of archive rows the live database no longer references.
+// Refuses when the database cannot be loaded — without it every row would
+// look orphaned.
+app.post('/api/db/archive/purge-orphans', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    if (!checkActiveSession(req, res)) return;
+    try {
+        const result = await queueStorageOperation(async () => {
+            await flushPendingDb();
+            if (!(await loadDbCacheIfMissing())) return { error: 'Database unavailable — refusing to purge' };
+            const db = dbCache[DB_HEX_KEY];
+            if (!db || !Array.isArray(db.characters)) return { error: 'Database decode failed — refusing to purge' };
+            return { ok: true, ...purgeOrphanArchiveRows(db) };
+        });
+        if (result.error) return res.status(400).json(result);
+        logger.info(`[Archive] purged ${result.deleted} orphan row(s), ${result.metas} index row(s), ${result.bytes} bytes`);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
 // ── Storage dashboard endpoints ──────────────────────────────────────────────
 
 const DB_BLOB_KEY = 'database/database.bin';
@@ -5957,7 +6525,7 @@ const DB_BACKUP_PREFIX = 'database/dbbackup-';
 // createBackupAndRotate names snapshots `${DB_BACKUP_PREFIX}${digits}.bin`;
 // the digits double as the plugin-storage snapshot id.
 const DB_BACKUP_KEY_RE = /^database\/dbbackup-(\d+)\.bin$/;
-const ASSET_PREFIXES = ['assets/', 'remotes/', 'inlay/', 'inlay_thumb/', 'inlay_meta/', 'inlay_info/', 'coldstorage/'];
+const ASSET_PREFIXES = ['assets/', 'remotes/', 'inlay/', 'inlay_thumb/', 'inlay_meta/', 'inlay_info/', 'coldstorage/', 'archive/', 'archive-meta/'];
 const AUTO_SWEEP_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function statsBasename(s) {
@@ -6124,6 +6692,11 @@ async function computeAssetSweep({ includeAssets, assetGraceMs = 0, includeRemot
     } catch (error) {
         return { error: `Manifest reference scan failed — refusing to purge: ${error?.message || error}` };
     }
+    try {
+        addArchivedCharacterRefs(uncleanable, dbObj);
+    } catch (error) {
+        return { error: `Deactivated-character reference scan failed — refusing to purge: ${error?.message || error}` };
+    }
 
     // A walker that returns nothing while assets exist means the decode
     // produced a shape we do not understand — every asset would look orphaned.
@@ -6148,6 +6721,8 @@ async function computeAssetSweep({ includeAssets, assetGraceMs = 0, includeRemot
     let remotesScanned = 0;
     if (includeRemotes) {
         const characterIds = new Set(dbObj.characters.map((v) => v?.chaId).filter(Boolean));
+        // A deactivated character still owns its remote cache.
+        for (const stub of archivedStubsOf(dbObj)) characterIds.add(stub.chaId);
         const remoteRows = kvListWithSizesAndUpdatedAt('remotes/');
         const remoteByKey = new Map(remoteRows.map((it) => [it.key, it]));
         for (const it of remoteRows) {
@@ -6250,6 +6825,10 @@ async function estimateServerBackupSize() {
     for (const it of kvListWithSizes('assets/')) total += it.size;
     for (const it of kvListWithSizes('inlay_meta/')) total += it.size;
     for (const e of listColdStorageBackupEntries()) total += e.size;
+    // Deactivated characters are inlined into database.risudat on export.
+    // Counting every archive row (orphans included) over-estimates, which is
+    // the safe direction for a free-space preflight.
+    for (const k of kvList(ARCHIVE_PREFIX)) total += kvSize(k) || 0;
     total += await sumInlayFsBytes();
     return total;
 }
@@ -6325,6 +6904,14 @@ app.get('/api/db/stats', async (req, res, next) => {
         }
         prefixes[DB_BACKUP_PREFIX] = { totalSize: backupTotal, count: backupKeys.length };
         for (const p of ASSET_PREFIXES) {
+            if (p === ARCHIVE_PREFIX) {
+                // Chunk-routed rows hold only a marker in kv; report logical size.
+                const keys = kvList(p);
+                let total = 0;
+                for (const k of keys) total += kvSize(k) || 0;
+                prefixes[p] = { totalSize: total, count: keys.length };
+                continue;
+            }
             const items = kvListWithSizes(p);
             let total = 0;
             for (const it of items) total += it.size;
@@ -6351,7 +6938,16 @@ app.get('/api/db/stats', async (req, res, next) => {
         // Quick estimates from in-memory cache only — never decode the BLOB just for stats.
         let trashed = { count: 0, expiredCount: 0, available: false };
         let orphan = { count: 0, totalSize: 0, available: false };
+        let archiveOrphan = { count: 0, totalSize: 0, available: false };
         const stripped = dbCache[DB_HEX_KEY];
+        if (stripped && Array.isArray(stripped.characters)) {
+            try {
+                const rows = listOrphanArchiveRows(stripped);
+                archiveOrphan = { count: rows.payloads.length, totalSize: rows.bytes, available: true };
+            } catch (error) {
+                logger.warn(`[Stats] archive orphan scan skipped: ${error?.message || error}`);
+            }
+        }
         if (stripped?.characters) {
             const now = Date.now();
             const GRACE = 1000 * 60 * 60 * 24 * 3;
@@ -6374,6 +6970,7 @@ app.get('/api/db/stats', async (req, res, next) => {
             try {
                 const uncleanable = buildUncleanableSet(stripped);
                 addLiveManifestRefs(uncleanable);
+                addArchivedCharacterRefs(uncleanable, stripped);
                 for (const bn of collectPluginStorageAssetRefs()) uncleanable.add(bn);
                 for (const it of kvListWithSizes('assets/')) {
                     if (!uncleanable.has(statsBasename(it.key))) {
@@ -6411,6 +7008,7 @@ app.get('/api/db/stats', async (req, res, next) => {
             },
             trashed,
             orphan,
+            archiveOrphan,
             etag: dbEtag,
         });
     } catch (err) { next(err); }
@@ -6492,21 +7090,63 @@ app.get('/api/db/stats/characters', async (req, res, next) => {
             });
         }
 
-        const uncleanable = buildUncleanableSet(dbObj);
-        addLiveManifestRefs(uncleanable);
-        for (const bn of collectPluginStorageAssetRefs()) uncleanable.add(bn);
-        let orphanCount = 0, orphanTotal = 0;
-        for (const it of kvListWithSizes('assets/')) {
-            if (!uncleanable.has(statsBasename(it.key))) {
-                orphanCount++;
-                orphanTotal += it.size;
+        // Deactivated characters are not in dbObj.characters; list them from
+        // their stubs so the dashboard shows where the bytes went and can
+        // offer to re-activate. Sizes come from the archive-meta index.
+        for (const stub of archivedStubsOf(dbObj)) {
+            let meta = null;
+            try { meta = readArchiveMeta(stub.chaId, stub.archivedAt); } catch { meta = null; }
+            const refs = meta ? meta.assetRefs : [stub.image];
+            let imgBytes = remoteSize.get(stub.chaId) || 0;
+            for (const ref of refs) {
+                const bn = statsBasename(ref);
+                if (!bn || claimed.has(bn)) continue;
+                const sz = assetSize.get(bn);
+                if (sz != null) {
+                    imgBytes += sz;
+                    claimed.add(bn);
+                }
             }
+            const cardBytes = meta?.cardBytes ?? 0;
+            const chatBytes = meta?.chatBytes ?? 0;
+            characters.push({
+                chaId: stub.chaId,
+                name: stub.name || '',
+                image: stub.image || '',
+                trashed: false,
+                archived: true,
+                archiveMissing: !meta || !hasArchivePayload(stub.chaId, stub.archivedAt),
+                cardBytes,
+                imgBytes,
+                chatBytes,
+                totalBytes: cardBytes + imgBytes + chatBytes,
+            });
+        }
+
+        // Same fail-closed rule as /api/db/stats: an unreadable reference
+        // source must not make the whole library look orphaned.
+        let orphan = { count: 0, totalSize: 0, available: false };
+        try {
+            const uncleanable = buildUncleanableSet(dbObj);
+            addLiveManifestRefs(uncleanable);
+            addArchivedCharacterRefs(uncleanable, dbObj);
+            for (const bn of collectPluginStorageAssetRefs()) uncleanable.add(bn);
+            let orphanCount = 0, orphanTotal = 0;
+            for (const it of kvListWithSizes('assets/')) {
+                if (!uncleanable.has(statsBasename(it.key))) {
+                    orphanCount++;
+                    orphanTotal += it.size;
+                }
+            }
+            orphan = { count: orphanCount, totalSize: orphanTotal, available: true };
+        } catch (error) {
+            logger.warn(`[Stats] per-character orphan scan skipped: ${error?.message || error}`);
         }
 
         characters.sort((a, b) => b.totalBytes - a.totalBytes);
         res.json({
             characters,
-            orphan: { count: orphanCount, totalSize: orphanTotal },
+            orphan,
             chatBytesNote: 'JSON.stringify estimate; on-disk msgpack ~0.6×',
             etag: dbEtag,
         });

@@ -5,7 +5,7 @@
   import { language } from 'src/lang'
   import SelectInput from "src/lib/UI/GUI/SelectInput.svelte";
   import OptionInput from "src/lib/UI/GUI/OptionInput.svelte";
-  import { alertConfirm } from 'src/ts/alert'
+  import { alertConfirm, notifyError, notifyInfo } from 'src/ts/alert'
   import {
     getCharacterChatIndex,
     listInlayExplorerItems,
@@ -29,6 +29,10 @@
   let displayCount = $state(PAGE_SIZE)
   let loading = $state(true)
   let scanResult = $state<InlayScanResult | null>(null)
+  let scanning = $state(false)
+  // Set after a failed scan so the effect below does not retry in a loop;
+  // cleared when the filter changes, which is the user's retry path.
+  let scanFailed = $state(false)
   let paging = $state(false)
   let loadMoreSentinel: HTMLDivElement | null = $state(null)
   let selection = $state<Set<string>>(new SvelteSet())
@@ -50,7 +54,7 @@
       if (specialFilter === 'meta-missing' && item.hasMeta) return false
       if (specialFilter === 'orphan-character' && !isOrphanCharacter(item)) return false
       if (specialFilter === 'orphan-chat' && !isOrphanChat(item)) return false
-      if (specialFilter === 'orphan-message' && (scanResult?.refCounts[item.id] ?? 0) > 0) return false
+      if (specialFilter === 'orphan-message' && (!scanResult || (scanResult.refCounts[item.id] ?? 0) > 0)) return false
 
       return true
     })
@@ -144,10 +148,30 @@
     selection.clear()
   }
 
+  // With the orphan-message filter active a stale "unreferenced" view must not
+  // drive a delete: rescan now and keep only ids that still have no reference.
+  // Returns null when the scan failed (caller aborts).
+  const keepUnreferenced = async (ids: string[]): Promise<string[] | null> => {
+    if (specialFilter !== 'orphan-message') return ids
+    try {
+      scanResult = await scanInlayReferences()
+    } catch (error) {
+      notifyError(`${language.playground.inlayScanFailed}: ${error instanceof Error ? error.message : String(error)}`)
+      return null
+    }
+    const referenced = ids.filter((id) => (scanResult?.refCounts[id] ?? 0) > 0)
+    if (referenced.length > 0) {
+      notifyInfo(language.playground.inlayDeleteSkippedReferenced.replace('{count}', referenced.length.toString()))
+    }
+    return ids.filter((id) => !referenced.includes(id))
+  }
+
   const deleteAsset = async (id: string, name: string) => {
     if (!(await alertConfirm(language.playground.inlayDeleteConfirm.replace('{name}', name)))) {
       return
     }
+    const kept = await keepUnreferenced([id])
+    if (kept === null || kept.length === 0) return
     await removeInlayAsset(id)
     selection.delete(id)
     allItems = allItems.filter((item) => item.id !== id)
@@ -159,9 +183,14 @@
       return
     }
 
-    const ids = allItems.filter((item) => selection.has(item.id)).map((item) => item.id)
+    let ids = allItems.filter((item) => selection.has(item.id)).map((item) => item.id)
+    const kept = await keepUnreferenced(ids)
+    if (kept === null) return
+    ids = kept
+    if (ids.length === 0) { selection.clear(); return }
     await removeInlayAssets(ids)
-    allItems = allItems.filter((item) => !selection.has(item.id))
+    const removed = new Set(ids)
+    allItems = allItems.filter((item) => !removed.has(item.id))
     selection.clear()
   }
 
@@ -174,9 +203,24 @@
   })
 
   $effect(() => {
-    if (specialFilter === 'orphan-message' && !scanResult) {
-      scanResult = scanInlayReferences()
+    if (specialFilter === 'orphan-message' && !scanResult && !scanning && !scanFailed) {
+      scanning = true
+      scanInlayReferences()
+        .then((result) => { scanResult = result })
+        .catch((error) => {
+          // Unknown is not "unreferenced": leave the filter empty and say why.
+          scanFailed = true
+          notifyError(`${language.playground.inlayScanFailed}: ${error instanceof Error ? error.message : String(error)}`)
+        })
+        .finally(() => { scanning = false })
     }
+  })
+
+  $effect(() => {
+    specialFilter
+    // Leaving and re-entering the filter starts from a fresh scan.
+    scanFailed = false
+    scanResult = null
   })
 
   $effect(() => {
@@ -250,6 +294,7 @@
 <header class="flex flex-col gap-4 py-6 sticky top-0 bg-bgcolor z-10">
   <div class="flex flex-wrap gap-4 items-center">
     <span class="text-textcolor2">{language.playground.inlayTotalAssets.replace('{count}', filteredItems.length.toString())}</span>
+    {#if scanning}<span class="text-textcolor2 text-sm">{language.playground.inlayScanning}</span>{/if}
     {#if allItems.length > 0}
       <div class="flex gap-2 ml-auto">
         {#if hasSelection}

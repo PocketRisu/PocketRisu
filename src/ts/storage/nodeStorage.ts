@@ -1082,6 +1082,53 @@ export class NodeStorage{
         if (da.status < 200 || da.status >= 300) throw new Error(`saveChatContent error: ${da.status}`)
     }
 
+    // ── Character archive (deactivate / activate) — see src/ts/characterArchive.ts ──
+
+    /** Server writes + verifies the payload; returns the stub to keep in the database. */
+    async archiveCharacter(chaId: string): Promise<any> {
+        const da = await this.authFetch(`/api/characters/${encodeURIComponent(chaId)}/archive`, { method: 'POST' })
+        const body = await da.json().catch(() => ({})) as { ok?: boolean; stub?: any; error?: string; code?: string }
+        if (da.status < 200 || da.status >= 300 || !body?.stub) {
+            throw new CharacterArchiveError(body?.code ?? `HTTP_${da.status}`, body?.error ?? `archive error: ${da.status}`)
+        }
+        return body.stub
+    }
+
+    /** Server registers the chats and returns the client-view character (stub chats, manifest descriptor). */
+    async activateCharacter(chaId: string, archivedAt?: number): Promise<any> {
+        const da = await this.authFetch(`/api/characters/${encodeURIComponent(chaId)}/activate`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ archivedAt }),
+        })
+        const body = await da.json().catch(() => ({})) as { ok?: boolean; character?: any; error?: string; code?: string }
+        if (da.status < 200 || da.status >= 300 || !body?.character) {
+            throw new CharacterArchiveError(body?.code ?? `HTTP_${da.status}`, body?.error ?? `activate error: ${da.status}`)
+        }
+        return body.character
+    }
+
+    /** Server-side inlay reference scan over every chat body (lazy-loaded and deactivated ones included). */
+    async fetchInlayReferences(): Promise<{ scannedAt: number; totalMessages: number; refCounts: Record<string, number> }> {
+        const da = await this.authFetch('/api/inlays/references')
+        if (da.status < 200 || da.status >= 300) {
+            const body = await da.json().catch(() => ({})) as { error?: string }
+            throw new Error(body?.error ?? `inlay reference scan error: ${da.status}`)
+        }
+        return await da.json()
+    }
+
+    /** Every deactivated character as a full legacy record (partial backup). */
+    async fetchArchivedCharactersInline(): Promise<any[]> {
+        const da = await this.authFetch('/api/characters/archived/inline')
+        if (da.status < 200 || da.status >= 300) {
+            const body = await da.json().catch(() => ({})) as { error?: string; code?: string }
+            throw new CharacterArchiveError(body?.code ?? `HTTP_${da.status}`, body?.error ?? `archived inline error: ${da.status}`)
+        }
+        const decoded = await decodeRisuSave(new Uint8Array(await da.arrayBuffer())) as { characters?: any[] }
+        return Array.isArray(decoded?.characters) ? decoded.characters : []
+    }
+
     // ── Save-folder migration ─────────────────────────────────────────────────
 
     async scanSaveFolder(folderPath?: string): Promise<{count: number, totalSize: number, hasDatabase: boolean}> {
@@ -1188,4 +1235,14 @@ async function digestPassword(message:string) {
         throw new Error(`Password hashing failed (${res.status})`)
     }
     return await res.text()
+}
+
+/** Failure reported by the character archive endpoints; `code` is the server's error code. */
+export class CharacterArchiveError extends Error {
+    code: string
+    constructor(code: string, message: string) {
+        super(message)
+        this.name = 'CharacterArchiveError'
+        this.code = code
+    }
 }
