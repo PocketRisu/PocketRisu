@@ -527,6 +527,11 @@ async function checkNewFormat(): Promise<void> {
             if (chat?.id) validDraftKeys.add(chatDraftKey(char.chaId, chat.id));
         }
     }
+    // Deactivated characters keep their chats server-side; their drafts stay too.
+    for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
+        if (!stub?.chaId) continue;
+        for (const id of stub.chatIds ?? []) validDraftKeys.add(chatDraftKey(stub.chaId, id));
+    }
     void sweepOrphanDrafts(validDraftKeys);
 }
 

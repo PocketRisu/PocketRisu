@@ -18,7 +18,9 @@
 
 
   } from "../../ts/stores.svelte";
-    import { setDatabase, type folder } from "../../ts/storage/database.svelte";
+    import { setDatabase, type folder, type ArchivedCharacterStub } from "../../ts/storage/database.svelte";
+    import { promptActivateCharacter } from "../../ts/characterArchive";
+    import { ArchiveIcon } from "@lucide/svelte";
     import { DBState } from 'src/ts/stores.svelte';
     import BarIcon from "./BarIcon.svelte";
     import SidebarIndicator from "./SidebarIndicator.svelte";
@@ -77,7 +79,10 @@
   }
 
   type sortTypeNormal = { type:'normal',img: string, index: number, name:string }
-  type sortType =  sortTypeNormal|{type:'folder',folder:sortTypeNormal[],id:string, name:string, color:string, img?:string}
+  // Deactivated character: rendered in place (dimmed); not in DBState.db.characters.
+  type sortTypeArchived = { type:'archived',img: string, chaId: string, name:string }
+  type sortTypeEntry = sortTypeNormal|sortTypeArchived
+  type sortType =  sortTypeEntry|{type:'folder',folder:sortTypeEntry[],id:string, name:string, color:string, img?:string}
   let charImages: sortType[] = $state([]);
   // Recently interacted characters for the home sidebar. Character-level
   // `lastInteraction` is already in memory (no chat hydration needed), so this
@@ -107,6 +112,18 @@
   $effect(() => {
     let newCharImages: sortType[] = [];
     const idObject = getCharacterIndexObject()
+    // Deactivated characters keep their slot in characterOrder; resolve those
+    // ids against the stub list (unless the user chose to hide them).
+    const archivedById = new Map<string, ArchivedCharacterStub>()
+    if (!DBState.db.nodeOnlyHideArchivedCharacters) {
+      for (const stub of DBState.db.nodeOnlyArchivedCharacters ?? []) {
+        if (stub?.chaId) archivedById.set(stub.chaId, stub)
+      }
+    }
+    const archivedEntry = (id: string): sortTypeArchived | null => {
+      const stub = archivedById.get(id)
+      return stub ? { type: 'archived', img: stub.image ?? '', chaId: stub.chaId, name: stub.name ?? '' } : null
+    }
     for (const id of DBState.db.characterOrder) {
       if(typeof(id) === 'string'){
         const index = idObject[id] ?? -1
@@ -118,11 +135,14 @@
             type: "normal",
             name: cha.name
           });
+        } else {
+          const archived = archivedEntry(id)
+          if (archived) newCharImages.push(archived)
         }
       }
       else{
         const folder = id
-        let folderCharImages: sortTypeNormal[] = []
+        let folderCharImages: sortTypeEntry[] = []
         for(const id of folder.data){
           const index = idObject[id] ?? -1
           if(index !== -1){
@@ -133,6 +153,9 @@
               type: "normal",
               name: cha.name
             });
+          } else {
+            const archived = archivedEntry(id)
+            if (archived) folderCharImages.push(archived)
           }
         }
         newCharImages.push({
@@ -257,7 +280,7 @@
     for (const item of charImages) {
       if (item.type === 'folder') {
         const foundChar = item.folder.find(c => 
-          DBState.db.characters[c.index]?.chaId === characterId
+          c.type === 'normal' && DBState.db.characters[c.index]?.chaId === characterId
         )
         if (foundChar) {
           targetFolderId = item.id
@@ -749,12 +772,16 @@
               if(suppressNextClick) return
               if(char.type === "normal"){
                 changeChar(char.index, {reseter});
+              } else if(char.type === "archived"){
+                void promptActivateCharacter(char.chaId, {reseter});
               }
             }}
             onkeydown={(e) => {
               if (e.key === "Enter") {
                 if(char.type === "normal"){
                   changeChar(char.index, {reseter});
+                } else if(char.type === "archived"){
+                  void promptActivateCharacter(char.chaId, {reseter});
                 }
               }
             }}
@@ -767,6 +794,19 @@
               name={char.name}
               chaId={DBState.db.characters[char.index]?.chaId}
             />
+          {:else if char.type === 'archived'}
+            <div class="relative">
+              <SidebarAvatar 
+                src={char.img ? getCharImage(char.img, "plain") : "/none.webp"} 
+                size="56" 
+                rounded={IconRounded} 
+                name={`${char.name} (${language.deactivatedBadge})`}
+                chaId={char.chaId}
+              />
+              <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55" class:rounded-md={!IconRounded} class:rounded-full={IconRounded}>
+                <ArchiveIcon size={20} class="text-white/90" />
+              </div>
+            </div>
           {:else if char.type === "folder"}
             {#key char.color}
             {#key char.name}
@@ -928,7 +968,7 @@
               ontouchstart={touchDragEnabled && char.type === 'folder' ? (e) => {onTouchDragStart({index: ind, folder:char.id}, e)} : undefined}
             >
               <SidebarIndicator
-                isActive={$selectedCharID === char2.index && sideBarMode !== 1}
+                isActive={char2.type === 'normal' && $selectedCharID === char2.index && sideBarMode !== 1}
               />
               <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
               <div
@@ -937,23 +977,42 @@
                     if(suppressNextClick) return
                     if(char2.type === "normal"){
                       changeChar(char2.index, {reseter});
+                    } else if(char2.type === "archived"){
+                      void promptActivateCharacter(char2.chaId, {reseter});
                     }
                   }}
                   onkeydown={(e) => {
                     if (e.key === "Enter") {
                       if(char2.type === "normal"){
                         changeChar(char2.index, {reseter});
+                      } else if(char2.type === "archived"){
+                        void promptActivateCharacter(char2.chaId, {reseter});
                       }
                     }
                   }}
                 >
-                <SidebarAvatar 
-                  src={char2.img ? getCharImage(char2.img, "plain") : "/none.webp"} 
-                  size="56" 
-                  rounded={IconRounded} 
-                  name={char2.name}
-                  chaId={DBState.db.characters[char2.index]?.chaId}
-                />
+                {#if char2.type === 'archived'}
+                  <div class="relative">
+                    <SidebarAvatar 
+                      src={char2.img ? getCharImage(char2.img, "plain") : "/none.webp"} 
+                      size="56" 
+                      rounded={IconRounded} 
+                      name={`${char2.name} (${language.deactivatedBadge})`}
+                      chaId={char2.chaId}
+                    />
+                    <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/55" class:rounded-md={!IconRounded} class:rounded-full={IconRounded}>
+                      <ArchiveIcon size={20} class="text-white/90" />
+                    </div>
+                  </div>
+                {:else}
+                  <SidebarAvatar 
+                    src={char2.img ? getCharImage(char2.img, "plain") : "/none.webp"} 
+                    size="56" 
+                    rounded={IconRounded} 
+                    name={char2.name}
+                    chaId={DBState.db.characters[char2.index]?.chaId}
+                  />
+                {/if}
               </div>
             </div>
             <div class="h-4 min-h-4 w-14 relative z-20" role="listitem" data-spacer-index={ind+1} data-spacer-folder={char.type === 'folder' ? char.id : undefined} ondragover={(e) => {
@@ -1164,6 +1223,13 @@
         <ShSwitch
           checked={!!DBState.db.nodeOnlyHideRecentChats}
           onCheckedChange={(v) => (DBState.db.nodeOnlyHideRecentChats = v)}
+        />
+      </div>
+      <div class="flex items-center justify-between gap-2 mt-2">
+        <span class="text-sm text-textcolor2">{language.hideDeactivatedCharacters}</span>
+        <ShSwitch
+          checked={!!DBState.db.nodeOnlyHideArchivedCharacters}
+          onCheckedChange={(v) => (DBState.db.nodeOnlyHideArchivedCharacters = v)}
         />
       </div>
       {#if DBState.db.nodeOnlyHideRecentChats}

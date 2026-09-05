@@ -123,9 +123,15 @@ function kvGet(key) {
     return chunkStore.getValue(key);
 }
 
+// Deactivated-character payloads (server.cjs character archive) hold a whole
+// character with its chats inline, so they share the DB blob's size profile
+// and must never hit the single-BLOB ceiling either.
+const ARCHIVE_CHUNKED_PREFIX = 'archive/';
+
 function kvSet(key, value) {
-    // Only the DB blob is chunked; all other keys keep the exact prior path.
-    if (key === DB_BLOB_KEY) {
+    // The DB blob and archive payloads are chunked; all other keys keep the
+    // exact prior path.
+    if (key === DB_BLOB_KEY || key.startsWith(ARCHIVE_CHUNKED_PREFIX)) {
         chunkStore.putValue(key, value);
     } else {
         stmtKvSet.run(key, value, Date.now());

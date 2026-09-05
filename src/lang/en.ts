@@ -466,6 +466,8 @@ export const languageEnglish = {
         inlayFilterOrphanMessage: "Not in Messages",
         inlayScanMessages: "Scan Messages",
         inlayScanning: "Scanning...",
+        inlayScanFailed: "Message scan failed; the unreferenced list is not shown",
+        inlayDeleteSkippedReferenced: "Rescan found {count} of them referenced again; they were left alone",
         inlayScanDone: "Scanned {count} messages",
     },
     confirm: "Confirm",
@@ -536,6 +538,17 @@ export const languageEnglish = {
     chatLoadInitialPages: "Initial Chat Load Count",
     chatLoadAdditionalPages: "Additional Chat Load Count",
     removeCharacter: "Remove Character",
+    deactivateCharacter: "Deactivate Character",
+    deactivateCharacterConfirm: (name: string) =>
+        `Deactivate "${name}" and its chats?\n\nIt stays in your lists but cannot be opened, and plugins, scripts, search and dataset export treat it as deleted. The data is kept on the server and you can activate it again at any time.`,
+    deactivateCharacterDone: "Character deactivated.",
+    deactivateCharacterUnsaved: "Some chats are not saved on the server yet, so the character cannot be deactivated. Try again in a moment.",
+    deactivateCharacterFailed: "Deactivation failed: ",
+    activateCharacterConfirm: (name: string) => `"${name}" is deactivated. Activate it?`,
+    activateCharacterMissing: "The stored character data could not be found, so it cannot be activated. Check the server log and the storage dashboard.",
+    activateCharacterFailed: "Activation failed: ",
+    activateCharacterRemoveStub: "Remove this character from the list? (Nothing else is deleted.)",
+    deactivatedBadge: "Deactivated",
     exportCharacter: "Export Character",
     characterPackage: "Character Package",
     characterPackageExport: "Export Package",
@@ -2070,6 +2083,9 @@ export const languageEnglish = {
     storageRowKvRemotesDesc: "Per-character remote sync cache (remotes/{chaId}.local.bin).",
     storageRowKvColdStorage: "Cold storage",
     storageRowKvColdStorageDesc: "Legacy/dormant storage tier. Usually empty.",
+    storageRowKvArchive: "Deactivated characters",
+    storageRowKvArchiveDesc:
+        "Bodies (chats and asset lists included) and index of deactivated characters. Never deleted automatically, even after activation; backups always include them as complete characters.",
     storageRowKvUncategorized: "Other data",
     storageRowKvUncategorizedDesc: "Keys not matching any known category. Usually migration leftovers or temporary entries.",
     storageRowSqliteOverhead: "SQLite overhead (structural)",
@@ -2160,6 +2176,17 @@ export const languageEnglish = {
     storageCharactersChat: "chat",
     storageCharactersTrashed: "trashed",
     storageCharactersGoTo: "Go to this character",
+    storageCharactersDeactivated: "deactivated",
+    storageArchiveOrphanHeader: (count: number, size: number) =>
+        `Unreferenced deactivated-character data: ${count} row(s), ${(size / 1024 / 1024).toFixed(1)} MB`,
+    storageArchiveOrphanDesc:
+        "Stored bodies of characters that were activated again, deleted, or replaced by a backup import. Kept on purpose so older snapshots can still be restored.",
+    storageArchiveOrphanPurge: "Purge stored data",
+    storageArchiveOrphanConfirm: (count: number, size: number) =>
+        `Delete ${count} unreferenced deactivated-character row(s) (${(size / 1024 / 1024).toFixed(1)} MB)? Older snapshots pointing at them will no longer be able to open those characters. This cannot be undone.`,
+    storageArchiveOrphanDone: (count: number, size: number) =>
+        `Purged ${count} row(s) (${(size / 1024 / 1024).toFixed(1)} MB).`,
+    storageCharactersDeactivatedMissing: "deactivated · data missing",
     storageCharactersOrphan: (count: number, size: number) =>
         `Orphan media (not referenced by any character): ${count} item(s), ${(size / 1024 / 1024).toFixed(1)} MB`,
     storageCharactersEmpty: "No characters",
@@ -2311,6 +2338,7 @@ export const languageEnglish = {
     recentChatsTitle: "Recent Chats",
     noRecentChatsDesc: "No conversations yet",
     hideRecentChats: "Hide conversation list",
+    hideDeactivatedCharacters: "Hide deactivated characters",
     moveInsteadOfCopyOnCMPConvert: "Move Instead of Copy on CMP Convert",
 
     showRequestStatus: "Show request status",
