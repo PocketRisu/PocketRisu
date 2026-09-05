@@ -878,6 +878,10 @@ export class RisuSavePatcher {
     private lastCharJsons = new Map<string, string>();
     private lastModuleJsons = new Map<string, string>();
     private moduleItemHashes = new Map<string, number>();
+    // chaIds whose stubbed body hashed differently from the baseline in the
+    // last set(): the characters the client actually changed, whether or not
+    // the tracker listed them. A rebase overlays exactly these.
+    private lastChangedCharacterIds: string[] = [];
 
     hash(): string {
         this.hashBlocks['characters'] = SEED_ARRAY;
@@ -891,6 +895,21 @@ export class RisuSavePatcher {
             rootHash += (Math.imul(calculateHash(key), PRIME_MULTIPLIER) + this.hashBlocks[key])
         }
         return (rootHash >>> 0).toString(16);
+    }
+
+    /** chaIds the baseline (what this client last synced against) lists as deactivated. */
+    baselineArchivedCharacterIds(): Set<string> {
+        const list = this.lastSyncedDb?.nodeOnlyArchivedCharacters
+        return new Set(
+            (Array.isArray(list) ? list : [])
+                .map((stub: any) => stub?.chaId)
+                .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0),
+        )
+    }
+
+    /** chaIds whose body changed against the baseline in the last set(). */
+    changedCharacterIdsOfLastSet(): string[] {
+        return [...this.lastChangedCharacterIds]
     }
 
     /**
@@ -1078,6 +1097,7 @@ export class RisuSavePatcher {
         const { compare } = await import('fast-json-patch')
         const expectedHash: string = this.hash();
         const patch: any[] = []
+        this.lastChangedCharacterIds = []
 
         const {
             characters: lastCharacters = [],
@@ -1254,12 +1274,18 @@ export class RisuSavePatcher {
             const normChars = normalizeJSON(curCharacters.map(withStubs))
             patch.push({ op: 'replace', path: '/characters', value: normChars })
             // Update all character hashes
+            const previousCharHashes = new Map<string, number>()
             for (const lastId of lastIds) {
-                if (lastId) delete this.hashBlocks[lastId];
+                if (lastId) {
+                    previousCharHashes.set(lastId, this.hashBlocks[lastId])
+                    delete this.hashBlocks[lastId];
+                }
             }
             for (const char of normChars) {
                 if (char?.chaId) {
-                    this.hashBlocks[char.chaId] = calculateHash(char);
+                    const charHash = calculateHash(char)
+                    if (previousCharHashes.get(char.chaId) !== charHash) this.lastChangedCharacterIds.push(char.chaId)
+                    this.hashBlocks[char.chaId] = charHash;
                 }
             }
             this.lastSyncedDb.characters = normChars;
@@ -1291,6 +1317,7 @@ export class RisuSavePatcher {
                 const changedByHash = !!(curCharId && curCharHash !== this.hashBlocks[curCharId])
 
                 if (trackedBySave || changedByHash) {
+                    if (changedByHash && curCharId) this.lastChangedCharacterIds.push(curCharId)
                     // Iterate instead of spreading — a single character's diff
                     // can exceed spread-argument limits (e.g. a shifted
                     // multi-thousand-entry lorebook). Same rule as the

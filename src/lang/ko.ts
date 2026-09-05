@@ -616,6 +616,8 @@ export const languageKorean = {
   deactivateCharacterDone: "캐릭터를 비활성화했습니다.",
   deactivateCharacterUnsaved: "아직 서버에 저장되지 않은 채팅이 있어 비활성화할 수 없습니다. 잠시 후 다시 시도하세요.",
   deactivateCharacterFailed: "비활성화에 실패했습니다: ",
+  rebaseSkippedArchived: (names: string) =>
+    `"${names}" 캐릭터가 다른 기기에서 비활성화되어 이 기기의 저장되지 않은 변경을 반영하지 못했습니다.`,
   activateCharacterConfirm: (name: string) => `"${name}" 캐릭터가 비활성화되어 있습니다. 활성화할까요?`,
   activateCharacterMissing: "보관된 캐릭터 데이터를 찾을 수 없어 활성화할 수 없습니다. 서버 로그와 스토리지 대시보드를 확인하세요.",
   activateCharacterFailed: "활성화에 실패했습니다: ",

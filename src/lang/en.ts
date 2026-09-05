@@ -544,6 +544,8 @@ export const languageEnglish = {
     deactivateCharacterDone: "Character deactivated.",
     deactivateCharacterUnsaved: "Some chats are not saved on the server yet, so the character cannot be deactivated. Try again in a moment.",
     deactivateCharacterFailed: "Deactivation failed: ",
+    rebaseSkippedArchived: (names: string) =>
+        `"${names}" was deactivated on another device, so this device's unsaved edits to it were discarded.`,
     activateCharacterConfirm: (name: string) => `"${name}" is deactivated. Activate it?`,
     activateCharacterMissing: "The stored character data could not be found, so it cannot be activated. Check the server log and the storage dashboard.",
     activateCharacterFailed: "Activation failed: ",

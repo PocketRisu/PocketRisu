@@ -12,7 +12,7 @@ import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
 import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
-import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat } from "./storage/chatStorage";
+import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat, convertStubsToPlaceholders } from "./storage/chatStorage";
 import { AutoStorage } from "./storage/autoStorage";
 import {
     ConflictError,
@@ -28,7 +28,8 @@ import { language } from "src/lang";
 import { startObserveDom } from "./observer.svelte";
 import { updateGuisize } from "./gui/guisize";
 import { deepTouch } from "./gui/deepTouch.svelte";
-import { updateLorebooks } from "./characters";
+import { updateLorebooks, deselectCharacter } from "./characters";
+import { mergeServerDbWithTrackedLocalChanges, withTrackedCharacters, hasAmbiguousCharacterIds } from "./storage/rebaseMerge";
 import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import { isLocalNetworkUrl } from "./network/localNetwork";
@@ -44,6 +45,24 @@ import { createAssetNameResolver, type AssetNameHit } from './storage/assetNameR
 import { addLog } from './log'
 
 export const forageStorage = new AutoStorage()
+
+let lastBaselineResyncAt = 0
+const BASELINE_RESYNC_MIN_INTERVAL_MS = 5 * 60_000
+
+// One line for the system log: counts and flags first, because the message
+// is the dedupe key and gets truncated, so the stable discriminator must
+// survive the cut ahead of the (possibly long) id lists.
+function summarizeHashMismatch(report: ReturnType<RisuSavePatcher['describeHashMismatch']>): string {
+    const keySetDiffs = report.roots.onlyLocal.length + report.roots.onlyRemote.length
+        + report.characters.onlyLocal.length + report.characters.onlyRemote.length
+    const duplicates = report.duplicateCharIds.length + report.serverDuplicateCharIds.length
+    return [
+        `roots:${report.roots.mismatched.length} chars:${report.characters.mismatched.length} keyset:${keySetDiffs} dup:${duplicates}`,
+        report.compositionOnly ? 'composition-only' : '',
+        report.roots.mismatched.length ? `[${report.roots.mismatched.join(',')}]` : '',
+        report.characters.mismatched.length ? `[${report.characters.mismatched.join(',')}]` : '',
+    ].filter(Boolean).join(' ')
+}
 
 function errorMessage(error: unknown): string {
     if (error instanceof Error && error.message) return error.message
@@ -882,67 +901,109 @@ export async function saveDb() {
         }
     }
 
-    async function rebaseTrackedLocalChangesOnLatestServerDb(conflictEtag: string | null, db: Database, toSave: toSaveType) {
+    // After a full write the patcher was re-seeded from the bytes we sent,
+    // while the server holds its own client view of the same data (chats
+    // stubbed, asset lists as manifest descriptors, normalized). If the two
+    // differ, every patch from here on 409s and falls back to a full write —
+    // the "every save uploads the whole database" loop. The write response
+    // carries the server view's hashes: on a difference, name it in the
+    // system log and re-seed the patcher from the server view, but only when
+    // nobody else wrote in between (the read must return the etag we wrote).
+    async function resyncBaselineAfterFullWrite() {
+        const diagnostics = forageStorage.realStorage?.takeDbWriteDiagnostics?.()
+        if (!diagnostics?.serverHash) return
+        let report: ReturnType<RisuSavePatcher['describeHashMismatch']>
+        try {
+            report = patcher.describeHashMismatch(diagnostics)
+        } catch (e) {
+            console.warn('[Save] Failed to compare baseline after full write:', e)
+            return
+        }
+        if (report.localHash === report.serverHash) return
+        console.warn('[Save] Baseline differs from server view after full write:', report)
+        addLog({
+            level: 'warning',
+            source: 'save',
+            message: `[Save] Baseline differs from server after full write: ${summarizeHashMismatch(report)}`.slice(0, 300),
+            description: JSON.stringify(report),
+        })
+        const writtenEtag = forageStorage.getDbEtag()
+        if (!writtenEtag) return
+        // A divergence the re-seed cannot cure would otherwise cost a full
+        // download on every full write; one attempt per interval keeps the
+        // diagnostic and caps the traffic.
+        if (Date.now() - lastBaselineResyncAt < BASELINE_RESYNC_MIN_INTERVAL_MS) {
+            console.warn('[Save] Skipped baseline re-seed: one succeeded recently and the divergence persists')
+            return
+        }
+        try {
+            const serverBytes = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
+            const readEtag = forageStorage.getDbEtag()
+            if (!serverBytes || serverBytes.length === 0 || readEtag !== writtenEtag) {
+                // Someone else wrote meanwhile (or the read did not match the
+                // write byte for byte). Keep the etag we wrote so the next
+                // full write still runs into the conflict path instead of
+                // silently overwriting theirs.
+                forageStorage.setDbEtag(writtenEtag)
+                console.warn('[Save] Skipped baseline re-seed: server etag moved since the full write')
+                return
+            }
+            await patcher.init(await decodeRisuSave(serverBytes))
+            // Stamped only on success: a transient failure must retry on
+            // the next full write, while a divergence the re-seed cannot
+            // cure is capped to one download per interval.
+            lastBaselineResyncAt = Date.now()
+            addLog({ level: 'info', source: 'save', message: '[Save] Baseline re-seeded from the server view after a full write' })
+        } catch (e) {
+            forageStorage.setDbEtag(writtenEtag)
+            console.warn('[Save] Baseline re-seed failed:', e)
+        }
+    }
+
+    async function rebaseTrackedLocalChangesOnLatestServerDb(
+        conflictEtag: string | null, db: Database, toSave: toSaveType, syncedArchivedIds: ReadonlySet<string>,
+    ) {
         forageStorage.setDbEtag(conflictEtag ?? null)
         const latestData = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
         if (latestData && latestData.length > 0) {
             const latestDb = await decodeRisuSave(latestData) as Database
-            const mergedDb = safeStructuredClone(latestDb) as Database
-            const localDb = safeStructuredClone(db) as Database
-
-            for (const key in localDb) {
-                if (
-                    key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
-                    key !== 'plugins' && key !== 'pluginCustomStorage'
-                ) {
-                    mergedDb[key] = safeStructuredClone(localDb[key])
-                }
-            }
-
-            if (toSave.botPreset) {
-                mergedDb.botPresets = safeStructuredClone(localDb.botPresets)
-                mergedDb.botPresetsId = localDb.botPresetsId
-            }
-            if (toSave.modules) {
-                mergedDb.modules = safeStructuredClone(localDb.modules)
-            }
-
-            const trackedCharIds = new Set<string>(toSave.character.filter(Boolean))
-            for (const trackedChat of toSave.chat) {
-                if (trackedChat?.[0]) {
-                    trackedCharIds.add(trackedChat[0])
-                }
-            }
-            const mergedCharacters = Array.isArray(mergedDb.characters) ? mergedDb.characters : []
-            const localCharacters = Array.isArray(localDb.characters) ? localDb.characters : []
-
-            for (const charId of trackedCharIds) {
-                const localChar = localCharacters.find((char) => char?.chaId === charId)
-                const mergedIndex = mergedCharacters.findIndex((char) => char?.chaId === charId)
-                if (localChar) {
-                    const clonedLocalChar = safeStructuredClone(localChar)
-                    if (mergedIndex >= 0) {
-                        mergedCharacters[mergedIndex] = clonedLocalChar
-                    }
-                    else {
-                        mergedCharacters.push(clonedLocalChar)
-                    }
-                }
-                else if (mergedIndex >= 0) {
-                    mergedCharacters.splice(mergedIndex, 1)
-                }
-            }
-            mergedDb.characters = mergedCharacters
-            const mergedBaseline = safeStructuredClone(mergedDb) as Database
+            const selectedChaId = getCurrentCharacter()?.chaId
+            const localNames = new Map<string, string>(
+                (Array.isArray(db.characters) ? db.characters : [])
+                    .filter((char) => char?.chaId)
+                    .map((char) => [char.chaId, char.name || char.chaId] as [string, string]),
+            )
+            const { mergedDb, skippedArchivedCharIds } = mergeServerDbWithTrackedLocalChanges(
+                latestDb, db, toSave, safeStructuredClone, convertStubsToPlaceholders, syncedArchivedIds,
+            )
             setDatabase(mergedDb)
+            if (skippedArchivedCharIds.length > 0) {
+                // Deactivated on another device while this one still held
+                // edits for them; the edits were dropped (see rebaseMerge).
+                const names = skippedArchivedCharIds.map((chaId) => localNames.get(chaId) ?? chaId).join(', ')
+                console.warn('[Save] Dropped local edits to characters deactivated elsewhere:', skippedArchivedCharIds)
+                addLog({
+                    level: 'warning',
+                    source: 'save',
+                    message: '[Save] Dropped local edits to characters deactivated on another device',
+                    description: skippedArchivedCharIds.join(', '),
+                })
+                notifyError(language.rebaseSkippedArchived(names))
+                if (selectedChaId && skippedArchivedCharIds.includes(selectedChaId)) {
+                    deselectCharacter()
+                }
+            }
 
             encoder = new RisuSaveEncoder()
             await encoder.init(getDatabase(), {
                 compression: false
             })
             if (supportsPatchSync) {
+                // Seed from the server's view, not the merged result: the
+                // retry then sends the overlaid local changes as a patch
+                // instead of an empty patch that 409s into a full write.
                 patcher = new RisuSavePatcher()
-                await patcher.init(mergedBaseline)
+                await patcher.init(latestDb)
                 activeSavePatcher = patcher
             }
         }
@@ -1006,9 +1067,23 @@ export async function saveDb() {
 
         let saved = false
         let newEtag: string | undefined
+        // Characters the patcher saw change by hash in this attempt, so a
+        // rebase overlays every edited character, not only the tracked ones.
+        let attemptedChangedCharIds: string[] = []
+        // Decided in the same tick as the ids above: rebase attributes edits
+        // by chaId, so with a missing or repeated one the pre-existing
+        // behaviour (full write, plain rebase) is kept for this save.
+        let attemptedIdsAmbiguous = false
+        // The deactivated list as of the last sync, read BEFORE set() below
+        // advances the patcher's baseline to this attempt's local state; a
+        // rebase classifies in-flight (de)activations against it.
+        let syncedArchivedIds: ReadonlySet<string> = new Set()
 
         if (supportsPatchSync && !options?.forceFullWrite) {
+            syncedArchivedIds = patcher.baselineArchivedCharacterIds()
             const patchData = await patcher.set(db, safeStructuredClone(toSave))
+            attemptedChangedCharIds = patcher.changedCharacterIdsOfLastSet()
+            attemptedIdsAmbiguous = hasAmbiguousCharacterIds(db.characters ?? [])
             // Refuse to send patches that would corrupt server-side lazy chats.
             // chatToStub strips chats to metadata before diffing, so the only
             // way these ops appear is a baseline desync. Falling through to a
@@ -1169,9 +1244,15 @@ export async function saveDb() {
                 }
                 // Leave saved=false so the full-write path below kicks in.
             } else {
+                // The revision this client last synced against, read before
+                // the patch: a 409 returns the server's current etag, which
+                // is adopted only on success — adopting it on failure would
+                // let the full-write fallback pass x-if-match over another
+                // device's write.
+                const syncedEtag = forageStorage.getDbEtag()
                 const patchResult = await forageStorage.patchItem('database/database.bin', patchData)
                 saved = patchResult.success
-                if (patchResult.etag) {
+                if (patchResult.success && patchResult.etag) {
                     newEtag = patchResult.etag
                     forageStorage.setDbEtag(patchResult.etag)
                 }
@@ -1180,7 +1261,7 @@ export async function saveDb() {
                 }
                 // Server's chat-internal-field guard rejected the patch — the
                 // client-side guard above missed this case. Surface to user
-                // and continue to the full-write fallback below.
+                // and continue to the conflict handling below (rebase or full write).
                 if (patchResult.chatGuardRejected) {
                     console.error('[Save] Server rejected patch — chat-internal field ops detected server-side')
                     showChatGuardToastThrottled('server')
@@ -1193,27 +1274,56 @@ export async function saveDb() {
                     try {
                         const report = patcher.describeHashMismatch(patchResult.hashDiagnostics)
                         console.warn('[Save] Patch hash mismatch, diverged keys:', report)
-                        const keySetDiffs = report.roots.onlyLocal.length + report.roots.onlyRemote.length
-                            + report.characters.onlyLocal.length + report.characters.onlyRemote.length
-                        const duplicates = report.duplicateCharIds.length + report.serverDuplicateCharIds.length
-                        // Counts and flags first: the message is the dedupe key
-                        // and gets truncated, so the stable discriminator must
-                        // survive the cut ahead of the (possibly long) id lists.
-                        const summary = [
-                            `roots:${report.roots.mismatched.length} chars:${report.characters.mismatched.length} keyset:${keySetDiffs} dup:${duplicates}`,
-                            report.compositionOnly ? 'composition-only' : '',
-                            report.roots.mismatched.length ? `[${report.roots.mismatched.join(',')}]` : '',
-                            report.characters.mismatched.length ? `[${report.characters.mismatched.join(',')}]` : '',
-                        ].filter(Boolean).join(' ')
                         addLog({
                             level: 'warning',
                             source: 'save',
-                            message: `[Save] Patch hash mismatch: ${summary}`.slice(0, 300),
+                            message: `[Save] Patch hash mismatch: ${summarizeHashMismatch(report)}`.slice(0, 300),
                             description: JSON.stringify(report),
                         })
                     } catch (e) {
                         console.warn('[Save] Failed to describe patch hash mismatch:', e)
                     }
+                } else if (!patchResult.success && patchResult.conflictCode && !patchResult.chatGuardRejected) {
+                    // Any other server guard (asset manifest, deactivated
+                    // character): say which, or the fallback below hides it.
+                    console.warn('[Save] Patch rejected by server:', patchResult.conflictCode, patchResult.conflictError ?? '')
+                    addLog({
+                        level: 'warning',
+                        source: 'save',
+                        message: `[Save] Patch rejected: ${patchResult.conflictCode}`,
+                        description: patchResult.conflictError,
+                    })
+                    if (patchResult.conflictCode === 'ARCHIVE_GUARD_REJECTED' && patchResult.etag === syncedEtag) {
+                        // Our own revision was refused for an invalid
+                        // deactivation state (e.g. a character returned from
+                        // the archive without /activate after a server
+                        // restart). A full write or rebase would only replay
+                        // the same state; surface it through the error path
+                        // instead of cycling.
+                        throw new Error(patchResult.conflictError ?? 'Save rejected: deactivated-character state is inconsistent')
+                    }
+                }
+                if (!patchResult.success && patchResult.etag && patchResult.etag !== syncedEtag && attemptedIdsAmbiguous) {
+                    // Rebase attributes edits by chaId; with a missing or
+                    // repeated one the hash-detected widening could misplace
+                    // an edit, so rebase with the tracked list only (the
+                    // pre-existing conflict behaviour) and retry.
+                    console.warn('[Save] Foreign revision conflict with ambiguous character ids, rebasing tracked changes only...')
+                    await rebaseTrackedLocalChangesOnLatestServerDb(patchResult.etag, db, toSave, syncedArchivedIds)
+                    await sleep(Math.min(500 * (savetrys + 1), 3000))
+                    return 'retry'
+                } else if (!patchResult.success && patchResult.etag && patchResult.etag !== syncedEtag) {
+                    // The server's revision is not the one this client last
+                    // synced against: someone else wrote in between. A full
+                    // write would pass x-if-match with the server's etag and
+                    // silently overwrite their changes, so merge theirs first
+                    // (the same path a full-write 409 takes) and retry.
+                    console.warn('[Save] Patch conflict with a foreign revision, rebasing tracked local changes on latest server DB...')
+                    await rebaseTrackedLocalChangesOnLatestServerDb(
+                        patchResult.etag, db, withTrackedCharacters(toSave, attemptedChangedCharIds), syncedArchivedIds,
+                    )
+                    await sleep(Math.min(500 * (savetrys + 1), 3000))
+                    return 'retry'
                 }
             }
         }
@@ -1227,7 +1337,11 @@ export async function saveDb() {
             } catch (conflictErr) {
                 if (conflictErr instanceof ConflictError) {
                     console.warn('[Save] Full-write conflict detected, rebasing tracked local changes on latest server DB...')
-                    await rebaseTrackedLocalChangesOnLatestServerDb(conflictErr.currentEtag ?? null, db, toSave)
+                    await rebaseTrackedLocalChangesOnLatestServerDb(
+                        conflictErr.currentEtag ?? null, db,
+                        attemptedIdsAmbiguous ? toSave : withTrackedCharacters(toSave, attemptedChangedCharIds),
+                        syncedArchivedIds,
+                    )
                     await sleep(Math.min(500 * (savetrys + 1), 3000))
                     return 'retry'
                 }
@@ -1239,6 +1353,7 @@ export async function saveDb() {
             if (supportsPatchSync) {
                 const decodedDb = await decodeRisuSave(dbData)
                 await patcher.init(decodedDb)
+                await resyncBaselineAfterFullWrite()
             }
         }
 
@@ -1271,6 +1386,15 @@ export async function saveDb() {
                 const result = await persistTrackedChanges(toSave, options)
                 if (result === 'saved') {
                     savetrys = 0
+                    consecutiveRetries = 0
+                } else if (result === 'retry') {
+                    // A rebase requeued the changes; a conflict that never
+                    // settles must surface instead of re-downloading forever.
+                    consecutiveRetries += 1
+                    if (consecutiveRetries > MAX_CONSECUTIVE_SAVE_RETRIES) {
+                        consecutiveRetries = 0
+                        throw new Error('Saving keeps conflicting with the server after repeated rebases')
+                    }
                 } else if (result === 'noop' && hasTrackedChanges(toSave)) {
                     requeueTrackedChanges(toSave)
                     changed = true
@@ -1305,6 +1429,10 @@ export async function saveDb() {
     }
 
     let savetrys = 0
+
+    let consecutiveRetries = 0
+
+    const MAX_CONSECUTIVE_SAVE_RETRIES = 5
     while (true) {
         if (!changed) {
             await sleep(200)

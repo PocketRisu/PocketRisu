@@ -1283,3 +1283,63 @@ describe('describeHashMismatch — naming the diverged keys from a 409', () => {
         expect(report.characters).toEqual({ mismatched: [], onlyLocal: [], onlyRemote: [] })
     })
 })
+
+describe('changedCharacterIdsOfLastSet — which characters a save actually changed', () => {
+    test('per-character path: an untracked edit is reported, untouched characters are not', async () => {
+        const db = dbWith([chr('a'), chr('b'), chr('c')])
+        const patcher = new RisuSavePatcher()
+        await patcher.init(clone(db))
+        const next = clone(db)
+        next.characters[1].desc = 'edited without a tracker entry'
+        await patcher.set(clone(next), emptyToSave())
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual(['b'])
+    })
+
+    test('a tracked but unchanged character is not reported', async () => {
+        const db = dbWith([chr('a'), chr('b')])
+        const patcher = new RisuSavePatcher()
+        await patcher.init(clone(db))
+        await patcher.set(clone(db), { ...emptyToSave(), character: ['a'] })
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual([])
+    })
+
+    test('structural path: only added or edited bodies are reported, a pure reorder reports nothing', async () => {
+        const db = dbWith([chr('a'), chr('b'), chr('c')])
+        const patcher = new RisuSavePatcher()
+        await patcher.init(clone(db))
+
+        const reordered = clone(db)
+        reordered.characters.reverse()
+        await patcher.set(clone(reordered), emptyToSave())
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual([])
+
+        const changed = clone(reordered)
+        changed.characters.splice(1, 1) // remove b
+        changed.characters[0].desc = 'edited c'
+        changed.characters.push(chr('d'))
+        await patcher.set(clone(changed), emptyToSave())
+        expect(patcher.changedCharacterIdsOfLastSet().sort()).toEqual(['c', 'd'])
+    })
+
+    test('the list is reset on every set()', async () => {
+        const db = dbWith([chr('a')])
+        const patcher = new RisuSavePatcher()
+        await patcher.init(clone(db))
+        const next = clone(db); next.characters[0].desc = 'x'
+        await patcher.set(clone(next), emptyToSave())
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual(['a'])
+        await patcher.set(clone(next), emptyToSave())
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual([])
+    })
+})
+
+describe('baselineArchivedCharacterIds', () => {
+    test('lists the deactivated chaIds of the baseline and ignores malformed stubs', async () => {
+        const patcher = new RisuSavePatcher()
+        await patcher.init(dbWith([chr('a')], { nodeOnlyArchivedCharacters: [{ chaId: 'x' }, { chaId: '' }, null, { name: 'no id' }] }))
+        expect([...patcher.baselineArchivedCharacterIds()]).toEqual(['x'])
+        const bare = new RisuSavePatcher()
+        await bare.init(dbWith([]))
+        expect(bare.baselineArchivedCharacterIds().size).toBe(0)
+    })
+})

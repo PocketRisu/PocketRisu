@@ -88,6 +88,30 @@ function computeDatabaseEtagFromObject(databaseObject) {
     return computeBufferEtag(Buffer.from(encodeRisuSaveLegacy(databaseObject)));
 }
 
+// Per-root-key and per-character hashes of a client-view database, in the
+// hex form RisuSavePatcher.describeHashMismatch compares against its own
+// baseline. Characters are keyed by chaId (or `#index` when missing); the
+// first occurrence of a repeated id wins and the repeats are listed so the
+// client sees a stable pair instead of a last-writer-wins collision.
+function databaseHashDiagnostics(databaseObject) {
+    const keyHashes = {};
+    for (const [key, value] of Object.entries(databasePatchHashCache.keyHashes(databaseObject))) {
+        keyHashes[key] = value.toString(16);
+    }
+    const characterHashes = {};
+    const duplicateCharIds = [];
+    const characters = Array.isArray(databaseObject?.characters) ? databaseObject.characters : [];
+    characters.forEach((character, index) => {
+        const id = typeof character?.chaId === 'string' && character.chaId ? character.chaId : `#${index}`;
+        if (Object.prototype.hasOwnProperty.call(characterHashes, id)) {
+            duplicateCharIds.push(id);
+            return;
+        }
+        characterHashes[id] = calculateHash(character).toString(16);
+    });
+    return { keyHashes, characterHashes, duplicateCharIds };
+}
+
 let storageOperationQueue = Promise.resolve();
 function queueStorageOperation(operation) {
     const operationRun = storageOperationQueue.then(operation, operation);
@@ -4077,6 +4101,8 @@ app.post('/api/write', async (req, res, next) => {
                 try {
                     // eslint-disable-next-line no-var
                     var persistedEtag;
+                    // eslint-disable-next-line no-var
+                    var persistedHashes;
                     const incomingDb = await decodeRisuSave(fileContent);
                     const archiveConflict = findArchiveConflicts(dbCache[DB_HEX_KEY], incomingDb, null);
                     if (archiveConflict) {
@@ -4160,9 +4186,23 @@ app.post('/api/write', async (req, res, next) => {
                     // PERSISTED DB, stripped. Not the request bytes — the
                     // split above may have emptied pluginCustomStorage, so
                     // the client's copy and the served copy differ.
-                    persistedEtag = computeDatabaseEtagFromObject(
-                        normalizeJSON(stripDatabaseForClient(fullDb, { reconcileManifests: true })),
-                    );
+                    const persistedView = normalizeJSON(stripDatabaseForClient(fullDb, { reconcileManifests: true }));
+                    persistedEtag = computeDatabaseEtagFromObject(persistedView);
+                    // Hashes of that same view, so the client can tell at once
+                    // whether the baseline it re-seeds from its own bytes matches
+                    // what the server holds — a silent difference here is what
+                    // turns every later save into a full write.
+                    try {
+                        // keyHashes first: hash() then composes from the cached
+                        // per-key values instead of walking the view again.
+                        const diagnostics = databaseHashDiagnostics(persistedView);
+                        persistedHashes = {
+                            serverHash: databasePatchHashCache.hash(persistedView).toString(16),
+                            ...diagnostics,
+                        };
+                    } catch {
+                        persistedHashes = undefined;
+                    }
                 } catch (e) {
                     logger.error('[Write] Failed to merge chats into database.bin:', e.message);
                     // Do NOT write stubs-only to disk — that would permanently
@@ -4187,7 +4227,8 @@ app.post('/api/write', async (req, res, next) => {
 
             res.send({
                 success: true,
-                etag: key === 'database/database.bin' ? dbEtag : undefined
+                etag: key === 'database/database.bin' ? dbEtag : undefined,
+                ...(key === 'database/database.bin' && persistedHashes ? persistedHashes : {}),
             });
         });
     } catch (error) {
@@ -4334,24 +4375,7 @@ app.post('/api/patch', async (req, res, next) => {
                         dbEtag = currentEtag;
                     } catch {}
                     try {
-                        keyHashes = {};
-                        for (const [key, value] of Object.entries(databasePatchHashCache.keyHashes(dbCache[filePath]))) {
-                            keyHashes[key] = value.toString(16);
-                        }
-                        characterHashes = {};
-                        duplicateCharIds = [];
-                        const characters = Array.isArray(dbCache[filePath]?.characters) ? dbCache[filePath].characters : [];
-                        characters.forEach((character, index) => {
-                            const id = typeof character?.chaId === 'string' && character.chaId ? character.chaId : `#${index}`;
-                            // First occurrence wins so the client (which also
-                            // compares its first occurrence) sees a stable pair;
-                            // repeats are reported instead of overwriting.
-                            if (Object.prototype.hasOwnProperty.call(characterHashes, id)) {
-                                duplicateCharIds.push(id);
-                                return;
-                            }
-                            characterHashes[id] = calculateHash(character).toString(16);
-                        });
+                        ({ keyHashes, characterHashes, duplicateCharIds } = databaseHashDiagnostics(dbCache[filePath]));
                     } catch {
                         keyHashes = undefined;
                         characterHashes = undefined;
@@ -4360,6 +4384,7 @@ app.post('/api/patch', async (req, res, next) => {
                 }
                 res.status(409).send({
                     error: 'Hash mismatch - data out of sync',
+                    code: 'HASH_MISMATCH',
                     currentEtag,
                     serverHash,
                     keyHashes,
@@ -4593,7 +4618,16 @@ app.get('/api/asset-manifests/:manifestId', async (req, res, next) => {
             limit: req.query.limit,
             search: req.query.search,
         });
-        if (!page) return res.status(404).json({ error: 'Asset manifest not found' });
+        if (!page) return res.status(404).set('Cache-Control', 'no-store').json({ error: 'Asset manifest not found' });
+        // Manifest ids are content-addressed, so a page for a given id and
+        // query never changes: let the browser keep it across reloads. The
+        // client's in-memory manifest cache is cold on every page load, and
+        // re-downloading every page over a remote link is what made chat
+        // entry slow. The page JSON shape is part of the manifest format —
+        // bump MANIFEST_FORMAT_VERSION (the client sends it as `v`) when
+        // changing it, so stale cached pages are never read by newer code.
+        // `private`: the route is auth-gated, so only the browser may keep it.
+        res.set('Cache-Control', 'private, max-age=31536000, immutable');
         res.json(page);
     } catch (error) { next(error); }
 });

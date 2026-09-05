@@ -15,6 +15,7 @@ const AUTH_FETCH_TRANSIENT_BASE_DELAY_MS = 500
 const AUTH_FETCH_TRANSIENT_JITTER_MIN = 0.5
 const AUTH_FETCH_TRANSIENT_JITTER_MAX = 1.5
 const AUTH_FETCH_TRANSIENT_STATUS = new Set([502, 503, 504])
+const FIRST_BYTE_TIMEOUT_MS = 30_000
 
 export type StorageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -105,6 +106,21 @@ export interface PatchItemResult {
     chatGuardRejected?: boolean
     /** Server-side per-key hashes sent with a hash-mismatch 409. */
     hashDiagnostics?: PatchHashDiagnostics
+    /** `code` / `error` of a 409 body, for logging which guard rejected the patch. */
+    conflictCode?: string
+    conflictError?: string
+}
+
+/** Hash fields a 409 or a full-write response may carry; null when absent. */
+export function parseHashDiagnostics(data: any): PatchHashDiagnostics | null {
+    if (!data || typeof data !== 'object') return null
+    if (!(data.keyHashes || data.characterHashes || typeof data.serverHash === 'string')) return null
+    return {
+        serverHash: typeof data.serverHash === 'string' ? data.serverHash : undefined,
+        keyHashes: data.keyHashes && typeof data.keyHashes === 'object' ? data.keyHashes : undefined,
+        characterHashes: data.characterHashes && typeof data.characterHashes === 'object' ? data.characterHashes : undefined,
+        duplicateCharIds: Array.isArray(data.duplicateCharIds) ? data.duplicateCharIds.filter((id: unknown) => typeof id === 'string') : undefined,
+    }
 }
 
 export interface PatchHashDiagnostics {
@@ -190,6 +206,8 @@ export class NodeStorage{
     })()
 
     _lastDbEtag: string | null = null
+
+    private _lastDbWriteDiagnostics: PatchHashDiagnostics | null = null
     authChecked = false
     private cachedJwt: { token: string; expiresAt: number } | null = null
     private static sessionInitialized = false
@@ -379,6 +397,44 @@ export class NodeStorage{
         }
     }
 
+    // A half-open remote link (a phone on Tailscale that silently dropped)
+    // leaves a fetch hanging forever. For the idempotent GETs on the chat
+    // entry path, give the server this long to send response headers, then
+    // abort and try once more. The body is deliberately not limited: once
+    // headers arrive the link is alive, and a large chat may take a while.
+    private async authFetchGetWithFirstByteTimeout(
+        input: RequestInfo | URL,
+        init: RequestInit = {},
+        timeoutMs = FIRST_BYTE_TIMEOUT_MS,
+    ): Promise<Response> {
+        // A caller-supplied signal keeps full control; nothing is layered on top.
+        if (init.signal) return this.authFetch(input, init)
+        for (let attempt = 0; ; attempt++) {
+            const controller = new AbortController()
+            let timedOut = false
+            let cancelTimer: () => void = () => {}
+            // Raced rather than relying on the signal alone: the auth and
+            // session pre-flight inside authFetch use their own fetches that
+            // do not carry this signal, and a hang there must still time out.
+            const timeout = new Promise<never>((_resolve, reject) => {
+                const timer = setTimeout(() => {
+                    timedOut = true
+                    controller.abort()
+                    reject(new DOMException(`No response headers within ${timeoutMs}ms`, 'AbortError'))
+                }, timeoutMs)
+                cancelTimer = () => clearTimeout(timer)
+            })
+            try {
+                return await Promise.race([this.authFetch(input, { ...init, signal: controller.signal }), timeout])
+            } catch (error) {
+                if (!timedOut || attempt >= 1) throw error
+                console.warn(`[Storage] No response headers within ${timeoutMs}ms, retrying once: ${String(input)}`)
+            } finally {
+                cancelTimer()
+            }
+        }
+    }
+
     private async authFetchOnce(input: RequestInfo | URL, init: RequestInit = {}, retry = true) {
         await this.checkAuth()
         const headers = new Headers(init.headers)
@@ -462,6 +518,16 @@ export class NodeStorage{
         if (key === 'database/database.bin' && nextEtag) {
             this._lastDbEtag = nextEtag
         }
+        if (key === 'database/database.bin') {
+            this._lastDbWriteDiagnostics = parseHashDiagnostics(data)
+        }
+    }
+
+    /** Hashes of the view the last database.bin full write persisted; consumed once. */
+    takeDbWriteDiagnostics(): PatchHashDiagnostics | null {
+        const diagnostics = this._lastDbWriteDiagnostics
+        this._lastDbWriteDiagnostics = null
+        return diagnostics
     }
     async getItem(key:string):Promise<Buffer> {
         const headers: Record<string, string> = {
@@ -599,25 +665,25 @@ export class NodeStorage{
 
         if (da.status === 409) {
             const data = await da.json()
+            // The server's etag is returned for the caller to compare, not
+            // adopted: if it differs from the one this client last synced
+            // against, someone else wrote in between, and adopting it would
+            // let the full-write fallback pass x-if-match and overwrite them.
             const currentEtag = data.currentEtag as string | undefined
-            if (key === 'database/database.bin' && currentEtag) {
-                this._lastDbEtag = currentEtag
-            }
             // Server signals chat-guard rejection via explicit fields. The
             // error string fallback is kept for forward-compat with deployed
             // servers that haven't shipped the explicit fields yet.
             const rejectedByChatGuard = data.chatGuardRejected === true
                 || data.code === 'CHAT_GUARD_REJECTED'
                 || (typeof data.error === 'string' && data.error.includes('chat-internal field ops'))
-            const hashDiagnostics: PatchHashDiagnostics | undefined = (data.keyHashes || data.characterHashes || data.serverHash)
-                ? {
-                    serverHash: typeof data.serverHash === 'string' ? data.serverHash : undefined,
-                    keyHashes: data.keyHashes && typeof data.keyHashes === 'object' ? data.keyHashes : undefined,
-                    characterHashes: data.characterHashes && typeof data.characterHashes === 'object' ? data.characterHashes : undefined,
-                    duplicateCharIds: Array.isArray(data.duplicateCharIds) ? data.duplicateCharIds.filter((id: unknown) => typeof id === 'string') : undefined,
-                }
-                : undefined
-            return { success: false, etag: currentEtag, chatGuardRejected: rejectedByChatGuard, hashDiagnostics }
+            return {
+                success: false,
+                etag: currentEtag,
+                chatGuardRejected: rejectedByChatGuard,
+                hashDiagnostics: parseHashDiagnostics(data) ?? undefined,
+                conflictCode: typeof data.code === 'string' ? data.code : undefined,
+                conflictError: typeof data.error === 'string' ? data.error : undefined,
+            }
         }
         if (da.status < 200 || da.status >= 300) {
             // Surface the server's error detail — without this the browser
@@ -702,9 +768,13 @@ export class NodeStorage{
         if (options.offset != null) params.set('offset', String(options.offset))
         if (options.limit != null) params.set('limit', String(options.limit))
         if (options.search) params.set('search', options.search)
+        // The server caches pages as immutable (content-addressed ids); the
+        // format version in the URL keeps a newer client from reading a page
+        // shape cached by an older one.
+        if (descriptor?.version != null) params.set('v', String(descriptor.version))
         const query = params.toString()
         for (let attempt = 0; attempt < 2; attempt++) {
-            const da = await this.authFetch(`/api/asset-manifests/${encodeURIComponent(manifestId)}${query ? `?${query}` : ''}`)
+            const da = await this.authFetchGetWithFirstByteTimeout(`/api/asset-manifests/${encodeURIComponent(manifestId)}${query ? `?${query}` : ''}`)
             if (da.ok) return await da.json()
             if (da.status !== 404 || !descriptor?.ownerKind || !descriptor.ownerId || attempt > 0) {
                 throw new Error(`asset manifest read error: ${da.status}`)
@@ -1060,7 +1130,7 @@ export class NodeStorage{
     // ── Chat content (runtime lazy load) ────────────────────────────────────
 
     async fetchChatContent(chaId: string, chatIndex: number, chatId: string): Promise<any | null> {
-        const da = await this.authFetch(`/api/chat-content/${encodeURIComponent(chaId)}/${chatIndex}`, {
+        const da = await this.authFetchGetWithFirstByteTimeout(`/api/chat-content/${encodeURIComponent(chaId)}/${chatIndex}`, {
             headers: { 'x-chat-id': chatId },
         })
         if (da.status === 404) return null
