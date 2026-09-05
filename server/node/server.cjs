@@ -4290,18 +4290,53 @@ app.post('/api/patch', async (req, res, next) => {
                 : calculateHash(dbCache[filePath]).toString(16);
 
             if (expectedHash !== serverHash) {
-                console.log(`[Patch] Hash mismatch for ${decodedKey}: expected=${expectedHash}, server=${serverHash}`);
+                logger.warn(`[Patch] Hash mismatch for ${decodedKey}: expected=${expectedHash}, server=${serverHash}`);
                 let currentEtag = undefined;
+                // Per-key hashes let the client name the diverged root keys and
+                // characters (see RisuSavePatcher.describeHashMismatch). Only
+                // computed on this rare path; hashing cost is bounded by one
+                // full-document hash.
+                let keyHashes = undefined;
+                let characterHashes = undefined;
+                let duplicateCharIds = undefined;
                 if (decodedKey === 'database/database.bin') {
                     // Encode failure must not upgrade this 409 into a 500.
                     try {
                         currentEtag = computeBufferEtag(Buffer.from(encodeRisuSaveLegacy(dbCache[filePath])));
                         dbEtag = currentEtag;
                     } catch {}
+                    try {
+                        keyHashes = {};
+                        for (const [key, value] of Object.entries(databasePatchHashCache.keyHashes(dbCache[filePath]))) {
+                            keyHashes[key] = value.toString(16);
+                        }
+                        characterHashes = {};
+                        duplicateCharIds = [];
+                        const characters = Array.isArray(dbCache[filePath]?.characters) ? dbCache[filePath].characters : [];
+                        characters.forEach((character, index) => {
+                            const id = typeof character?.chaId === 'string' && character.chaId ? character.chaId : `#${index}`;
+                            // First occurrence wins so the client (which also
+                            // compares its first occurrence) sees a stable pair;
+                            // repeats are reported instead of overwriting.
+                            if (Object.prototype.hasOwnProperty.call(characterHashes, id)) {
+                                duplicateCharIds.push(id);
+                                return;
+                            }
+                            characterHashes[id] = calculateHash(character).toString(16);
+                        });
+                    } catch {
+                        keyHashes = undefined;
+                        characterHashes = undefined;
+                        duplicateCharIds = undefined;
+                    }
                 }
                 res.status(409).send({
                     error: 'Hash mismatch - data out of sync',
-                    currentEtag
+                    currentEtag,
+                    serverHash,
+                    keyHashes,
+                    characterHashes,
+                    duplicateCharIds,
                 });
                 return;
             }

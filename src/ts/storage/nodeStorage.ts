@@ -103,6 +103,18 @@ export interface PatchItemResult {
     persistWarning?: PersistWarning
     /** Set when the server's chat-internal-field guard rejected the patch. */
     chatGuardRejected?: boolean
+    /** Server-side per-key hashes sent with a hash-mismatch 409. */
+    hashDiagnostics?: PatchHashDiagnostics
+}
+
+export interface PatchHashDiagnostics {
+    serverHash?: string
+    /** Root key → hex hash of the server's current value. */
+    keyHashes?: Record<string, string>
+    /** chaId (or `#index` when missing) → hex hash of the server's stubbed character (first occurrence). */
+    characterHashes?: Record<string, string>
+    /** chaIds that repeat in the server's characters array. */
+    duplicateCharIds?: string[]
 }
 
 export interface ExportBackupOptions {
@@ -597,7 +609,15 @@ export class NodeStorage{
             const rejectedByChatGuard = data.chatGuardRejected === true
                 || data.code === 'CHAT_GUARD_REJECTED'
                 || (typeof data.error === 'string' && data.error.includes('chat-internal field ops'))
-            return { success: false, etag: currentEtag, chatGuardRejected: rejectedByChatGuard }
+            const hashDiagnostics: PatchHashDiagnostics | undefined = (data.keyHashes || data.characterHashes || data.serverHash)
+                ? {
+                    serverHash: typeof data.serverHash === 'string' ? data.serverHash : undefined,
+                    keyHashes: data.keyHashes && typeof data.keyHashes === 'object' ? data.keyHashes : undefined,
+                    characterHashes: data.characterHashes && typeof data.characterHashes === 'object' ? data.characterHashes : undefined,
+                    duplicateCharIds: Array.isArray(data.duplicateCharIds) ? data.duplicateCharIds.filter((id: unknown) => typeof id === 'string') : undefined,
+                }
+                : undefined
+            return { success: false, etag: currentEtag, chatGuardRejected: rejectedByChatGuard, hashDiagnostics }
         }
         if (da.status < 200 || da.status >= 300) {
             // Surface the server's error detail — without this the browser

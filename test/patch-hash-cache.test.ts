@@ -7,6 +7,7 @@ const { createPatchHashCache, collectTouchedTopLevelKeys } = patchHashPkg as {
     createPatchHashCache: (calculateHash: (value: any) => number) => {
         hash: (database: any) => number
         update: (previousDatabase: any, nextDatabase: any, patch: any[]) => number
+        keyHashes: (database: any) => Record<string, number>
     }
     collectTouchedTopLevelKeys: (patch: any[]) => { keys: Set<string>, touchesRoot: boolean }
 }
@@ -105,5 +106,39 @@ describe('patch hash cache', () => {
         const next = apply(db, patch)
         expect(cache.update(db, next, patch)).toBe(calculateHash(next))
         expect(largeHashCalls).toBe(1)
+    })
+})
+
+describe('patch hash cache — keyHashes', () => {
+    it('exposes per-root-key hashes equal to calculateHash of each value, before and after an update', () => {
+        const db = {
+            username: 'u',
+            modules: [{ id: 'm1', value: 1 }],
+            characters: [{ chaId: 'c1', chats: [{ id: 'chat', _stub: true }] }],
+        }
+        const cache = createPatchHashCache(calculateHash)
+        cache.hash(db)
+        expect(cache.keyHashes(db)).toEqual({
+            username: calculateHash(db.username),
+            modules: calculateHash(db.modules),
+            characters: calculateHash(db.characters),
+        })
+
+        const patch = [{ op: 'replace', path: '/modules/0/value', value: 2 }]
+        const next = apply(db, patch)
+        cache.update(db, next, patch)
+        const hashes = cache.keyHashes(next)
+        expect(hashes.modules).toBe(calculateHash(next.modules))
+        expect(hashes.username).toBe(calculateHash(db.username))
+        expect(hashes.characters).toBe(calculateHash(db.characters))
+    })
+
+    it('fills keys the cache has not seen and returns nothing for a non-object root', () => {
+        const cache = createPatchHashCache(calculateHash)
+        const db: any = { a: 1 }
+        cache.hash(db)
+        db.b = 'late'
+        expect(cache.keyHashes(db)).toEqual({ a: calculateHash(1), b: calculateHash('late') })
+        expect(cache.keyHashes([1, 2])).toEqual({})
     })
 })

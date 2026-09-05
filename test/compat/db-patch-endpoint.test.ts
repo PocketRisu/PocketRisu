@@ -55,6 +55,25 @@ describe('/api/patch endpoint', () => {
 
     const stale = await sendPatch([{ op: 'replace', path: '/characters/0/name', value: 'again' }], before.hash)
     expect(stale.status).toBe(409)
+
+    // The 409 names what diverged: per-root-key and per-character hashes of
+    // the server's current view, in the same hex form the client computes.
+    const conflict = await stale.json() as {
+      serverHash: string
+      keyHashes: Record<string, string>
+      characterHashes: Record<string, string>
+      duplicateCharIds: string[]
+    }
+    expect(conflict.serverHash).toBe(after.hash)
+    for (const key of Object.keys(after.db)) {
+      expect(conflict.keyHashes[key]).toBe(utils.calculateHash(after.db[key]).toString(16))
+    }
+    expect(Object.keys(conflict.keyHashes).sort()).toEqual(Object.keys(after.db).sort())
+    for (const character of after.db.characters) {
+      expect(conflict.characterHashes[character.chaId]).toBe(utils.calculateHash(character).toString(16))
+    }
+    expect(Object.keys(conflict.characterHashes)).toHaveLength(after.db.characters.length)
+    expect(conflict.duplicateCharIds).toEqual([])
   })
 
   test('consecutive patches keep the cached hash in sync with the client', async () => {

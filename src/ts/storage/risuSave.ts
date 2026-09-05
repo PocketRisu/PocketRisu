@@ -837,6 +837,26 @@ export function diffArrayWithIdGuard(
     return ops
 }
 
+export type HashMismatchRemote = {
+    serverHash?: string
+    keyHashes?: Record<string, string>
+    characterHashes?: Record<string, string>
+    duplicateCharIds?: string[]
+}
+
+export type HashMismatchReport = {
+    localHash: string
+    serverHash?: string
+    roots: { mismatched: string[]; onlyLocal: string[]; onlyRemote: string[] }
+    characters: { mismatched: string[]; onlyLocal: string[]; onlyRemote: string[] }
+    /** chaIds that appear more than once in the local baseline (first occurrence is the one compared). */
+    duplicateCharIds: string[]
+    /** chaIds the server reported as repeated in its own characters array. */
+    serverDuplicateCharIds: string[]
+    /** Every compared block agrees yet the document hash differs — key set or composition problem. */
+    compositionOnly: boolean
+}
+
 export class RisuSavePatcher {
     private lastSyncedDb: any;
     private hashBlocks: { [key: string]: number } = {};
@@ -871,6 +891,62 @@ export class RisuSavePatcher {
             rootHash += (Math.imul(calculateHash(key), PRIME_MULTIPLIER) + this.hashBlocks[key])
         }
         return (rootHash >>> 0).toString(16);
+    }
+
+    /**
+     * Compare this baseline's per-key hashes with the ones the server sent on
+     * a hash-mismatch 409, naming the root keys and characters that diverged.
+     * Diagnostic only — never changes the baseline.
+     */
+    describeHashMismatch(remote: HashMismatchRemote): HashMismatchReport {
+        const localHash = this.hash()
+        const roots = { mismatched: [] as string[], onlyLocal: [] as string[], onlyRemote: [] as string[] }
+        const characters = { mismatched: [] as string[], onlyLocal: [] as string[], onlyRemote: [] as string[] }
+
+        const remoteKeys = remote.keyHashes ?? {}
+        const localKeys = Object.keys(this.lastSyncedDb)
+        for (const key of localKeys) {
+            if (!Object.hasOwn(remoteKeys, key)) {
+                if (remote.keyHashes) roots.onlyLocal.push(key)
+                continue
+            }
+            if (Number.parseInt(remoteKeys[key], 16) !== this.hashBlocks[key]) roots.mismatched.push(key)
+        }
+        for (const key of Object.keys(remoteKeys)) {
+            if (!Object.hasOwn(this.lastSyncedDb, key)) roots.onlyRemote.push(key)
+        }
+
+        // Characters are keyed the way the server keys them: chaId, or
+        // `#index` when it is missing. Hash the baseline entry directly (it
+        // already holds stubbed chats) instead of reading hashBlocks[chaId],
+        // which is undefined for an id-less character and last-writer-wins
+        // for duplicates — the very corruptions a mismatch loop may stem from.
+        const remoteChars = remote.characterHashes ?? {}
+        const localCharIds = new Set<string>()
+        const duplicateCharIds: string[] = []
+        const localChars: any[] = Array.isArray(this.lastSyncedDb.characters) ? this.lastSyncedDb.characters : []
+        localChars.forEach((character, index) => {
+            const id = typeof character?.chaId === 'string' && character.chaId ? character.chaId : `#${index}`
+            if (localCharIds.has(id)) {
+                duplicateCharIds.push(id)
+                return
+            }
+            localCharIds.add(id)
+            if (!Object.hasOwn(remoteChars, id)) {
+                if (remote.characterHashes) characters.onlyLocal.push(id)
+                return
+            }
+            if (Number.parseInt(remoteChars[id], 16) !== calculateHash(character)) characters.mismatched.push(id)
+        })
+        for (const id of Object.keys(remoteChars)) {
+            if (!localCharIds.has(id)) characters.onlyRemote.push(id)
+        }
+
+        const serverDuplicateCharIds = Array.isArray(remote.duplicateCharIds) ? [...remote.duplicateCharIds] : []
+        const compositionOnly = [roots, characters]
+            .every((group) => group.mismatched.length === 0 && group.onlyLocal.length === 0 && group.onlyRemote.length === 0)
+            && duplicateCharIds.length === 0 && serverDuplicateCharIds.length === 0
+        return { localHash, serverHash: remote.serverHash, roots, characters, duplicateCharIds, serverDuplicateCharIds, compositionOnly }
     }
 
     async init(data: any) {

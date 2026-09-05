@@ -41,6 +41,7 @@ import {
 import { cacheFullAssetManifest, getCachedFullAssetManifest } from './storage/assetManifestCache';
 import { resolveNamesLocally } from './storage/assetNameLocalResolver';
 import { createAssetNameResolver, type AssetNameHit } from './storage/assetNameResolver'
+import { addLog } from './log'
 
 export const forageStorage = new AutoStorage()
 
@@ -1183,6 +1184,36 @@ export async function saveDb() {
                 if (patchResult.chatGuardRejected) {
                     console.error('[Save] Server rejected patch — chat-internal field ops detected server-side')
                     showChatGuardToastThrottled('server')
+                }
+                // Hash mismatch: name the diverged keys so a repeated
+                // conflict (every save falling through to a full write)
+                // can be traced from the system log instead of only
+                // "expected≠server" on the server console.
+                if (!patchResult.success && patchResult.hashDiagnostics) {
+                    try {
+                        const report = patcher.describeHashMismatch(patchResult.hashDiagnostics)
+                        console.warn('[Save] Patch hash mismatch, diverged keys:', report)
+                        const keySetDiffs = report.roots.onlyLocal.length + report.roots.onlyRemote.length
+                            + report.characters.onlyLocal.length + report.characters.onlyRemote.length
+                        const duplicates = report.duplicateCharIds.length + report.serverDuplicateCharIds.length
+                        // Counts and flags first: the message is the dedupe key
+                        // and gets truncated, so the stable discriminator must
+                        // survive the cut ahead of the (possibly long) id lists.
+                        const summary = [
+                            `roots:${report.roots.mismatched.length} chars:${report.characters.mismatched.length} keyset:${keySetDiffs} dup:${duplicates}`,
+                            report.compositionOnly ? 'composition-only' : '',
+                            report.roots.mismatched.length ? `[${report.roots.mismatched.join(',')}]` : '',
+                            report.characters.mismatched.length ? `[${report.characters.mismatched.join(',')}]` : '',
+                        ].filter(Boolean).join(' ')
+                        addLog({
+                            level: 'warning',
+                            source: 'save',
+                            message: `[Save] Patch hash mismatch: ${summary}`.slice(0, 300),
+                            description: JSON.stringify(report),
+                        })
+                    } catch (e) {
+                        console.warn('[Save] Failed to describe patch hash mismatch:', e)
+                    }
                 }
             }
         }
