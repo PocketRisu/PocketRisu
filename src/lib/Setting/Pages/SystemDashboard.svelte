@@ -26,6 +26,7 @@
     import { changeChar } from 'src/ts/characters'
     import { promptActivateCharacter } from 'src/ts/characterArchive'
     import { SystemTab } from 'src/ts/routing'
+    import { dbTransferSizeStore, TRANSFER_SIZE_RECOMMENDED_BYTES } from 'src/ts/transferSize'
     import { language, getCurrentLocale } from 'src/lang'
 
     // ── Types ────────────────────────────────────────────────────────────────
@@ -565,6 +566,41 @@
                     </Tooltip.Root>
                     <span class="text-textcolor text-sm tabular-nums shrink-0 w-20 text-right">{fmtBytes(row.size)}</span>
                 </div>
+                {#if row.id === 'kv-database'}
+                    <!-- Client-measured full-write payload (chats excluded). Kept
+                         client-side on purpose: serializing a multi-hundred-MB
+                         DB on the server would stall every request. -->
+                    <div class="flex items-center gap-2 py-1.5 pl-5 border-b border-darkborderc/30 last:border-b-0">
+                        <span class="text-textcolor2 text-sm flex-1 min-w-0 truncate">{language.storageRowTransferSize}</span>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger>
+                                {#snippet child({ props })}
+                                    <button
+                                        {...props}
+                                        type="button"
+                                        class="text-textcolor2 hover:text-primary cursor-pointer shrink-0 leading-none"
+                                        aria-label={language.storageRowTransferSize}
+                                        onclick={() => openRowDetails(language.storageRowTransferSize, language.storageRowTransferSizeDesc, $dbTransferSizeStore.bytes)}
+                                    >
+                                        <InfoIcon size={14} />
+                                    </button>
+                                {/snippet}
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <Tooltip.Content
+                                    class="bg-darkbg border border-darkborderc rounded-md px-3 py-2 text-xs text-textcolor shadow-lg z-50 max-w-70 leading-relaxed"
+                                    sideOffset={4}
+                                    collisionPadding={8}
+                                >
+                                    {language.storageRowTransferSizeDesc}
+                                </Tooltip.Content>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                        <span class={'text-sm tabular-nums shrink-0 text-right ' + ($dbTransferSizeStore.overLimit ? 'text-yellow-400' : 'text-textcolor2')}>
+                            {fmtBytes($dbTransferSizeStore.bytes)} / {language.storageRowTransferSizeLimit.replace('{{limit}}', fmtBytes(TRANSFER_SIZE_RECOMMENDED_BYTES))}
+                        </span>
+                    </div>
+                {/if}
             {/each}
             {#if showFullDisk && otherUsed != null && otherUsed > 0}
                 <div class="flex items-center gap-2 py-1.5 border-b border-darkborderc/30 last:border-b-0">

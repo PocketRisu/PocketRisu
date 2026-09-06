@@ -2065,6 +2065,11 @@ export const languageKorean = {
   httpInsecureWarningBody:
     "플러그인 등 일부 기능이 동작하지 않을 수 있습니다. 원격 접속 기능을 사용하면 HTTPS로 연결할 수 있습니다.",
   httpInsecureOpenRemoteAccess: "설정 열기",
+  transferSizeWarningTitle: "전송 데이터 용량이 권장 크기를 넘었습니다",
+  transferSizeWarningBody:
+    "현재 약 {{size}}로, 원격 접속 시 저장이 실패할 수 있습니다. 사용하지 않는 캐릭터를 비활성화하면 전송 데이터 용량이 줄어듭니다.",
+  transferSizeOpenCharacterManager: "캐릭터 관리",
+  transferSizeDismiss: "이번 세션에서 숨기기",
 
   // 시스템 페이지
   system: "시스템",
@@ -2257,6 +2262,10 @@ export const languageKorean = {
   storageRowKvDatabase: "database.bin (활성)",
   storageRowKvDatabaseDesc:
     "risuai.db 내부에 있는 단일 BLOB 행. 캐릭터 메타·채팅·설정이 통째로 들어갑니다. 2 GB 단일 BLOB 한계의 적용 대상.",
+  storageRowTransferSize: "전송 데이터 용량 (채팅 제외)",
+  storageRowTransferSizeLimit: "권장 {{limit}} 이하",
+  storageRowTransferSizeDesc:
+    "저장할 때 서버로 보내는 데이터의 크기입니다 (이 기기에서 마지막 저장 기준). 권장 크기를 넘으면 원격 접속 시 저장이 실패할 수 있으니, 사용하지 않는 캐릭터를 비활성화해 전송 데이터 용량을 줄이세요.",
   storageRowKvDbBackups: "DB 백업 (인프로세스)",
   storageRowKvDbBackupsDesc:
     "risuai.db 내부에 자동으로 보관되는 database.bin 스냅샷. 약 500 MB 한도로 자동 로테이션.",

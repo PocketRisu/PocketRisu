@@ -8,6 +8,7 @@ import { chatDraftKey, sweepOrphanDrafts } from "./storage/chatDraft";
 import { checkRisuUpdate } from "./update";
 import { fetchPublicStats } from "./publicStats";
 import { MobileGUI, botMakerMode, selectedCharID, loadedStore, DBState, LoadingStatusState, bootBackupPromptStore } from "./stores.svelte";
+import { recordDbTransferSize } from "./transferSize";
 import { loadPlugins } from "./plugins/plugins.svelte";
 import { alertError, alertMd, alertTOS, waitAlert, alertConfirm, alertInput } from "./alert";
 import { characterURLImport } from "./characterCards";
@@ -60,6 +61,10 @@ export async function loadData() {
                     setPatchSyncBaseline(decoded)
                     console.log(decoded)
                     setDatabase(decoded)
+                    // /api/read serves the chat-stripped blob — the same shape a
+                    // full write sends — so its length is a first estimate of the
+                    // transfer size until the first save measures the real payload.
+                    if (!createdFreshDatabase) recordDbTransferSize(gotStorage.byteLength, 'boot')
                 } catch (error) {
                     console.error(error)
                     const backups = await getDbBackups()

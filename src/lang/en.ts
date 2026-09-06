@@ -1903,6 +1903,10 @@ export const languageEnglish = {
     httpInsecureWarningTitle: "Connected over HTTP",
     httpInsecureWarningBody: "Some features such as plugins may not work. Use the Remote Access feature for an HTTPS connection.",
     httpInsecureOpenRemoteAccess: "Open settings",
+    transferSizeWarningTitle: "Transfer data size exceeds the recommended limit",
+    transferSizeWarningBody: "Currently about {{size}}; saving may fail over remote access. Deactivating characters you no longer use reduces the transfer data size.",
+    transferSizeOpenCharacterManager: "Manage Characters",
+    transferSizeDismiss: "Hide for this session",
 
     // System page
     system: "System",
@@ -2076,6 +2080,9 @@ export const languageEnglish = {
     storageRowFileBackupsDesc: "Manual export backups stored on disk under the backups/ folder.",
     storageRowKvDatabase: "database.bin (live)",
     storageRowKvDatabaseDesc: "The single BLOB inside risuai.db that holds character metadata, chats, and settings. Subject to the 2 GB single-blob limit.",
+    storageRowTransferSize: "Transfer data size (excluding chats)",
+    storageRowTransferSizeLimit: "recommended ≤ {{limit}}",
+    storageRowTransferSizeDesc: "Size of the data sent to the server on save (as of the last save from this device). Above the recommended limit, saving may fail over remote access — deactivate characters you no longer use to reduce it.",
     storageRowKvDbBackups: "In-process DB backups",
     storageRowKvDbBackupsDesc: "Automatic snapshots of database.bin kept inside risuai.db. Rotated to fit within ~500 MB.",
     storageRowKvAssets: "Character assets",
