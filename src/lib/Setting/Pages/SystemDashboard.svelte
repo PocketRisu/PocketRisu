@@ -47,7 +47,7 @@
             kv: { count: number; totalSize: number; oldest: number | null; newest: number | null }
             file: { count: number; totalSize: number; oldest: number | null; newest: number | null }
         }
-        trashed: { count: number; expiredCount: number; available: boolean }
+        trashed: { count: number; available: boolean }
         /** Deactivated-character rows the live database no longer references (kept until purged here). */
         archiveOrphan?: { count: number; totalSize: number; available: boolean }
         orphan: { count: number; totalSize: number; available: boolean }

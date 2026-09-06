@@ -2,7 +2,7 @@
     import { MobileGUIStack, MobileSearch, MobileSideBar, selectedCharID } from "src/ts/stores.svelte";
     import Settings from "../Setting/Settings.svelte";
     import RealmMain from "../UI/Realm/RealmMain.svelte";
-    import MobileCharacters from "./MobileCharacters.svelte";
+    import CharacterManager from "../CharacterManager/CharacterManager.svelte";
     import ChatScreen from "../ChatScreens/ChatScreen.svelte";
     import CharConfig from "../SideBars/CharConfig.svelte";
     import { WrenchIcon } from "@lucide/svelte";
@@ -52,7 +52,7 @@
     {:else if $MobileGUIStack === 0}
         <RealmMain />
     {:else if $MobileGUIStack === 1}
-        <MobileCharacters search={$MobileSearch} />
+        <CharacterManager inline externalSearch={$MobileSearch} />
     {:else if $MobileGUIStack === 2}
         <Settings />
     {/if}

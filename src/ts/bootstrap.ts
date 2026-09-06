@@ -1,3 +1,4 @@
+import { migrateLegacyTrash } from "./characterArchive";
 import { changeFullscreen, checkNullish } from "./util"
 import { installDynamicViewportHeight } from "./viewportHeight"
 import { v4 as uuidv4 } from 'uuid';
@@ -506,16 +507,15 @@ async function checkNewFormat(): Promise<void> {
     if (db.mainPrompt === oldJailbreak) {
         db.mainPrompt = defaultJailbreak;
     }
-    for (let i = 0; i < db.characters.length; i++) {
-        const trashTime = db.characters[i].trashTime;
-        const targetTrashTime = trashTime ? trashTime + 1000 * 60 * 60 * 24 * 3 : 0;
-        if (trashTime && targetTrashTime < Date.now()) {
-            db.characters.splice(i, 1);
-            i--;
-        }
-    }
+    // The trash no longer expires: trashed characters are deactivated (kept
+    // server-side) and stay until the user deletes them. Legacy live trash
+    // (`trashTime` on a character) is migrated to that shape shortly after
+    // boot, best effort — see characterArchive.migrateLegacyTrash.
     setDatabase(db);
     checkCharOrder();
+    if (db.characters.some((c) => c?.trashTime)) {
+        setTimeout(() => { void migrateLegacyTrash() }, 5000);
+    }
 
     // One-pass cleanup of composer drafts whose chat no longer exists (deleted
     // chats/characters, trash purge, plugin/script removals). Replaces per-delete

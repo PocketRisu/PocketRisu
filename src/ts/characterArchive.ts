@@ -54,34 +54,45 @@ function withOverlay<T>(fn: () => Promise<T>): Promise<T> {
  * `characters` to the stub list (one save tick) → selection is cleared.
  * Returns true when the character was deactivated.
  */
-export async function archiveCharacter(index: number): Promise<boolean> {
+export async function archiveCharacter(index: number, arg: { skipConfirm?: boolean; trash?: boolean; trashedAt?: number; silent?: boolean } = {}): Promise<boolean> {
     const db = DBState.db
     const char = db.characters[index]
     if (!char?.chaId) return false
     const name = char.name || 'Unnamed'
-    if (!await alertConfirm(language.deactivateCharacterConfirm(name))) return false
+    // skipConfirm: bulk callers (character manager) confirm once for the whole set.
+    // trash: the trash is "deactivated + trashedAt marker" — same server row,
+    // the stub just carries the marker (exported as upstream's trashTime).
+    if (!arg.skipConfirm && !await alertConfirm(language.deactivateCharacterConfirm(name))) return false
 
+    const run = async () => {
+        // The server builds the payload from its own view; push any edits
+        // still sitting in the client's debounce first so nothing is lost.
+        await requestImmediateSave()
+        const stub = await storage().archiveCharacter(char.chaId)
+        // Re-resolve: the array may have shifted while the server worked.
+        const idx = db.characters.findIndex((c) => c?.chaId === char.chaId)
+        if (idx === -1) return false
+        if (!Array.isArray(db.nodeOnlyArchivedCharacters)) db.nodeOnlyArchivedCharacters = []
+        if (arg.trash) stub.trashedAt = arg.trashedAt ?? Date.now()
+        db.nodeOnlyArchivedCharacters.push(stub)
+        const selectedIndex = get(selectedCharID)
+        db.characters.splice(idx, 1)
+        checkCharOrder()
+        requiresFullEncoderReload.state = true
+        // Keep whatever else was selected (bulk actions and the boot-time
+        // trash migration run while a chat may be open); only the archived
+        // character itself loses the selection. Indices after `idx` shift by one.
+        if (selectedIndex === idx || selectedIndex < 0) deselectCharacter()
+        else if (selectedIndex > idx) selectedCharID.set(selectedIndex - 1)
+        void requestImmediateSave()
+        if (!arg.silent) notifySuccess(arg.trash ? language.trashCharacterDone : language.deactivateCharacterDone)
+        return true
+    }
     try {
-        return await withOverlay(async () => {
-            // The server builds the payload from its own view; push any edits
-            // still sitting in the client's debounce first so nothing is lost.
-            await requestImmediateSave()
-            const stub = await storage().archiveCharacter(char.chaId)
-            // Re-resolve: the array may have shifted while the server worked.
-            const idx = db.characters.findIndex((c) => c?.chaId === char.chaId)
-            if (idx === -1) return false
-            if (!Array.isArray(db.nodeOnlyArchivedCharacters)) db.nodeOnlyArchivedCharacters = []
-            db.nodeOnlyArchivedCharacters.push(stub)
-            db.characters.splice(idx, 1)
-            checkCharOrder()
-            requiresFullEncoderReload.state = true
-            // Indices shifted; mirror removeChar and drop the selection.
-            deselectCharacter()
-            void requestImmediateSave()
-            notifySuccess(language.deactivateCharacterDone)
-            return true
-        })
+        // silent: no overlay, no dialogs — the caller reports (migration logs).
+        return arg.silent ? await run() : await withOverlay(run)
     } catch (error) {
+        if (arg.silent) throw error
         if (error instanceof CharacterArchiveError && error.code === 'ARCHIVE_CHATS_UNAVAILABLE') {
             alertError(language.deactivateCharacterUnsaved)
         } else {
@@ -124,6 +135,9 @@ export async function activateCharacter(chaId: string): Promise<number> {
     // The server sends chats as stubs; the client works with placeholders
     // (same conversion bootstrap applies to the whole database).
     restored.chats = convertStubsToPlaceholders(restored.chats ?? [])
+    // The trash marker lives on the stub, never on the body (a body archived
+    // by the legacy-trash migration may still carry the old flag).
+    delete restored.trashTime
     db.characters.push(restored)
     const stubIdxNow = (db.nodeOnlyArchivedCharacters ?? []).findIndex((s) => s?.chaId === chaId)
     if (stubIdxNow !== -1) db.nodeOnlyArchivedCharacters!.splice(stubIdxNow, 1)
@@ -131,6 +145,55 @@ export async function activateCharacter(chaId: string): Promise<number> {
     requiresFullEncoderReload.state = true
     void requestImmediateSave()
     return db.characters.length - 1
+}
+
+/** Move an already-deactivated character to the trash (marker only; nothing moves on the server). */
+export function trashDeactivatedCharacter(chaId: string): boolean {
+    const stub = findArchivedStub(chaId)
+    if (!stub || stub.trashedAt) return false
+    stub.trashedAt = Date.now()
+    checkCharOrder()
+    void requestImmediateSave()
+    return true
+}
+
+/** Take a trashed character out of the trash. It stays deactivated (its previous state) until opened. */
+export function restoreTrashedCharacter(chaId: string): boolean {
+    const stub = findArchivedStub(chaId)
+    if (!stub || !stub.trashedAt) return false
+    delete stub.trashedAt
+    checkCharOrder()
+    void requestImmediateSave()
+    return true
+}
+
+/** Permanently delete a trashed character: server rows first, then the stub. Throws CharacterArchiveError. */
+export async function deleteTrashedCharacter(chaId: string): Promise<boolean> {
+    const stub = findArchivedStub(chaId)
+    if (!stub) return false
+    await storage().deleteArchivedCharacter(chaId)
+    return removeArchivedStub(chaId)
+}
+
+/**
+ * Legacy trash (a live character carrying `trashTime`, written by older
+ * builds, upstream imports or .bin restores) → deactivated + trashedAt.
+ * Best effort at boot: a character whose chats are not on the server yet
+ * stays legacy and is retried next boot. The lists render both shapes.
+ */
+export async function migrateLegacyTrash(): Promise<void> {
+    const db = DBState.db
+    const ids = db.characters.filter((c) => c?.chaId && c.trashTime).map((c) => c.chaId)
+    for (const chaId of ids) {
+        const idx = db.characters.findIndex((c) => c?.chaId === chaId)
+        if (idx === -1) continue
+        const trashedAt = db.characters[idx].trashTime
+        try {
+            await archiveCharacter(idx, { skipConfirm: true, trash: true, trashedAt, silent: true })
+        } catch (error) {
+            console.warn('[Trash] legacy trash migration skipped for', chaId, error)
+        }
+    }
 }
 
 /** Drop a stub whose payload is gone for good (recovery path; nothing else is deleted). */

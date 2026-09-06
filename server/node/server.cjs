@@ -4903,7 +4903,11 @@ async function buildFullExportDbValue() {
     const raw = kvGet('database/database.bin');
     if (!raw) return null;
     const hasPluginRows = pluginStorage.list().length > 0;
-    const hasArchive = kvList(ARCHIVE_META_PREFIX).length > 0 || kvList(ARCHIVE_PREFIX).length > 0;
+    // Stubs count too: a database that still points at rows which are gone
+    // must fail the export below instead of shipping the raw stub list
+    // (which importers would silently drop).
+    const hasArchive = kvList(ARCHIVE_META_PREFIX).length > 0 || kvList(ARCHIVE_PREFIX).length > 0
+        || (dbCache[DB_HEX_KEY] ? archivedStubsOf(dbCache[DB_HEX_KEY]).length > 0 : false);
     if (!hasPluginRows && !hasArchive) return raw;
     const dbObj = await decodeRisuSave(raw);
     if (hasPluginRows) {
@@ -6260,7 +6264,12 @@ async function inlineArchivedCharacters(dbObj) {
                 missing.push(stub.name || stub.chaId);
                 continue;
             }
-            dbObj.characters.push(decoded.payload.character);
+            const inlined = decoded.payload.character;
+            // A trashed stub travels as upstream's trash marker so any importer
+            // (upstream RisuAI, older PocketRisu) files it under its own trash.
+            if (isValidArchivedAt(stub.trashedAt)) inlined.trashTime = stub.trashedAt;
+            else delete inlined.trashTime;
+            dbObj.characters.push(inlined);
             present.add(stub.chaId);
         }
         if (missing.length > 0) {
@@ -6412,6 +6421,10 @@ app.post('/api/characters/:chaId/archive', async (req, res, next) => {
                 }
                 throw err;
             }
+            // The trash marker lives on the stub (`trashedAt`), never in the row:
+            // a legacy-trashed character migrating into the archive must come
+            // back clean when activated.
+            delete full.trashTime;
             // New row per deactivation; never overwrite an existing version.
             let archivedAt = Date.now();
             while (kvSize(archiveKey(chaId, archivedAt)) || kvGet(archiveMetaKey(chaId, archivedAt))) archivedAt++;
@@ -6548,6 +6561,41 @@ app.post('/api/db/archive/purge-orphans', async (req, res, next) => {
         });
         if (result.error) return res.status(400).json(result);
         logger.info(`[Archive] purged ${result.deleted} orphan row(s), ${result.metas} index row(s), ${result.bytes} bytes`);
+        res.json(result);
+    } catch (err) { next(err); }
+});
+
+// Permanent deletion of a deactivated (trashed) character: every archive row
+// and index row of the chaId. The client drops the stub from its database
+// itself; a chaId that is still active is refused so a stale trash view can
+// never delete rows a live character may be re-deactivated against.
+app.delete('/api/characters/:chaId/archive', async (req, res, next) => {
+    if (!await checkAuth(req, res)) return;
+    if (!checkActiveSession(req, res)) return;
+    const chaId = req.params.chaId;
+    if (!isArchivableChaId(chaId)) {
+        return res.status(400).json({ error: 'Invalid character id', code: 'ARCHIVE_BAD_ID' });
+    }
+    try {
+        const result = await queueStorageOperation(async () => {
+            await flushPendingDb();
+            if (!(await loadDbCacheIfMissing())) return { status: 404, error: 'No database', code: 'ARCHIVE_NO_DB' };
+            const db = dbCache[DB_HEX_KEY];
+            if ((Array.isArray(db.characters) ? db.characters : []).some((c) => c?.chaId === chaId)) {
+                return { status: 409, error: 'Character is active', code: 'ARCHIVE_ALREADY_ACTIVE' };
+            }
+            const payloadKeys = listArchivePayloadKeysFor(chaId);
+            const metaKeys = kvList(ARCHIVE_META_PREFIX + chaId + '/');
+            let bytes = 0;
+            for (const key of payloadKeys) bytes += kvSize(key) || 0;
+            sqliteDb.transaction(() => {
+                for (const key of payloadKeys) kvDel(key);
+                for (const key of metaKeys) kvDel(key);
+            })();
+            return { ok: true, deleted: payloadKeys.length, metas: metaKeys.length, bytes };
+        });
+        if (result.error) return res.status(result.status).json({ error: result.error, code: result.code });
+        logger.info(`[Archive] deleted ${chaId}: ${result.deleted} row(s), ${result.metas} index row(s), ${result.bytes} bytes`);
         res.json(result);
     } catch (err) { next(err); }
 });
@@ -6970,7 +7018,7 @@ app.get('/api/db/stats', async (req, res, next) => {
         } catch { /* backups dir may not exist */ }
 
         // Quick estimates from in-memory cache only — never decode the BLOB just for stats.
-        let trashed = { count: 0, expiredCount: 0, available: false };
+        let trashed = { count: 0, available: false };
         let orphan = { count: 0, totalSize: 0, available: false };
         let archiveOrphan = { count: 0, totalSize: 0, available: false };
         const stripped = dbCache[DB_HEX_KEY];
@@ -6983,13 +7031,11 @@ app.get('/api/db/stats', async (req, res, next) => {
             }
         }
         if (stripped?.characters) {
-            const now = Date.now();
-            const GRACE = 1000 * 60 * 60 * 24 * 3;
             for (const c of stripped.characters) {
-                if (c?.trashTime) {
-                    trashed.count++;
-                    if (c.trashTime + GRACE < now) trashed.expiredCount++;
-                }
+                if (c?.trashTime) trashed.count++;
+            }
+            for (const stub of archivedStubsOf(stripped)) {
+                if (isValidArchivedAt(stub.trashedAt)) trashed.count++;
             }
             trashed.available = true;
         }
@@ -7147,7 +7193,7 @@ app.get('/api/db/stats/characters', async (req, res, next) => {
                 chaId: stub.chaId,
                 name: stub.name || '',
                 image: stub.image || '',
-                trashed: false,
+                trashed: isValidArchivedAt(stub.trashedAt),
                 archived: true,
                 archiveMissing: !meta || !hasArchivePayload(stub.chaId, stub.archivedAt),
                 cardBytes,

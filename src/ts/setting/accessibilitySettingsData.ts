@@ -261,6 +261,31 @@ export const accessibilitySettingsItems: SettingItem[] = [
         helpKey: 'hideLeftBarCollapseButton',
         keywords: ['left', 'bar', 'collapse', 'toggle', 'mobile', 'sidebar', 'hide'],
     },
+    // Character list (rail + character manager) display options.
+    {
+        id: 'acc.roundIcons',
+        type: 'check',
+        labelKey: 'roundIcons',
+        helpKey: 'roundIcons',
+        bindKey: 'roundIcons',
+        keywords: ['round', 'icons', 'character', 'sidebar'],
+    },
+    {
+        id: 'acc.nodeOnlyHideRecentChats',
+        type: 'check',
+        labelKey: 'hideRecentChats',
+        helpKey: 'hideRecentChats',
+        bindKey: 'nodeOnlyHideRecentChats',
+        keywords: ['recent', 'chats', 'hide', 'home', 'sidebar', 'character'],
+    },
+    {
+        id: 'acc.nodeOnlyHideArchivedCharacters',
+        type: 'check',
+        labelKey: 'hideDeactivatedCharacters',
+        helpKey: 'hideDeactivatedCharacters',
+        bindKey: 'nodeOnlyHideArchivedCharacters',
+        keywords: ['deactivated', 'archived', 'hide', 'sidebar', 'character'],
+    },
     {
         id: 'acc.nodeOnlyRestoreLastChat',
         type: 'check',
@@ -368,6 +393,12 @@ export const accessibilitySidebarItems = pick([
     'acc.showModelInSidebar',
     'acc.showPresetInSidebar',
     'acc.showPersonaInSidebar',
+]);
+
+export const accessibilityCharacterItems = pick([
+    'acc.roundIcons',
+    'acc.nodeOnlyHideRecentChats',
+    'acc.nodeOnlyHideArchivedCharacters',
 ]);
 
 export const accessibilityOtherItems = pick([

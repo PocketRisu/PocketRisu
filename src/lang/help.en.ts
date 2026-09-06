@@ -323,6 +323,8 @@ export const helpEn = {
             "Automatically create a folder when branching a chat, grouping the original and branched chats together.",
         hamburgerButtonBottom: "Move the hamburger/menu button to the bottom of the sidebar.",
         hideLeftBarCollapseButton: "Hide the toggle button that collapses the left character grid bar on narrow screens (under 400px).",
+        hideRecentChats: "Hide the recent-chats list shown in the sidebar while no character is selected.",
+        hideDeactivatedCharacters: "Remove deactivated characters from the sidebar rail instead of showing them dimmed. They stay listed in the character manager and the storage dashboard.",
         loreBookDepth:
             "Number of previous messages to scan for lorebook activation keywords. `0` disables scanning; higher values can find older keywords but may activate unnecessary lore. (0-20)",
         loreBookToken:
@@ -410,8 +412,6 @@ export const helpEn = {
             "Show the current max-context limit as a visual line in the chat area. Messages above the line may not be sent to the model, so this helps show what the model can still remember.",
         hideRealm:
             "Start the Recently Uploaded section on the home screen collapsed. While collapsed it skips the RisuRealm fetch, speeding up initial load. You can expand it any time from the home screen.",
-        showFolderNameInIcon:
-            "Show folder names on folder icons in the character grid. Makes large folder collections easier to scan.",
         showRequestStatus:
             "Show a floating toast during model-preset requests with the live phase (connecting / thinking / responding / stalled), thinking and response token counts, and tokens-per-second. Memory-only; turning it off stops the display entirely.",
         customBackground: "A custom image used as the chat background.",
