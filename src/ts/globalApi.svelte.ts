@@ -28,6 +28,7 @@ import { language } from "src/lang";
 import { startObserveDom } from "./observer.svelte";
 import { updateGuisize } from "./gui/guisize";
 import { deepTouch } from "./gui/deepTouch.svelte";
+import { pruneHiddenCharacterIds } from "./characterOrder";
 import { updateLorebooks, deselectCharacter } from "./characters";
 import { mergeServerDbWithTrackedLocalChanges, withTrackedCharacters, hasAmbiguousCharacterIds } from "./storage/rebaseMerge";
 import { initMobileGesture } from "./hotkey";
@@ -1984,6 +1985,8 @@ export function checkCharOrder() {
     // (and folder) in the order list so the sidebar can render them dimmed.
     for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
         if (!stub?.chaId) continue
+        // Trashed stubs (deactivated + trashedAt) leave the order like trashed characters.
+        if (stub.trashedAt) continue
         charIdList.push(stub.chaId)
         if (!ordered.includes(stub.chaId)) {
             db.characterOrder.push(stub.chaId)
@@ -1999,11 +2002,8 @@ export function checkCharOrder() {
                 i--;
                 continue
             }
-            if (data.data.length === 0) {
-                db.characterOrder.splice(i, 1)
-                i--;
-                continue
-            }
+            // Empty folders are kept: the character manager creates a folder
+            // first and fills it afterwards.
             for (let i2 = 0; i2 < data.data.length; i2++) {
                 const data2 = data.data[i2]
                 if (!charIdList.includes(data2)) {
@@ -2021,7 +2021,21 @@ export function checkCharOrder() {
         }
     }
 
-
+    // Sidebar-hidden ids: drop only ids that exist nowhere any more (trashed
+    // characters keep their flag so restoring them restores the hidden state).
+    if (Array.isArray(db.nodeOnlyHiddenCharacterIds) && db.nodeOnlyHiddenCharacterIds.length > 0) {
+        const known = new Set<string>(charIdList)
+        for (const char of db.characters) {
+            if (char?.chaId) known.add(char.chaId)
+        }
+        for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
+            if (stub?.chaId) known.add(stub.chaId)
+        }
+        const pruned = pruneHiddenCharacterIds(db.nodeOnlyHiddenCharacterIds, known)
+        if (pruned.length !== db.nodeOnlyHiddenCharacterIds.length) {
+            db.nodeOnlyHiddenCharacterIds = pruned
+        }
+    }
 }
 
 /**

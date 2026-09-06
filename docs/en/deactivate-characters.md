@@ -23,16 +23,23 @@ Deactivating moves a bot's full body (character card, lorebook, scripts, every c
 
 ## 2. How to deactivate and activate
 
-**Deactivate**: open the character, go to the character settings tab, scroll to the bottom and press **Deactivate Character** (right above *Remove Character*). Confirm the dialog. The character is deselected and its entry in the lists turns dimmed with a small box icon.
+**Deactivate**: either
 
-**Activate**: click the dimmed entry in the sidebar, the grid catalog, the mobile list or the storage dashboard. PocketRisu asks *"… is deactivated. Activate it?"*; confirm and the character opens as usual.
+- open the **Character Manager** with the button at the top of the sidebar (below the menu button) and choose **Deactivate Character** from a row's ⋯ menu — turn on **Select** to deactivate several characters at once; or
+- open the character, go to the character settings tab, scroll to the bottom and press **Deactivate Character** (right above *Move to trash*).
 
-You can hide deactivated characters from the lists with **Hide deactivated characters** in the sidebar's home panel (next to *Hide conversation list*). The storage dashboard always shows them.
+After confirming, the character is deselected and its entry in the lists turns dimmed with a small box icon.
+
+**Activate**: click the dimmed entry in the sidebar, the character manager or the storage dashboard. PocketRisu asks *"… is deactivated. Activate it?"*; confirm and the character opens as usual. **Activate Character** in the manager's ⋯ menu activates without opening.
+
+**Hide deactivated characters** in Settings → Accessibility → **Character** removes them from the sidebar. The character manager and the storage dashboard always show them (use the manager's **Deactivated only** filter).
+
+**Trash**: moving a character to the trash deactivates it the same way and only adds a trash marker. Trashed characters are never deleted automatically and cost nothing at runtime. Restore them (they come back deactivated) or delete them permanently from the manager's **Trash** tab. Characters left in the trash by an older version are migrated to this form automatically on the first start after updating.
 
 
 ## 3. What changes while a character is deactivated
 
-- It cannot be opened, edited, exported, converted to a module, copied or trashed. Activate it first.
+- It cannot be opened, edited, exported, converted to a module or copied. Activate it first. Moving it to the trash works while deactivated.
 - **Plugins, scripts, search and dataset export treat it as if it had been deleted.** The plugin API does not see it at all. A plugin that keeps per-character data keyed by character id may clean that data up, exactly as it would after you delete a bot. Activate the character before using plugin features on it.
 - Its images and other assets are **not** orphaned: the orphan-media cleanup and the "unreferenced" filter of the inlay gallery both know about deactivated characters.
 - Its chat drafts are kept.
@@ -41,7 +48,7 @@ You can hide deactivated characters from the lists with **Hide deactivated chara
 
 ## 4. Backups, snapshots and older versions
 
-- **Backup export (`.bin`)** always contains deactivated characters as complete, normal characters. A backup imported into original RisuAI or into an older PocketRisu shows them as active characters.
+- **Backup export (`.bin`)** always contains deactivated characters as complete, normal characters. A backup imported into original RisuAI or into an older PocketRisu shows them as active characters. Trashed characters carry their trash marker, so they land in the trash there too (original RisuAI purges its trash after three days).
 - **Backup import** starts with every character active. Server-side data of characters you had deactivated before the import is kept as "unreferenced deactivated-character data" until you purge it from the dashboard (section 5).
 - **Snapshot restore** is safe in any order: each deactivation writes its own row, rows are never overwritten or deleted automatically, so a restored snapshot always opens exactly the chats it was taken with.
 - **Downgrading** to a PocketRisu version older than v1.12.0 hides deactivated characters from the lists. Nothing is deleted; they reappear when you upgrade again. If you need them on the old version, activate them first or go through a `.bin` backup.

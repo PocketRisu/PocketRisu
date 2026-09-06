@@ -1,11 +1,12 @@
 <script lang="ts">
-    import { DynamicGUI, settingsOpen, sideBarStore, openPresetList, openModelPresetList, openModelProfileBrowser, openPersonaList, personaSelectCallback, openMemoryPresetList, memoryPresetSelectCallback, openThemePresetList, MobileGUI, loadedStore, alertStore, LoadingStatusState, bookmarkListOpen, popupStore, popUpEditorStore } from './ts/stores.svelte';
+    import { DynamicGUI, settingsOpen, sideBarStore, openPresetList, openCharacterManager, openModelPresetList, openModelProfileBrowser, openPersonaList, personaSelectCallback, openMemoryPresetList, memoryPresetSelectCallback, openThemePresetList, MobileGUI, loadedStore, alertStore, LoadingStatusState, bookmarkListOpen, popupStore, popUpEditorStore } from './ts/stores.svelte';
     import Sidebar from './lib/SideBars/Sidebar.svelte';
     import { DBState } from './ts/stores.svelte';
     import ChatScreen from './lib/ChatScreens/ChatScreen.svelte';
     import AlertComp from './lib/Others/AlertComp.svelte';
     import RealmPopUp from './lib/UI/Realm/RealmPopUp.svelte';
-    import GridChars from './lib/Others/GridCatalog.svelte';
+    import CharacterManager from './lib/CharacterManager/CharacterManager.svelte';
+    import FolderSettingsDialog from './lib/CharacterManager/FolderSettingsDialog.svelte';
     import BookmarkList from './lib/Others/BookmarkList.svelte';
     import Settings from './lib/Setting/Settings.svelte';
     import { showRealmInfoStore, importCharacterProcess } from './ts/characterCards';
@@ -42,7 +43,6 @@
     import sendSound from './etc/send.mp3'
     import { RISU_APP_INTERNAL_DRAG_TYPE, RISU_SIDEBAR_DRAG_TYPE } from './ts/dragTypes';
 
-    let gridOpen = $state(false)
     let aprilFools = $state(new Date().getMonth() === 3 && new Date().getDate() === 1)
     let aprilFoolsPage = $state(0)
     let keepingSessionAlive = $state(false)
@@ -214,27 +214,24 @@
             <MobileFooter />
         </div>
     {:else}
-        {#if gridOpen}
-            <GridChars endGrid={() => {gridOpen = false}} />
+        {#if (!$DynamicGUI)}
+            <Sidebar hidden={!$sideBarStore} />
         {:else}
-            {#if (!$DynamicGUI)}
-                <Sidebar openGrid={() => {gridOpen = true}} hidden={!$sideBarStore} />
-            {:else}
-                <div class="top-0 w-full h-full left-0 z-30 flex flex-row items-center" class:fixed={$sideBarStore} class:hidden={!$sideBarStore} >
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <Sidebar openGrid={() => {gridOpen = true}}  hidden={false} />
-
-
-
-                </div>
-            {/if}
-            <ChatScreen />
+            <div class="top-0 w-full h-full left-0 z-30 flex flex-row items-center" class:fixed={$sideBarStore} class:hidden={!$sideBarStore} >
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <Sidebar hidden={false} />
+            </div>
+        {/if}
+        <ChatScreen />
+        {#if $openCharacterManager}
+            <CharacterManager />
         {/if}
     {/if}
     <AlertComp />
     {#if $showRealmInfoStore}
         <RealmPopUp bind:openedData={$showRealmInfoStore} />
     {/if}
+    <FolderSettingsDialog />
     {#if $openPresetList}
         <Botpreset close={() => {$openPresetList = false}} />
     {/if}

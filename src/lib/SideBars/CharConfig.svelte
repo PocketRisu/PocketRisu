@@ -833,7 +833,7 @@ import ShButton from "../UI/GUI/ShButton.svelte";
 
     <Button onclick={async () => {
         removeChar($selectedCharID, DBState.db.characters[$selectedCharID].name)
-    }} className="mt-2" size="md">{language.removeCharacter}</Button>
+    }} className="mt-2" size="md">{language.moveToTrash}</Button>
 
     {#if DBState.db.characters[$selectedCharID].type === 'character'}
         {@const char = DBState.db.characters[$selectedCharID] as character}

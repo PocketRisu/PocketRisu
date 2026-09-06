@@ -1178,6 +1178,15 @@ export class NodeStorage{
         return body.character
     }
 
+    /** Permanently delete every archive row of a deactivated character (the caller drops the stub). */
+    async deleteArchivedCharacter(chaId: string): Promise<void> {
+        const da = await this.authFetch(`/api/characters/${encodeURIComponent(chaId)}/archive`, { method: 'DELETE' })
+        if (da.status < 200 || da.status >= 300) {
+            const body = await da.json().catch(() => ({})) as { error?: string; code?: string }
+            throw new CharacterArchiveError(body?.code ?? `HTTP_${da.status}`, body?.error ?? `archive delete error: ${da.status}`)
+        }
+    }
+
     /** Server-side inlay reference scan over every chat body (lazy-loaded and deactivated ones included). */
     async fetchInlayReferences(): Promise<{ scannedAt: number; totalMessages: number; refCounts: Record<string, number> }> {
         const da = await this.authFetch('/api/inlays/references')
