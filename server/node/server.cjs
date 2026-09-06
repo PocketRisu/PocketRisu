@@ -1962,6 +1962,42 @@ function createTimeoutController(timeoutMs) {
     };
 }
 
+// /proxy2 inactivity bound (issue #84). The total timeout above only exists
+// when the client sends risu-timeout-ms (local-network requests do; plugin
+// nativeFetch and image generation do not), so a half-open upstream or a
+// middlebox that swallowed the connection used to leave the relay — and the
+// browser reader behind it — waiting forever. This aborts the upstream fetch
+// when nothing has arrived for PROXY_IDLE_TIMEOUT_MS: armed at request start
+// (covers the pre-header silence) and re-armed on every body chunk. Generous
+// on purpose — thinking models stay silent for minutes before the first byte.
+const PROXY_IDLE_TIMEOUT_MS = 600000;
+
+function createIdleWatchdog(idleMs, totalSignal) {
+    const controller = new AbortController();
+    let timer = null;
+    let firedIdle = false;
+    const arm = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { firedIdle = true; controller.abort(); }, idleMs);
+    };
+    const onTotal = () => controller.abort();
+    totalSignal?.addEventListener('abort', onTotal, { once: true });
+    arm();
+    return {
+        signal: controller.signal,
+        idle: () => firedIdle,
+        touch: arm,
+        // Resets the idle timer on every chunk that flows through the relay.
+        transform: () => new Transform({
+            transform(chunk, _enc, cb) { arm(); cb(null, chunk); }
+        }),
+        cleanup: () => {
+            clearTimeout(timer);
+            totalSignal?.removeEventListener('abort', onTotal);
+        }
+    };
+}
+
 // --- Proxy Stream: auth helpers ---
 
 function normalizeAuthHeader(authHeader) {
@@ -3051,6 +3087,10 @@ const reverseProxyFunc = async (req, res, next) => {
     }
     const timeoutMs = getRequestTimeoutMs(req.headers['risu-timeout-ms']);
     const timeout = createTimeoutController(timeoutMs);
+    // A client-configured total timeout longer than the default idle bound
+    // (localNetworkTimeoutSec up to 3600s) must not be undercut by it.
+    const idleMs = Math.max(PROXY_IDLE_TIMEOUT_MS, timeoutMs || 0);
+    const idle = createIdleWatchdog(idleMs, timeout.signal);
     let originalResponse;
     try {
     const header = req.headers['risu-header'] ? JSON.parse(decodeURIComponent(req.headers['risu-header'])) : req.headers;
@@ -3089,7 +3129,7 @@ const reverseProxyFunc = async (req, res, next) => {
             method: req.method,
             headers: header,
             body: requestBody,
-            signal: timeout.signal
+            signal: idle.signal
         });
         // get response body as stream
         const originalBody = originalResponse.body;
@@ -3113,7 +3153,7 @@ const reverseProxyFunc = async (req, res, next) => {
         // send response status to client
         res.status(originalResponse.status);
         // send response body to client
-        await pipeline(originalResponse.body, res);
+        await pipeline(originalResponse.body, idle.transform(), res);
 
 
     }
@@ -3121,9 +3161,11 @@ const reverseProxyFunc = async (req, res, next) => {
         if (err?.name === 'AbortError') {
             if (!res.headersSent) {
                 res.status(504).send({
-                    error: timeoutMs
-                        ? `Proxy request timed out after ${timeoutMs}ms`
-                        : 'Proxy request aborted'
+                    error: idle.idle()
+                        ? `Proxy upstream sent nothing for ${idleMs}ms`
+                        : timeoutMs
+                            ? `Proxy request timed out after ${timeoutMs}ms`
+                            : 'Proxy request aborted'
                 });
             } else {
                 res.end();
@@ -3137,6 +3179,7 @@ const reverseProxyFunc = async (req, res, next) => {
         next(err);
         return;
     } finally {
+        idle.cleanup();
         timeout.cleanup();
     }
 }
@@ -3156,6 +3199,10 @@ const reverseProxyFunc_get = async (req, res, next) => {
     }
     const timeoutMs = getRequestTimeoutMs(req.headers['risu-timeout-ms']);
     const timeout = createTimeoutController(timeoutMs);
+    // A client-configured total timeout longer than the default idle bound
+    // (localNetworkTimeoutSec up to 3600s) must not be undercut by it.
+    const idleMs = Math.max(PROXY_IDLE_TIMEOUT_MS, timeoutMs || 0);
+    const idle = createIdleWatchdog(idleMs, timeout.signal);
     let originalResponse;
     try {
     const header = req.headers['risu-header'] ? JSON.parse(decodeURIComponent(req.headers['risu-header'])) : req.headers;
@@ -3172,7 +3219,7 @@ const reverseProxyFunc_get = async (req, res, next) => {
         originalResponse = await fetch(urlParam, {
             method: 'GET',
             headers: header,
-            signal: timeout.signal
+            signal: idle.signal
         });
         // get response body as stream
         const originalBody = originalResponse.body;
@@ -3196,15 +3243,17 @@ const reverseProxyFunc_get = async (req, res, next) => {
         // send response status to client
         res.status(originalResponse.status);
         // send response body to client
-        await pipeline(originalResponse.body, res);
+        await pipeline(originalResponse.body, idle.transform(), res);
     }
     catch (err) {
         if (err?.name === 'AbortError') {
             if (!res.headersSent) {
                 res.status(504).send({
-                    error: timeoutMs
-                        ? `Proxy request timed out after ${timeoutMs}ms`
-                        : 'Proxy request aborted'
+                    error: idle.idle()
+                        ? `Proxy upstream sent nothing for ${idleMs}ms`
+                        : timeoutMs
+                            ? `Proxy request timed out after ${timeoutMs}ms`
+                            : 'Proxy request aborted'
                 });
             } else {
                 res.end();
@@ -3214,6 +3263,7 @@ const reverseProxyFunc_get = async (req, res, next) => {
         next(err);
         return;
     } finally {
+        idle.cleanup();
         timeout.cleanup();
     }
 }

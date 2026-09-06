@@ -144,15 +144,24 @@ export function initHotkey(){
                 }
                 case 'previewRequest':{
                     if(get(doingChat) && get(selectedCharID) !== -1){
-                        return false
+                        // Consumed (break → preventDefault below) so the key
+                        // does not leak to the browser's default action.
+                        break
                     }
                     alertWait("Loading...")
                     ev.preventDefault()
                     ev.stopPropagation()
                     try {
-                        await sendChat(-1, {
+                        const ok = await sendChat(-1, {
                             previewPrompt: true
                         })
+                        if(ok === false){
+                            // sendChat reported the failure itself (error
+                            // alert or inlay). Only the "Loading..." dialog
+                            // must not be left behind.
+                            if(get(alertStore).type === 'wait') alertClear()
+                            return
+                        }
 
                         let md = ''
                         md += '### Prompt\n'

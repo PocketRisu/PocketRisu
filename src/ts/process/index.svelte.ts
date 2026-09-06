@@ -252,6 +252,11 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     if (realChatId && !arg.preview && !arg.previewPrompt) {
         registerPendingSend(realChatId, generationId)
     }
+    // Module-scoped result of the last preview: cleared up front so a failed
+    // preview cannot hand the previous prompt to the caller as if it were new.
+    if (arg.previewPrompt) {
+        previewBody = ''
+    }
 
     if(chatProcessIndex === -1 && DBState.db.presetChain){
         const names = DBState.db.presetChain.split(',').map((v) => v.trim())
