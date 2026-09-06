@@ -7958,13 +7958,18 @@ app.post('/api/self-update', async (req, res) => {
         const isWin = process.platform === 'win32';
         const updateTmp = path.join(appDir, '.update-tmp');
 
-        // Restore from a previous interrupted update if leftover exists
+        // Restore from a previous interrupted update only when its in-progress
+        // marker is still there. A leftover backup/ alone is not proof of an
+        // interrupted update: on Windows the running launcher exe keeps
+        // backup/PocketRisu.exe locked, so the restart script's rmdir leaves
+        // the folder behind after a SUCCESSFUL update — restoring from it
+        // would roll the app back to the previous version.
         const prevBackup = path.join(updateTmp, 'backup');
-        try {
-            await fs.access(prevBackup);
+        const inProgressMarker = path.join(updateTmp, 'in-progress');
+        if (existsSync(inProgressMarker) && existsSync(prevBackup)) {
             console.log('[Update] Restoring files from previous interrupted update...');
             await restoreBackup(prevBackup, appDir);
-        } catch { /* no leftover */ }
+        }
         await fs.rm(updateTmp, { recursive: true, force: true }).catch(() => {});
         await fs.mkdir(updateTmp, { recursive: true });
 
@@ -8016,6 +8021,10 @@ app.post('/api/self-update', async (req, res) => {
         // Phase 1: move old files to backup — rollback immediately on any failure
         const backupDir = path.join(updateTmp, 'backup');
         await fs.mkdir(backupDir, { recursive: true });
+        // Marks "app files are mid-replacement": present from the first move
+        // until the new files are verified in place. Only then does a leftover
+        // backup/ mean an interrupted update (see the restore check above).
+        await fs.writeFile(inProgressMarker, `v${targetVersion}`);
 
         const preserved = [];
         const oldEntries = await fs.readdir(appDir);
@@ -8087,6 +8096,10 @@ app.post('/api/self-update', async (req, res) => {
         // entries are app-managed and leaves everything else alone.
         await fs.writeFile(manifestPath, newEntries.join('\n') + '\n').catch(() => {});
 
+        // App files are complete and verified: a leftover backup/ from here on
+        // must never be restored over them.
+        await fs.rm(inProgressMarker, { force: true }).catch(() => {});
+
         // Phase 4 (Windows): stage bin/ for restart script to apply after exit
         if (isWin) {
             const newBin = path.join(sourceDir, 'bin');
@@ -8132,7 +8145,11 @@ app.post('/api/self-update', async (req, res) => {
                 const utmp = path.join(appDir, '.update-tmp');
                 const batLines = [
                     '@echo off',
-                    'timeout /t 3 /nobreak >nul',
+                    // Wait ~3s for the Node process to exit before touching
+                    // bin/. Not `timeout`: with stdio ignored, stdin is NUL
+                    // and timeout exits at once ("input redirection is not
+                    // supported"); ping does not read stdin.
+                    'ping -n 4 127.0.0.1 >nul',
                     // Apply staged bin/: backup current → copy new → on failure restore backup
                     'if exist "%RISU_UTMP%\\new-bin\\" (',
                     '  if exist "%RISU_APP_DIR%\\bin\\" (',
