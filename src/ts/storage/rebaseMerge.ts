@@ -29,16 +29,38 @@ export function mergeServerDbWithTrackedLocalChanges(
     clone: <T>(value: T) => T,
     convertChats: (chats: any[]) => any[],
     baselineArchivedIds: ReadonlySet<string> = new Set(),
+    baselineDb: Database | null = null,
+    normalizeValue: (value: any) => any = (value) => value,
 ): { mergedDb: Database; skippedArchivedCharIds: string[] } {
     const mergedDb = clone(latestDb)
     const localDb = clone(localDbSource)
 
+    // Root keys (settings, personas, characterOrder, ...): with a baseline —
+    // the view this client last synced against — only the keys this client
+    // changed since then come from local; the rest keep the server's value,
+    // which may carry another device's change. Copying every root key from
+    // local would make the retried patch revert that change. Without a
+    // baseline (non-patch mode) local wins as before. The baseline is the
+    // patcher's normalized view, so the local value goes through the same
+    // normalizer before comparing (a false "changed" only falls back to the
+    // old local-wins behaviour).
+    const localRootWins = (key: string): boolean => {
+        if (!baselineDb) return true
+        const localValue = (localDb as any)[key]
+        const baselineValue = (baselineDb as any)[key]
+        if (localValue === undefined && baselineValue === undefined) return false
+        try {
+            return JSON.stringify(normalizeValue(localValue)) !== JSON.stringify(baselineValue)
+        } catch {
+            return true
+        }
+    }
     for (const key in localDb) {
         if (
             key !== 'characters' && key !== 'botPresets' && key !== 'modules' &&
             key !== 'plugins' && key !== 'pluginCustomStorage' && key !== 'nodeOnlyArchivedCharacters'
         ) {
-            (mergedDb as any)[key] = clone((localDb as any)[key])
+            if (localRootWins(key)) (mergedDb as any)[key] = clone((localDb as any)[key])
         }
     }
 

@@ -4153,6 +4153,8 @@ app.post('/api/write', async (req, res, next) => {
                     var persistedEtag;
                     // eslint-disable-next-line no-var
                     var persistedHashes;
+                    // eslint-disable-next-line no-var
+                    var persistedView;
                     const incomingDb = await decodeRisuSave(fileContent);
                     const archiveConflict = findArchiveConflicts(dbCache[DB_HEX_KEY], incomingDb, null);
                     if (archiveConflict) {
@@ -4236,7 +4238,7 @@ app.post('/api/write', async (req, res, next) => {
                     // PERSISTED DB, stripped. Not the request bytes — the
                     // split above may have emptied pluginCustomStorage, so
                     // the client's copy and the served copy differ.
-                    const persistedView = normalizeJSON(stripDatabaseForClient(fullDb, { reconcileManifests: true }));
+                    persistedView = normalizeJSON(stripDatabaseForClient(fullDb, { reconcileManifests: true }));
                     persistedEtag = computeDatabaseEtagFromObject(persistedView);
                     // Hashes of that same view, so the client can tell at once
                     // whether the baseline it re-seeds from its own bytes matches
@@ -4266,7 +4268,16 @@ app.post('/api/write', async (req, res, next) => {
 
             // Update ETag, backup, and invalidate cache after database.bin write
             if (key === 'database/database.bin') {
-                delete dbCache[DB_HEX_KEY];
+                // Keep the cache warm with the view just persisted: it is the
+                // exact object the next /api/read or /api/patch would rebuild
+                // by cold-decoding the blob (stripped + normalized, and the
+                // patch hash cache is already keyed on it above). Dropping it
+                // cost one full decode after every full write.
+                if (persistedView) {
+                    dbCache[DB_HEX_KEY] = persistedView;
+                } else {
+                    delete dbCache[DB_HEX_KEY];
+                }
                 if (saveTimers[DB_HEX_KEY]) {
                     clearTimeout(saveTimers[DB_HEX_KEY]);
                     delete saveTimers[DB_HEX_KEY];

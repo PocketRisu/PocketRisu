@@ -907,6 +907,13 @@ export class RisuSavePatcher {
         )
     }
 
+    /** The baseline itself (what this client last synced against). Read-only
+     *  by contract: set() replaces it with a fresh object rather than mutating
+     *  it, so a reference taken before set() stays the pre-attempt view. */
+    baselineDb(): any {
+        return this.lastSyncedDb ?? null
+    }
+
     /** chaIds whose body changed against the baseline in the last set(). */
     changedCharacterIdsOfLastSet(): string[] {
         return [...this.lastChangedCharacterIds]

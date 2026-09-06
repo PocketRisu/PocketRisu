@@ -12,7 +12,7 @@ import { alertConfirm, alertError, alertMd, alertNormalWait, alertSelect, alertT
 import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
-import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
+import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, normalizeJSON, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
 import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat, convertStubsToPlaceholders } from "./storage/chatStorage";
 import { AutoStorage } from "./storage/autoStorage";
 import {
@@ -32,6 +32,18 @@ import { deepTouch } from "./gui/deepTouch.svelte";
 import { pruneHiddenCharacterIds } from "./characterOrder";
 import { updateLorebooks, deselectCharacter } from "./characters";
 import { mergeServerDbWithTrackedLocalChanges, withTrackedCharacters, hasAmbiguousCharacterIds } from "./storage/rebaseMerge";
+import { generationStates, chatGenKey, notifyDatabaseRebased, abortGeneration } from "./process/generationState";
+
+/** A save the server will keep refusing in this state (or one that keeps
+ *  conflicting after repeated rebases). Not transient: retrying re-downloads
+ *  the whole DB for the same answer, so triggerSave surfaces it at once
+ *  instead of feeding it to the generic retry/backoff path. */
+export class SaveRejectedError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'SaveRejectedError'
+    }
+}
 import { initMobileGesture } from "./hotkey";
 import { moduleUpdate } from "./process/modules";
 import { isLocalNetworkUrl } from "./network/localNetwork";
@@ -962,9 +974,40 @@ export async function saveDb() {
         }
     }
 
+    // chaIds with a generation in flight. Their local chat object holds the
+    // reply as it streams in; a rebase that rebuilt them from the server's
+    // stubs would swap in an empty placeholder and strand the partial reply.
+    function generatingCharacters(db: Database): Map<string, string[]> {
+        const live = get(generationStates)
+        const byChar = new Map<string, string[]>()
+        if (live.size === 0) return byChar
+        for (const char of Array.isArray(db.characters) ? db.characters : []) {
+            if (!char?.chaId || !Array.isArray(char.chats)) continue
+            const keys = char.chats.map((chat: any) => chatGenKey(chat?.id)).filter((key: string) => live.has(key))
+            if (keys.length > 0) byChar.set(char.chaId, keys)
+        }
+        return byChar
+    }
+
+    // Abort the generations under these keys and wait for their entries to
+    // clear (the send pipeline ends its entry on every exit path), bounded so
+    // a stuck send cannot block saving. Returns whether all of them ended.
+    async function abortGenerationsAndWait(keys: string[], timeoutMs: number): Promise<boolean> {
+        for (const key of keys) abortGeneration(key)
+        const deadline = Date.now() + timeoutMs
+        while (Date.now() < deadline) {
+            const live = get(generationStates)
+            if (!keys.some((key) => live.has(key))) return true
+            await sleep(50)
+        }
+        return false
+    }
+
     async function rebaseTrackedLocalChangesOnLatestServerDb(
         conflictEtag: string | null, db: Database, toSave: toSaveType, syncedArchivedIds: ReadonlySet<string>,
+        syncedBaselineDb: Database | null,
     ) {
+        const etagBeforeRebase = forageStorage.getDbEtag()
         forageStorage.setDbEtag(conflictEtag ?? null)
         const latestData = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
         if (latestData && latestData.length > 0) {
@@ -975,10 +1018,60 @@ export async function saveDb() {
                     .filter((char) => char?.chaId)
                     .map((char) => [char.chaId, char.name || char.chaId] as [string, string]),
             )
+            const generating = generatingCharacters(db)
+            toSave = withTrackedCharacters(toSave, [...generating.keys()])
             const { mergedDb, skippedArchivedCharIds } = mergeServerDbWithTrackedLocalChanges(
-                latestDb, db, toSave, safeStructuredClone, convertStubsToPlaceholders, syncedArchivedIds,
+                latestDb, db, toSave, safeStructuredClone, convertStubsToPlaceholders, syncedArchivedIds, syncedBaselineDb, normalizeJSON,
             )
+            // A character deactivated elsewhere while a generation streams into
+            // it has no slot in the merged DB. The send pipeline addresses its
+            // target by index into DBState.db, so end those generations first
+            // and only then swap the database: every write they still make
+            // lands in the old object, which is discarded whole.
+            const generatingSkippedKeys = skippedArchivedCharIds.flatMap((chaId) => generating.get(chaId) ?? [])
+            if (generatingSkippedKeys.length > 0) {
+                console.warn('[Save] Aborting generations for characters deactivated elsewhere before rebase:', skippedArchivedCharIds)
+                if (!await abortGenerationsAndWait(generatingSkippedKeys, 5000)) {
+                    // Swapping now would let the still-running send write
+                    // through its stale indices into the new database. Give
+                    // up on this attempt instead: the changes are requeued by
+                    // triggerSave's error path and the next attempt rebases
+                    // again once the generation has ended. The patcher's
+                    // baseline already advanced to this attempt's local state,
+                    // so restore the pre-rebase etag: the retry's patch then
+                    // 409s with the server's (foreign) etag and takes this
+                    // rebase path again, rather than the full-write fallback
+                    // an equal etag would select.
+                    forageStorage.setDbEtag(etagBeforeRebase)
+                    // And the patcher itself: its baseline advanced to this
+                    // attempt's local state in set(), which would make the
+                    // retry's rebase read every local root edit as
+                    // "unchanged since sync" and drop it. Re-seed from the
+                    // pre-attempt baseline so the retry repeats this attempt.
+                    if (supportsPatchSync && syncedBaselineDb) {
+                        patcher = new RisuSavePatcher()
+                        await patcher.init(syncedBaselineDb)
+                        activeSavePatcher = patcher
+                    }
+                    requeueTrackedChanges(toSave)
+                    throw new Error('Rebase deferred: a generation for a character deactivated elsewhere has not ended yet')
+                }
+            }
             setDatabase(mergedDb)
+            // selectedCharID is an index into db.characters; the merged array
+            // follows the server's order and may have gained or lost entries,
+            // so re-point it at the same character (or clear it if gone).
+            if (selectedChaId && !skippedArchivedCharIds.includes(selectedChaId)) {
+                const idx = (mergedDb.characters ?? []).findIndex((char) => char?.chaId === selectedChaId)
+                if (idx === -1) {
+                    deselectCharacter()
+                } else if (idx !== get(selectedCharID)) {
+                    selectedCharID.set(idx)
+                }
+            }
+            // A send streaming into the old database object addresses it by
+            // captured indices; let it re-resolve them against the new one.
+            notifyDatabaseRebased()
             if (skippedArchivedCharIds.length > 0) {
                 // Deactivated on another device while this one still held
                 // edits for them; the edits were dropped (see rebaseMerge).
@@ -1081,9 +1174,13 @@ export async function saveDb() {
         // advances the patcher's baseline to this attempt's local state; a
         // rebase classifies in-flight (de)activations against it.
         let syncedArchivedIds: ReadonlySet<string> = new Set()
+        // Same baseline, whole: a rebase copies a root key from local only
+        // when it differs from this. null (non-patch mode) = local wins.
+        let syncedBaselineDb: Database | null = null
 
         if (supportsPatchSync && !options?.forceFullWrite) {
             syncedArchivedIds = patcher.baselineArchivedCharacterIds()
+            syncedBaselineDb = patcher.baselineDb()
             const patchData = await patcher.set(db, safeStructuredClone(toSave))
             attemptedChangedCharIds = patcher.changedCharacterIdsOfLastSet()
             attemptedIdsAmbiguous = hasAmbiguousCharacterIds(db.characters ?? [])
@@ -1303,7 +1400,7 @@ export async function saveDb() {
                         // restart). A full write or rebase would only replay
                         // the same state; surface it through the error path
                         // instead of cycling.
-                        throw new Error(patchResult.conflictError ?? 'Save rejected: deactivated-character state is inconsistent')
+                        throw new SaveRejectedError(patchResult.conflictError ?? 'Save rejected: deactivated-character state is inconsistent')
                     }
                 }
                 if (!patchResult.success && patchResult.etag && patchResult.etag !== syncedEtag && attemptedIdsAmbiguous) {
@@ -1312,7 +1409,7 @@ export async function saveDb() {
                     // an edit, so rebase with the tracked list only (the
                     // pre-existing conflict behaviour) and retry.
                     console.warn('[Save] Foreign revision conflict with ambiguous character ids, rebasing tracked changes only...')
-                    await rebaseTrackedLocalChangesOnLatestServerDb(patchResult.etag, db, toSave, syncedArchivedIds)
+                    await rebaseTrackedLocalChangesOnLatestServerDb(patchResult.etag, db, toSave, syncedArchivedIds, syncedBaselineDb)
                     await sleep(Math.min(500 * (savetrys + 1), 3000))
                     return 'retry'
                 } else if (!patchResult.success && patchResult.etag && patchResult.etag !== syncedEtag) {
@@ -1323,7 +1420,7 @@ export async function saveDb() {
                     // (the same path a full-write 409 takes) and retry.
                     console.warn('[Save] Patch conflict with a foreign revision, rebasing tracked local changes on latest server DB...')
                     await rebaseTrackedLocalChangesOnLatestServerDb(
-                        patchResult.etag, db, withTrackedCharacters(toSave, attemptedChangedCharIds), syncedArchivedIds,
+                        patchResult.etag, db, withTrackedCharacters(toSave, attemptedChangedCharIds), syncedArchivedIds, syncedBaselineDb,
                     )
                     await sleep(Math.min(500 * (savetrys + 1), 3000))
                     return 'retry'
@@ -1334,16 +1431,22 @@ export async function saveDb() {
             if (supportsPatchSync && !options?.forceFullWrite) {
                 console.warn('[Save] Patch conflict, falling through to full write...')
             }
+            const currentEtag = forageStorage.getDbEtag()
             try {
-                const currentEtag = forageStorage.getDbEtag()
                 await forageStorage.setItem('database/database.bin', dbData, currentEtag ?? undefined)
             } catch (conflictErr) {
                 if (conflictErr instanceof ConflictError) {
+                    if (conflictErr.code === 'ARCHIVE_GUARD_REJECTED' && currentEtag && conflictErr.currentEtag === currentEtag) {
+                        // Our own revision, refused for an inconsistent
+                        // deactivation state: a rebase would download the DB
+                        // and replay the same state into the same rejection.
+                        throw new SaveRejectedError(conflictErr.message)
+                    }
                     console.warn('[Save] Full-write conflict detected, rebasing tracked local changes on latest server DB...')
                     await rebaseTrackedLocalChangesOnLatestServerDb(
                         conflictErr.currentEtag ?? null, db,
                         attemptedIdsAmbiguous ? toSave : withTrackedCharacters(toSave, attemptedChangedCharIds),
-                        syncedArchivedIds,
+                        syncedArchivedIds, syncedBaselineDb,
                     )
                     await sleep(Math.min(500 * (savetrys + 1), 3000))
                     return 'retry'
@@ -1396,7 +1499,7 @@ export async function saveDb() {
                     consecutiveRetries += 1
                     if (consecutiveRetries > MAX_CONSECUTIVE_SAVE_RETRIES) {
                         consecutiveRetries = 0
-                        throw new Error('Saving keeps conflicting with the server after repeated rebases')
+                        throw new SaveRejectedError('Saving keeps conflicting with the server after repeated rebases. Another device may be saving continuously; reload this page to resync, and your unsaved changes are retried on the next edit.')
                     }
                 } else if (result === 'noop' && hasTrackedChanges(toSave)) {
                     requeueTrackedChanges(toSave)
@@ -1404,6 +1507,16 @@ export async function saveDb() {
                 }
             } catch (error) {
                 requeueTrackedChanges(toSave)
+                if (error instanceof SaveRejectedError) {
+                    // Deterministic rejection: the generic backoff below would
+                    // only repeat the download/replay cycle (up to 30 full
+                    // downloads before this alert used to appear). Surface it
+                    // now; the changes stay queued for the next edit.
+                    console.error(error)
+                    alertError(error)
+                    savetrys = 0
+                    return
+                }
                 savetrys += 1
                 if (savetrys > 4) {
                     alertError(error)

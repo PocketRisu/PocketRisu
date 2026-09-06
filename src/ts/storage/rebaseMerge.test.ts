@@ -24,6 +24,21 @@ describe('mergeServerDbWithTrackedLocalChanges', () => {
         expect(local.characters[0].desc).toBe('local')
     })
 
+    test('with a baseline, only root keys this client changed come from local; the rest keep the server value', () => {
+        // Device A changed `username` on the server; this device changed
+        // `personaPrompt` locally and never touched `username`.
+        const baseline = { username: 'old', personaPrompt: 'old', characterOrder: ['a'], characters: [] } as any
+        const server = { username: 'from-A', personaPrompt: 'old', characterOrder: ['a', 'b'], characters: [] } as any
+        const local = { username: 'old', personaPrompt: 'mine', characterOrder: ['a'], characters: [] } as any
+        const { mergedDb } = mergeServerDbWithTrackedLocalChanges(server, local, toSave() as any, clone, passChats, new Set(), baseline)
+        expect(mergedDb.username).toBe('from-A')
+        expect(mergedDb.personaPrompt).toBe('mine')
+        expect(mergedDb.characterOrder).toEqual(['a', 'b'])
+        // A key absent from both baseline and local keeps the server value.
+        const { mergedDb: m2 } = mergeServerDbWithTrackedLocalChanges({ theme: 'srv', characters: [] } as any, { characters: [] } as any, toSave() as any, clone, passChats, new Set(), { characters: [] } as any)
+        expect((m2 as any).theme).toBe('srv')
+    })
+
     test('tracked characters overlay the server copy, are appended when new, and removed when gone locally', () => {
         const server = { characters: [chr('a', { desc: 'server' }), chr('gone')] } as any
         const local = { characters: [chr('a', { desc: 'local' }), chr('new')] } as any

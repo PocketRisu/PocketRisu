@@ -58,10 +58,13 @@ function isUserActive(): boolean {
 // Custom error class for database conflict detection
 export class ConflictError extends Error {
     currentEtag: string
-    constructor(message: string, currentEtag: string) {
+    /** Server guard code (e.g. ARCHIVE_GUARD_REJECTED); undefined for a plain etag conflict. */
+    code?: string
+    constructor(message: string, currentEtag: string, code?: string) {
         super(message)
         this.name = 'ConflictError'
         this.currentEtag = currentEtag
+        this.code = code
     }
 }
 
@@ -505,7 +508,7 @@ export class NodeStorage{
         })
         if(da.status === 409){
             const data = await da.json()
-            throw new ConflictError(data.error, data.currentEtag)
+            throw new ConflictError(data.error, data.currentEtag, typeof data.code === 'string' ? data.code : undefined)
         }
         if(da.status < 200 || da.status >= 300){
             throw await this.storageRequestError('setItem', da)
