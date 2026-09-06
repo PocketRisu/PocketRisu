@@ -123,14 +123,28 @@ export function makeJobFetch(opts: JobFetchOptions): typeof fetch {
             console.warn('[ModelJob] job creation failed, falling back to direct request path', err)
             return opts.fallbackFetch(input, init)
         }
+        let jobId: string
         if (created.status === 409) {
-            throw new ModelJobBusyError()
-        }
-        if (!created.ok) {
+            // The chat already has a running job. If it is THIS generation's
+            // own job (the previous attempt lost its stream before the
+            // upstream answered — a gateway 504 in front of a slow-first-byte
+            // model, or a killed tab — and the send pipeline retried), attach
+            // to it instead of failing: the journal replays from byte 0, so
+            // the retry resumes the generation in place. A job of another
+            // generation is a genuine conflict and must surface (issue #87).
+            let busy: { jobId?: string, generationId?: string } = {}
+            try { busy = await created.json() } catch { /* body optional */ }
+            if (!busy.jobId || busy.generationId !== opts.generationId) {
+                throw new ModelJobBusyError()
+            }
+            console.warn('[ModelJob] chat busy with this generation\'s own job, reattaching', busy.jobId)
+            jobId = busy.jobId
+        } else if (!created.ok) {
             console.warn('[ModelJob] job creation rejected (', created.status, '), falling back to direct request path')
             return opts.fallbackFetch(input, init)
+        } else {
+            jobId = (await created.json()).jobId
         }
-        const jobId: string = (await created.json()).jobId
 
         // Abort propagation: aborting the request DELETEs the job (server
         // aborts the upstream) and cancels the local stream fetch (same
@@ -151,9 +165,14 @@ export function makeJobFetch(opts: JobFetchOptions): typeof fetch {
         // resumes, while the radio may take several more seconds to come back.
         // The job is already running server-side and the journal replays from
         // byte 0 on every attach, so attaching late loses nothing. Only fetch
-        // REJECTIONS (network-level) retry; an HTTP response is the server's
-        // definitive answer and falls through unchanged. On exhaustion this is
-        // a lost connection, not a lost generation — surface the same
+        // REJECTIONS (network-level) and responses that did not come from our
+        // server retry — a reverse proxy in front of the server answers with
+        // its own 502/504 when the pre-header wait (a thinking model's first
+        // byte) outlasts its idle timeout, and that is a transport failure,
+        // not the server's answer (issue #87). Our own stream responses always
+        // carry x-model-job-id, so a response without it is a middlebox; 404
+        // stays definitive (the job is gone). On exhaustion this is a lost
+        // connection, not a lost generation — surface the same
         // ModelJobConnectionLostError the mid-stream path uses (recovery picks
         // the job up at the next return), never the raw TypeError.
         const baseDelay = opts.reconnectBaseDelayMs ?? 1000
@@ -175,7 +194,15 @@ export function makeJobFetch(opts: JobFetchOptions): typeof fetch {
                 if (attempt > 0) {
                     await sleepAbortable(baseDelay * 2 ** (attempt - 1))
                 }
-                streamRes = await fetch(`/api/model-jobs/${jobId}/stream`, { headers: await authHeader(), signal })
+                const res = await fetch(`/api/model-jobs/${jobId}/stream`, { headers: await authHeader(), signal })
+                // Gateway-shaped statuses only (502/503/504, Cloudflare 52x,
+                // 408): a headerless 4xx/500 can also be the server's own
+                // auth/handler error and must stay definitive.
+                if (!res.headers.has('x-model-job-id') && (res.status === 408 || res.status >= 502)) {
+                    console.warn('[ModelJob] stream attach answered by an intermediary (', res.status, '), retrying')
+                    continue
+                }
+                streamRes = res
                 break
             } catch (err) {
                 if (signal?.aborted) {

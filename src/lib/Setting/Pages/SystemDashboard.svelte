@@ -24,7 +24,9 @@
     import { DBState, SystemSubmenuIndex, settingsOpen } from 'src/ts/stores.svelte'
     import { getDatabase } from 'src/ts/storage/database.svelte'
     import { changeChar } from 'src/ts/characters'
+    import { promptActivateCharacter } from 'src/ts/characterArchive'
     import { SystemTab } from 'src/ts/routing'
+    import { dbTransferSizeStore, TRANSFER_SIZE_RECOMMENDED_BYTES } from 'src/ts/transferSize'
     import { language, getCurrentLocale } from 'src/lang'
 
     // ── Types ────────────────────────────────────────────────────────────────
@@ -46,17 +48,21 @@
             kv: { count: number; totalSize: number; oldest: number | null; newest: number | null }
             file: { count: number; totalSize: number; oldest: number | null; newest: number | null }
         }
-        trashed: { count: number; expiredCount: number; available: boolean }
+        trashed: { count: number; available: boolean }
+        /** Deactivated-character rows the live database no longer references (kept until purged here). */
+        archiveOrphan?: { count: number; totalSize: number; available: boolean }
         orphan: { count: number; totalSize: number; available: boolean }
         etag: string | null
     }
     interface CharBreakdown {
         chaId: string; name: string; image: string; trashed: boolean
+        /** Deactivated: body lives in kv archive/<chaId>; `archiveMissing` when that payload is gone. */
+        archived?: boolean; archiveMissing?: boolean
         cardBytes: number; imgBytes: number; chatBytes: number; totalBytes: number
     }
     interface CharStats {
         characters: CharBreakdown[]
-        orphan: { count: number; totalSize: number }
+        orphan: { count: number; totalSize: number; available?: boolean }
     }
     interface ModuleBreakdown {
         id: string; name: string
@@ -129,6 +135,34 @@
             loadError = err instanceof Error ? err.message : String(err)
         } finally {
             loading = false
+        }
+    }
+
+    async function runPurgeArchiveOrphans() {
+        const ok = await alertConfirm(language.storageArchiveOrphanConfirm(
+            stats?.archiveOrphan?.count ?? 0,
+            stats?.archiveOrphan?.totalSize ?? 0,
+        ))
+        if (!ok) return
+        optimizeMessage = language.storageOrphanPurging
+        optimizeOpen = true
+        try {
+            const auth = await forageStorage.createAuth()
+            const res = await fetch('/api/db/archive/purge-orphans', {
+                method: 'POST',
+                headers: { 'risu-auth': auth },
+            })
+            const json = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                notifyError(language.storageOrphanFailed + ': ' + (json?.error || `HTTP ${res.status}`))
+                return
+            }
+            notifySuccess(language.storageArchiveOrphanDone(json.deleted ?? 0, json.bytes ?? 0))
+            await loadStats()
+        } catch (err) {
+            notifyError(language.storageOrphanFailed + ': ' + (err instanceof Error ? err.message : String(err)))
+        } finally {
+            optimizeOpen = false
         }
     }
 
@@ -285,7 +319,11 @@
         // share chunks) live in the `chunks` table, not in kv. kv holds only a
         // tiny marker, so the chart counts the chunk table's physical size here
         // and excludes database.bin / dbbackup from kv accounting.
-        const chunkedDbBytes = stats.chunks?.bytes ?? 0
+        // Deactivated-character payloads (archive/*) are chunk-routed too and
+        // therefore also live in the `chunks` table; they get their own row
+        // below, so take their (logical) size out of the DB slice here. Dedup
+        // makes this an approximation, clamped so the DB row never goes negative.
+        const chunkedDbBytes = Math.max(0, (stats.chunks?.bytes ?? 0) - get('archive/'))
         // A small DB (≤ chunk threshold) stays a raw kv value rather than chunks,
         // so count it here — otherwise the database row reads 0 and its bytes get
         // mislabeled as "uncategorized". Keyed on whether the *live* blob is
@@ -297,7 +335,7 @@
         // else lives in kv (test keys, migration leftovers), it shows up
         // under "uncategorized" so the bar always sums correctly.
         const knownKv =
-            get('assets/') + inlayKvTotal + get('remotes/') + get('coldstorage/') + rawDbBlob
+            get('assets/') + inlayKvTotal + get('remotes/') + get('coldstorage/') + get('archive/') + get('archive-meta/') + rawDbBlob
         const uncategorizedKv = Math.max(0, stats.kvTotalBytes - knownKv)
         // SQLite overhead splits into "structural" (always present — indexes,
         // page headers, alignment) and "reclaimable" (the freelist, removable
@@ -311,6 +349,7 @@
             { id: 'kv-inlay',        label: language.storageRowKvInlay,        desc: language.storageRowKvInlayDesc,        size: inlayTotal,                    color: 'bg-emerald-500' },
             { id: 'kv-remotes',      label: language.storageRowKvRemotes,      desc: language.storageRowKvRemotesDesc,      size: get('remotes/'),               color: 'bg-cyan-500' },
             { id: 'kv-cold',         label: language.storageRowKvColdStorage,  desc: language.storageRowKvColdStorageDesc,  size: get('coldstorage/'),           color: 'bg-stone-500' },
+            { id: 'kv-archive',      label: language.storageRowKvArchive,      desc: language.storageRowKvArchiveDesc,      size: get('archive/') + get('archive-meta/'), color: 'bg-violet-500' },
             { id: 'kv-uncat',        label: language.storageRowKvUncategorized, desc: language.storageRowKvUncategorizedDesc, size: uncategorizedKv,             color: 'bg-stone-600' },
             { id: 'overhead',        label: language.storageRowSqliteOverhead, desc: language.storageRowSqliteOverheadDesc, size: structuralOverhead,            color: 'bg-zinc-500' },
             { id: 'reclaimable',     label: language.storageRowReclaimablePages, desc: language.storageRowReclaimablePagesDesc, size: reclaimable,               color: 'bg-yellow-500' },
@@ -373,6 +412,14 @@
     // Trashed rows aren't in the live characters array, so there's nothing to jump to.
     function jumpToCharacter(c: CharBreakdown) {
         if (c.trashed) return
+        if (c.archived) {
+            // Activation asks for confirmation; only leave the dashboard when it opened.
+            void promptActivateCharacter(c.chaId).then((opened) => {
+                if (opened) settingsOpen.set(false)
+                void loadStats()
+            })
+            return
+        }
         const index = getDatabase().characters.findIndex((ch) => ch.chaId === c.chaId)
         if (index === -1) return
         changeChar(index)
@@ -519,6 +566,41 @@
                     </Tooltip.Root>
                     <span class="text-textcolor text-sm tabular-nums shrink-0 w-20 text-right">{fmtBytes(row.size)}</span>
                 </div>
+                {#if row.id === 'kv-database'}
+                    <!-- Client-measured full-write payload (chats excluded). Kept
+                         client-side on purpose: serializing a multi-hundred-MB
+                         DB on the server would stall every request. -->
+                    <div class="flex items-center gap-2 py-1.5 pl-5 border-b border-darkborderc/30 last:border-b-0">
+                        <span class="text-textcolor2 text-sm flex-1 min-w-0 truncate">{language.storageRowTransferSize}</span>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger>
+                                {#snippet child({ props })}
+                                    <button
+                                        {...props}
+                                        type="button"
+                                        class="text-textcolor2 hover:text-primary cursor-pointer shrink-0 leading-none"
+                                        aria-label={language.storageRowTransferSize}
+                                        onclick={() => openRowDetails(language.storageRowTransferSize, language.storageRowTransferSizeDesc, $dbTransferSizeStore.bytes)}
+                                    >
+                                        <InfoIcon size={14} />
+                                    </button>
+                                {/snippet}
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <Tooltip.Content
+                                    class="bg-darkbg border border-darkborderc rounded-md px-3 py-2 text-xs text-textcolor shadow-lg z-50 max-w-70 leading-relaxed"
+                                    sideOffset={4}
+                                    collisionPadding={8}
+                                >
+                                    {language.storageRowTransferSizeDesc}
+                                </Tooltip.Content>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                        <span class={'text-sm tabular-nums shrink-0 text-right ' + ($dbTransferSizeStore.overLimit ? 'text-yellow-400' : 'text-textcolor2')}>
+                            {fmtBytes($dbTransferSizeStore.bytes)} / {language.storageRowTransferSizeLimit.replace('{{limit}}', fmtBytes(TRANSFER_SIZE_RECOMMENDED_BYTES))}
+                        </span>
+                    </div>
+                {/if}
             {/each}
             {#if showFullDisk && otherUsed != null && otherUsed > 0}
                 <div class="flex items-center gap-2 py-1.5 border-b border-darkborderc/30 last:border-b-0">
@@ -665,6 +747,18 @@
             <ShSwitch bind:checked={DBState.db.nodeOnlyAutoCleanAssets} />
         </div>
 
+        {#if stats.archiveOrphan}
+            <div class="flex items-center justify-between gap-3 mb-3 border-t border-darkborderc/50 pt-3">
+                <div class="min-w-0">
+                    <div class="text-textcolor text-sm">{language.storageArchiveOrphanHeader(stats.archiveOrphan.count, stats.archiveOrphan.totalSize)}</div>
+                    <div class="text-textcolor2 text-xs leading-relaxed">{language.storageArchiveOrphanDesc}</div>
+                </div>
+                <ShButton variant="outline" size="sm" onclick={runPurgeArchiveOrphans} disabled={!stats.archiveOrphan.available || stats.archiveOrphan.count === 0}>
+                    {language.storageArchiveOrphanPurge}
+                </ShButton>
+            </div>
+        {/if}
+
         <div class="flex justify-end">
             <ShButton variant="primary" onclick={runPurgeOrphans} disabled={!stats.orphan.available || stats.orphan.count === 0}>
                 <ImageOffIcon size={16} />
@@ -716,6 +810,9 @@
                                 <div class="flex items-center gap-2 min-w-0">
                                     {#if c.trashed}
                                         <ShBadge variant="secondary">{language.storageCharactersTrashed}</ShBadge>
+                                    {/if}
+                                    {#if c.archived}
+                                        <ShBadge variant={c.archiveMissing ? 'destructive' : 'outline'}>{c.archiveMissing ? language.storageCharactersDeactivatedMissing : language.storageCharactersDeactivated}</ShBadge>
                                     {/if}
                                     <span class="text-textcolor text-sm truncate">{c.name || '(unnamed)'}</span>
                                 </div>

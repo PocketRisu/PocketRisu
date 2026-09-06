@@ -79,6 +79,17 @@
         y:number,
         content:string,
     } = $state(null)
+    // Branch tree rows: y=0 is the greeting (not part of chat.message), the
+    // rest map to message[y-1]. Indexing message[-1] for the first row threw
+    // a TypeError on every hover.
+    function branchNodeContent(obj: { chatId: number, y: number }): string {
+        const char = getCurrentCharacter()
+        const chat = char.chats[obj.chatId]
+        if(obj.y === 0){
+            return (chat.fmIndex === -1 ? char.firstMessage : char.alternateGreetings?.[chat.fmIndex ?? 0]) ?? ''
+        }
+        return chat.message[obj.y - 1]?.data ?? ''
+    }
     let copiedKey: string | null = $state(null)
     let togglePresetShowAll = $state(false)
 
@@ -590,21 +601,19 @@
                 style="top: {obj.y * 80 + 24}px; left: {obj.x * 80 + 24}px"
                 onmouseenter={() => {
                     if(branchHover === null){
-                        const char = getCurrentCharacter()
                         branchHover = {
                             x: obj.x,
                             y: obj.y,
-                            content: char.chats[obj.chatId].message[obj.y - 1].data
+                            content: branchNodeContent(obj)
                         }
                     }
                 }}
                 onclick={() => {
                     if(branchHover === null){
-                        const char = getCurrentCharacter()
                         branchHover = {
                             x: obj.x,
                             y: obj.y,
-                            content: char.chats[obj.chatId].message[obj.y - 1].data
+                            content: branchNodeContent(obj)
                         }
                     }
                 }}

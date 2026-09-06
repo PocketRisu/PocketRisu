@@ -24,8 +24,8 @@
     <button class="font-medium cursor-pointer hover:text-primary" onclick={() => {
         exportRegex()
     }}><DownloadIcon /></button>
-    <button class="font-medium cursor-pointer hover:text-primary" onclick={() => {
-        importRegex()
+    <button class="font-medium cursor-pointer hover:text-primary" onclick={async () => {
+        DBState.db.globalscript = await importRegex(DBState.db.globalscript)
     }}><HardDriveUploadIcon /></button>
 </div>
 </SettingPage>

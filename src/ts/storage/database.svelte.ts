@@ -772,6 +772,18 @@ export function setDatabase(data:Database){
     data.saveSignatures ??= false
     data.nodeOnlyScrollButtonType ??= 'four'
     data.nodeOnlyHideRecentChats ??= false
+    data.nodeOnlyArchivedCharacters ??= []
+    data.nodeOnlyHideArchivedCharacters ??= false
+    data.nodeOnlyHiddenCharacterIds ??= []
+    // One-time migration: the global "show folder name in icon" toggle became
+    // a per-folder display mode. A truthy global value marks folders that
+    // have no mode yet as 'name' and is then cleared, so this never runs twice.
+    if (data.showFolderName && Array.isArray(data.characterOrder)) {
+        for (const entry of data.characterOrder) {
+            if (entry && typeof entry !== 'string' && !entry.nodeOnlyDisplay) entry.nodeOnlyDisplay = 'name'
+        }
+        data.showFolderName = false
+    }
     data.nodeOnlyRestoreLastChat ??= false
     data.nodeOnlyAutoCleanAssets ??= false
     data.keepSessionAlive ??= 'off'
@@ -1600,6 +1612,17 @@ export interface Database{
     dynamicModelRegistry?:boolean
     nodeOnlyScrollButtonType?:'four'|'two'|'off'
     nodeOnlyHideRecentChats?:boolean
+    // Deactivated characters (src/ts/characterArchive.ts). Their bodies live
+    // server-side in kv archive/<chaId>/<archivedAt>; only these stubs stay in the database
+    // so the lists can render them in place. Never exposed to plugins.
+    nodeOnlyArchivedCharacters?:ArchivedCharacterStub[]
+    // Hide deactivated characters from the character lists (the storage
+    // dashboard still lists them).
+    nodeOnlyHideArchivedCharacters?:boolean
+    // Characters hidden from the sidebar rail (display only, no data impact;
+    // the character manager still lists them). chaIds, kept at DB level so
+    // the flag survives deactivation and never rides along in .charx exports.
+    nodeOnlyHiddenCharacterIds?:string[]
     // Reopen the last active character on boot instead of landing on Home.
     // Default OFF — an unexpected jump into a chat surprises users who open
     // the app to browse. Toggled in accessibility settings (Others tab).
@@ -1672,6 +1695,24 @@ export interface loreBook{
     bookVersion?:number
     id?:string
     folder?:string
+}
+
+/** Stub kept in `nodeOnlyArchivedCharacters` for a deactivated character. Built by the server (/api/characters/:chaId/archive). */
+export interface ArchivedCharacterStub{
+    chaId: string
+    name: string
+    image: string
+    nickname?: string
+    tags: string[]
+    creation_date?: number
+    lastInteraction: number
+    archivedAt: number
+    /** Set when the character sits in the trash (trash = deactivated + this marker). Exported as `trashTime`. */
+    trashedAt?: number
+    /** Encoded payload size on the server. */
+    bytes: number
+    chatCount: number
+    chatIds: string[]
 }
 
 export interface character{
@@ -1848,6 +1889,10 @@ export function purgeUnsupportedGroupChats(db: Database): number {
     db.characters = db.characters.filter((char): char is character => (char as any)?.type !== 'group')
     if (db.characterOrder?.length) {
         const validIds = new Set(db.characters.map((char) => char.chaId))
+        // Deactivated characters keep their slot (and folder) in the order list.
+        for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
+            if (stub?.chaId) validIds.add(stub.chaId)
+        }
         const nextOrder: (string | folder)[] = []
         for (const entry of db.characterOrder) {
             if (typeof entry === 'string') {
@@ -2049,6 +2094,19 @@ export interface folder{
     id:string
     imgFile?:string
     img?:string
+    // NodeOnly additive fields (ignored by upstream). How the rail slot is
+    // drawn: 'icon' (nodeOnlyIcon or the default glyph), 'image' (imgFile) or
+    // 'name'. Missing → 'image' when imgFile is set, else 'icon'.
+    nodeOnlyDisplay?:FolderDisplayMode
+    nodeOnlyIcon?:string
+}
+
+export type FolderDisplayMode = 'icon' | 'image' | 'name'
+
+/** Resolve a folder's display mode, tolerating folders written before the field existed. */
+export function folderDisplayMode(f: folder): FolderDisplayMode {
+    if (f.nodeOnlyDisplay === 'icon' || f.nodeOnlyDisplay === 'image' || f.nodeOnlyDisplay === 'name') return f.nodeOnlyDisplay
+    return f.imgFile ? 'image' : 'icon'
 }
 
 

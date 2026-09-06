@@ -2,6 +2,7 @@ import { get, writable } from "svelte/store";
 import { saveImage, setDatabase, type character, type Chat, defaultSdDataFunc, type loreBook, getDatabase, getCharacterByIndex, setCharacterByIndex, getCurrentChat, loadTogglesFromChat, normalizeChat, newChatModelDefaults } from "./storage/database.svelte";
 import { ensureChatHydrated } from "./storage/chatStorage";
 import { alertAddCharacter, alertConfirm, alertError, alertSelect, alertStore, alertWait, notifySuccess, notifyInfo } from "./alert";
+import { archiveCharacter } from "./characterArchive";
 import { loadingOverlayStore, chatDeselected } from "./stores.svelte";
 import { language } from "../lang";
 import { checkNullish, findCharacterbyId, findCharacterIndexbyId, getUserName, selectMultipleFile, selectSingleFile } from "./util";
@@ -707,16 +708,20 @@ export function deselectCharacter() {
     selectedCharID.set(-1)
 }
 
-export async function removeChar(identifier:string|number,name:string, type:'normal'|'permanent'|'permanentForce' = 'normal'){
+export async function removeChar(identifier:string|number,name:string, type:'normal'|'permanent'|'permanentForce' = 'normal', arg:{ skipConfirm?: boolean } = {}){
     const db = getDatabase()
-    if(type !== 'permanentForce'){
-        const conf = await alertConfirm(language.removeConfirm + name)
+    // skipConfirm: bulk callers (character manager) confirm once for the whole set.
+    // Moving to the trash is reversible, so it asks once; permanent deletion asks twice.
+    if(type !== 'permanentForce' && !arg.skipConfirm){
+        const conf = await alertConfirm((type === 'normal' ? language.moveToTrashConfirm : language.removeConfirm) + name)
         if(!conf){
             return
         }
-        const conf2 = await alertConfirm(language.removeConfirm2 + name)
-        if(!conf2){
-            return
+        if(type === 'permanent'){
+            const conf2 = await alertConfirm(language.removeConfirm2 + name)
+            if(!conf2){
+                return
+            }
         }
     }
     let chars = db.characters
@@ -729,11 +734,13 @@ export async function removeChar(identifier:string|number,name:string, type:'nor
         return
     }
     if(type === 'normal'){
-        chars[index].trashTime = Date.now()
+        // Trash = deactivate + marker: the character leaves memory and the
+        // database blob like any deactivation (src/ts/characterArchive.ts).
+        // Bulk callers confirmed once already; they also get one summary instead of a toast per character.
+        await archiveCharacter(index, { skipConfirm: true, trash: true, silent: arg.skipConfirm })
+        return
     }
-    else{
-        chars.splice(index, 1)
-    }
+    chars.splice(index, 1)
     checkCharOrder()
     db.characters = chars
     requiresFullEncoderReload.state = true

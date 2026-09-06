@@ -10,6 +10,7 @@
     import { PlusIcon, SmileIcon, TrashIcon, UserIcon, ActivityIcon, BookIcon, Braces, Volume2Icon, DownloadIcon, HardDriveUploadIcon, Share2Icon, ImageIcon, ImageOffIcon, ArrowUp, ArrowDown, TriangleAlertIcon } from '@lucide/svelte'
     import Check from "../UI/GUI/CheckInput.svelte";
     import { addCharEmotion, addingEmotion, getCharImage, rmCharEmotion, selectCharImg, removeChar, changeCharImage } from "../../ts/characters";
+    import { archiveCharacter } from "../../ts/characterArchive";
     import LoreBook from "./LoreBook/LoreBookSetting.svelte";
     import { getAuthorNoteDefaultText, selectMultipleFile, selectSingleFile } from "../../ts/util";
     import Help from "../Others/Help.svelte";
@@ -827,8 +828,12 @@ import ShButton from "../UI/GUI/ShButton.svelte";
     }}>{language.convertToModule}</Button>
 
     <Button onclick={async () => {
+        await archiveCharacter($selectedCharID)
+    }} className="mt-2" size="md">{language.deactivateCharacter}</Button>
+
+    <Button onclick={async () => {
         removeChar($selectedCharID, DBState.db.characters[$selectedCharID].name)
-    }} className="mt-2" size="md">{language.removeCharacter}</Button>
+    }} className="mt-2" size="md">{language.moveToTrash}</Button>
 
     {#if DBState.db.characters[$selectedCharID].type === 'character'}
         {@const char = DBState.db.characters[$selectedCharID] as character}

@@ -88,6 +88,24 @@ function createPatchHashCache(calculateHash) {
         return compose(database, getState(database));
     }
 
+    // Per-root-key hashes in the same form the client keeps in its
+    // hashBlocks, so a 409 can name the keys that diverged instead of only
+    // reporting that the whole document did. Fills any missing entries.
+    function keyHashes(database) {
+        const out = {};
+        if (!isObjectRoot(database)) return out;
+        const state = getState(database);
+        for (const key in database) {
+            let valueHash = state.valueHashes.get(key);
+            if (valueHash === undefined && !state.valueHashes.has(key)) {
+                valueHash = calculateHash(database[key]);
+                state.valueHashes.set(key, valueHash);
+            }
+            out[key] = valueHash;
+        }
+        return out;
+    }
+
     function update(previousDatabase, nextDatabase, patch) {
         if (!isObjectRoot(nextDatabase)) {
             return calculateHash(nextDatabase);
@@ -117,7 +135,7 @@ function createPatchHashCache(calculateHash) {
         return compose(nextDatabase, nextState);
     }
 
-    return { hash, update };
+    return { hash, update, keyHashes };
 }
 
 module.exports = {

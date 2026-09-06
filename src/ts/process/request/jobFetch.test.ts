@@ -38,6 +38,9 @@ interface ServerBehavior {
     streamRejectTimes?: number
     /** HTTP status of the GET /stream response itself (default 200). */
     streamHttpStatus?: number
+    /** Answer this many GET /stream fetches with a middlebox 504 (no
+     *  x-model-job-* headers) before serving — for gateway-timeout tests. */
+    streamIntermediaryTimes?: number
     /** GET /api/model-jobs/:id after the stream ends. */
     job?: { status: string, error?: string }
     /** Successive GET /api/model-jobs/:id responses (last repeats). Overrides job. */
@@ -61,8 +64,14 @@ function setupServer(behavior: ServerBehavior) {
                 behavior.streamRejectTimes -= 1
                 throw new TypeError('Failed to fetch')
             }
+            if (behavior.streamIntermediaryTimes && behavior.streamIntermediaryTimes > 0) {
+                behavior.streamIntermediaryTimes -= 1
+                // A reverse proxy's own error page: no x-model-job-* headers.
+                return new Response('<html>504 Gateway Time-out</html>', { status: 504, headers: { 'content-type': 'text/html' } })
+            }
             const headers = behavior.streamHeaders ?? {
                 'content-type': 'text/event-stream',
+                'x-model-job-id': 'job-1',
                 'x-model-job-upstream-status': '200',
             }
             let chunks = behavior.streamChunks ?? []
@@ -308,12 +317,65 @@ describe('makeJobFetch', () => {
         })
     })
 
-    test('creation 409 throws ModelJobBusyError and never falls back', async () => {
-        setupServer({ create: { status: 409, body: { error: 'busy', jobId: 'job-1' } } })
+    test('creation 409 for another generation throws ModelJobBusyError and never falls back', async () => {
+        setupServer({ create: { status: 409, body: { error: 'busy', jobId: 'job-1', generationId: 'gen-other' } } })
         const opts = makeOpts()
         await expect(makeJobFetch(opts)('https://provider.example/v1/chat', { method: 'POST', body: '{}' }))
             .rejects.toThrow(ModelJobBusyError)
         expect(opts.fallbackFetch).not.toHaveBeenCalled()
+    })
+
+    test('creation 409 without a generationId (older server) still throws ModelJobBusyError', async () => {
+        setupServer({ create: { status: 409, body: { error: 'busy', jobId: 'job-1' } } })
+        await expect(makeJobFetch(makeOpts())('https://provider.example/v1/chat', { method: 'POST', body: '{}' }))
+            .rejects.toThrow(ModelJobBusyError)
+    })
+
+    test('creation 409 for this generation\'s own job reattaches to it instead of failing (issue #87)', async () => {
+        // The send pipeline retried after the first attempt lost its stream;
+        // the server still holds our job → resume it, no new job, no busy error.
+        const { calls } = setupServer({
+            create: { status: 409, body: { error: 'busy', jobId: 'job-1', generationId: 'gen-1' } },
+            streamChunks: ['resumed'],
+            job: { status: 'done' },
+        })
+        const opts = makeOpts()
+        const res = await makeJobFetch(opts)('https://provider.example/v1/chat', { method: 'POST', body: '{}' })
+        expect(res.status).toBe(200)
+        expect(await res.text()).toBe('resumed')
+        expect(opts.fallbackFetch).not.toHaveBeenCalled()
+        expect(callsFor(calls, '/api/model-jobs/job-1/stream')).toHaveLength(1)
+        await vi.waitFor(() => {
+            expect(callsFor(calls, '/api/model-jobs/job-1/claim', 'POST')).toHaveLength(1)
+        })
+    })
+
+    test('a gateway error page on the initial attach retries like a network failure (issue #87)', async () => {
+        // The reverse proxy in front of the server gave up on the pre-header
+        // wait (thinking model, slow first byte). Its 504 carries no
+        // x-model-job-* headers, so it is a transport failure, not our answer.
+        const { calls } = setupServer({
+            streamIntermediaryTimes: 2,
+            streamChunks: ['hello'],
+            job: { status: 'done' },
+        })
+        const res = await makeJobFetch(makeOpts({ reconnectBaseDelayMs: 1 }))('https://provider.example/v1/chat', { method: 'POST', body: '{}' })
+        expect(await res.text()).toBe('hello')
+        expect(callsFor(calls, '/api/model-jobs/job-1/stream')).toHaveLength(3)
+    })
+
+    test('a headerless 500 on the initial attach stays definitive (server-side auth/handler error, not a gateway)', async () => {
+        const { calls } = setupServer({ streamHttpStatus: 500, streamHeaders: { 'content-type': 'application/json' } })
+        await expect(makeJobFetch(makeOpts({ reconnectBaseDelayMs: 1 }))('https://provider.example/v1/chat', { method: 'POST', body: '{}' }))
+            .rejects.toThrow(TypeError)
+        expect(callsFor(calls, '/api/model-jobs/job-1/stream')).toHaveLength(1)
+    })
+
+    test('gateway errors on every initial attach end in ModelJobConnectionLostError, job left running', async () => {
+        const { calls } = setupServer({ streamIntermediaryTimes: Infinity })
+        await expect(makeJobFetch(makeOpts({ reconnectBaseDelayMs: 1 }))('https://provider.example/v1/chat', { method: 'POST', body: '{}' }))
+            .rejects.toThrow(ModelJobConnectionLostError)
+        expect(callsFor(calls, '/api/model-jobs/job-1', 'DELETE')).toHaveLength(0)
     })
 
     test('creation network failure falls back to the direct fetch with the same args', async () => {

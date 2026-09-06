@@ -1,4 +1,5 @@
 import { alertError, alertStore, alertWait, alertMd, alertConfirm, alertConfirmMulti, alertClear, waitAlert, notifySuccess, notifyInfo, notifyError } from "../alert";
+import { fetchArchivedCharactersInline } from "../characterArchive"
 import { downloadFile, LocalWriter, forageStorage, loadAssetManifestItems } from "../globalApi.svelte";
 import { encodeRisuSaveLegacy } from "../storage/risuSave";
 import { getDatabase, type Chat } from "../storage/database.svelte";
@@ -187,6 +188,12 @@ export async function SavePartialLocalBackup(){
         }
     }
     
+    // Deactivated characters are not in db.characters; keep their profile images too.
+    for (const stub of db.nodeOnlyArchivedCharacters ?? []) {
+        if (stub?.image) {
+            assetMap.set(stub.image, { charName: stub.name ?? 'Unknown Character', assetName: 'Profile Image' })
+        }
+    }
     // User icon
     if (db.userIcon) {
         assetMap.set(db.userIcon, { charName: 'User Settings', assetName: 'User Icon' })
@@ -289,6 +296,18 @@ export async function SavePartialLocalBackup(){
             }
         }
     }
+    // Deactivated characters live server-side; the .bin must carry them as
+    // complete records exactly like the server export does. A missing payload
+    // aborts the backup instead of silently dropping the character.
+    if ((dbCopy.nodeOnlyArchivedCharacters ?? []).length > 0) {
+        alertWait(`Saving partial local backup... (Deactivated characters)`)
+        const inline = await fetchArchivedCharactersInline()
+        const present = new Set(dbCopy.characters.map((c) => c?.chaId))
+        for (const c of inline) {
+            if (!present.has(c.chaId)) dbCopy.characters.push(c)
+        }
+    }
+    delete dbCopy.nodeOnlyArchivedCharacters
     // Plugin values live in the server kv, never in the client DB (the field
     // is always {}). Importing a .bin replaces plugin storage wholesale, so
     // the backup must carry every key or a restore wipes them.
@@ -330,10 +349,23 @@ export function LoadLocalBackup(){
             const file = input.files[0];
             input.remove();
             alertWait(`Loading local Backup... (Uploading ${file.name})`);
-            const result = await forageStorage.importBackup(file, (loaded, total) => {
-                const progress = total > 0 ? ((loaded / total) * 100).toFixed(2) : '0.00'
-                alertWait(`Loading local Backup... (${progress}%)`)
-            })
+            let result: Awaited<ReturnType<typeof forageStorage.importBackup>>
+            try {
+                result = await forageStorage.importBackup(file, (loaded, total) => {
+                    const progress = total > 0 ? ((loaded / total) * 100).toFixed(2) : '0.00'
+                    alertWait(`Loading local Backup... (${progress}%)`)
+                })
+            } catch (error) {
+                // The server rejected the file before replacing the database
+                // (encrypted upstream account backup, corrupt payload, ...).
+                // Explain why instead of surfacing it as an uncaught error.
+                console.error(error)
+                const code = (error as { code?: unknown })?.code
+                alertError(code === 'BACKUP_ENCRYPTED'
+                    ? language.errors.backupEncryptedAccount
+                    : String((error as Error)?.message ?? error))
+                return
+            }
             if (result.coldStorageFailed && result.coldStorageFailed > 0) {
                 alertError(`Warning: ${result.coldStorageFailed} character(s) could not be restored from cold storage. The imported save may be incomplete. The app will now reload.`)
                 await waitAlert()

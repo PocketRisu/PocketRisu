@@ -43,6 +43,7 @@ PocketRisu는 PC나 개인 서버에 띄워두고, PC·태블릿·스마트폰 �
 - [원격 접속 가이드](../docs/ko/remote.md)
 - [Termux 설치 가이드 (Android)](../docs/ko/termux.md)
 - [플러그인 저장소 가이드](../docs/ko/plugin-storage.md)
+- [캐릭터 비활성화 가이드](../docs/ko/deactivate-characters.md)
 
 
 ## RisuAI 호환

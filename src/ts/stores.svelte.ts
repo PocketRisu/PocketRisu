@@ -45,6 +45,10 @@ export const settingsOpen = writable(false)
 export const botMakerMode = writable(false)
 export const moduleBackgroundEmbedding = writable('')
 export const openPresetList = writable(false)
+// Character manager popup (desktop overlay; mobile mounts it inline).
+export const openCharacterManager = writable(false)
+// Folder settings dialog target: characterOrder folder id, or null when closed.
+export const folderSettingsTarget = writable<string | null>(null)
 export const presetSelectCallback = writable<((index: number) => void) | null>(null)
 export const openModelPresetList = writable(false)
 export const modelPresetSelectCallback = writable<((id: string) => void) | null>(null)

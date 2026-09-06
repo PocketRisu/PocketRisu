@@ -837,6 +837,26 @@ export function diffArrayWithIdGuard(
     return ops
 }
 
+export type HashMismatchRemote = {
+    serverHash?: string
+    keyHashes?: Record<string, string>
+    characterHashes?: Record<string, string>
+    duplicateCharIds?: string[]
+}
+
+export type HashMismatchReport = {
+    localHash: string
+    serverHash?: string
+    roots: { mismatched: string[]; onlyLocal: string[]; onlyRemote: string[] }
+    characters: { mismatched: string[]; onlyLocal: string[]; onlyRemote: string[] }
+    /** chaIds that appear more than once in the local baseline (first occurrence is the one compared). */
+    duplicateCharIds: string[]
+    /** chaIds the server reported as repeated in its own characters array. */
+    serverDuplicateCharIds: string[]
+    /** Every compared block agrees yet the document hash differs — key set or composition problem. */
+    compositionOnly: boolean
+}
+
 export class RisuSavePatcher {
     private lastSyncedDb: any;
     private hashBlocks: { [key: string]: number } = {};
@@ -858,6 +878,10 @@ export class RisuSavePatcher {
     private lastCharJsons = new Map<string, string>();
     private lastModuleJsons = new Map<string, string>();
     private moduleItemHashes = new Map<string, number>();
+    // chaIds whose stubbed body hashed differently from the baseline in the
+    // last set(): the characters the client actually changed, whether or not
+    // the tracker listed them. A rebase overlays exactly these.
+    private lastChangedCharacterIds: string[] = [];
 
     hash(): string {
         this.hashBlocks['characters'] = SEED_ARRAY;
@@ -871,6 +895,84 @@ export class RisuSavePatcher {
             rootHash += (Math.imul(calculateHash(key), PRIME_MULTIPLIER) + this.hashBlocks[key])
         }
         return (rootHash >>> 0).toString(16);
+    }
+
+    /** chaIds the baseline (what this client last synced against) lists as deactivated. */
+    baselineArchivedCharacterIds(): Set<string> {
+        const list = this.lastSyncedDb?.nodeOnlyArchivedCharacters
+        return new Set(
+            (Array.isArray(list) ? list : [])
+                .map((stub: any) => stub?.chaId)
+                .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0),
+        )
+    }
+
+    /** The baseline itself (what this client last synced against). Read-only
+     *  by contract: set() replaces it with a fresh object rather than mutating
+     *  it, so a reference taken before set() stays the pre-attempt view. */
+    baselineDb(): any {
+        return this.lastSyncedDb ?? null
+    }
+
+    /** chaIds whose body changed against the baseline in the last set(). */
+    changedCharacterIdsOfLastSet(): string[] {
+        return [...this.lastChangedCharacterIds]
+    }
+
+    /**
+     * Compare this baseline's per-key hashes with the ones the server sent on
+     * a hash-mismatch 409, naming the root keys and characters that diverged.
+     * Diagnostic only — never changes the baseline.
+     */
+    describeHashMismatch(remote: HashMismatchRemote): HashMismatchReport {
+        const localHash = this.hash()
+        const roots = { mismatched: [] as string[], onlyLocal: [] as string[], onlyRemote: [] as string[] }
+        const characters = { mismatched: [] as string[], onlyLocal: [] as string[], onlyRemote: [] as string[] }
+
+        const remoteKeys = remote.keyHashes ?? {}
+        const localKeys = Object.keys(this.lastSyncedDb)
+        for (const key of localKeys) {
+            if (!Object.hasOwn(remoteKeys, key)) {
+                if (remote.keyHashes) roots.onlyLocal.push(key)
+                continue
+            }
+            if (Number.parseInt(remoteKeys[key], 16) !== this.hashBlocks[key]) roots.mismatched.push(key)
+        }
+        for (const key of Object.keys(remoteKeys)) {
+            if (!Object.hasOwn(this.lastSyncedDb, key)) roots.onlyRemote.push(key)
+        }
+
+        // Characters are keyed the way the server keys them: chaId, or
+        // `#index` when it is missing. Hash the baseline entry directly (it
+        // already holds stubbed chats) instead of reading hashBlocks[chaId],
+        // which is undefined for an id-less character and last-writer-wins
+        // for duplicates — the very corruptions a mismatch loop may stem from.
+        const remoteChars = remote.characterHashes ?? {}
+        const localCharIds = new Set<string>()
+        const duplicateCharIds: string[] = []
+        const localChars: any[] = Array.isArray(this.lastSyncedDb.characters) ? this.lastSyncedDb.characters : []
+        localChars.forEach((character, index) => {
+            const id = typeof character?.chaId === 'string' && character.chaId ? character.chaId : `#${index}`
+            if (localCharIds.has(id)) {
+                duplicateCharIds.push(id)
+                return
+            }
+            localCharIds.add(id)
+            if (!Object.hasOwn(remoteChars, id)) {
+                if (remote.characterHashes) characters.onlyLocal.push(id)
+                return
+            }
+            if (Number.parseInt(remoteChars[id], 16) !== calculateHash(character)) characters.mismatched.push(id)
+        })
+        for (const id of Object.keys(remoteChars)) {
+            if (!localCharIds.has(id)) characters.onlyRemote.push(id)
+        }
+
+        const serverDuplicateCharIds = Array.isArray(remote.duplicateCharIds) ? [...remote.duplicateCharIds] : []
+        const compositionOnly = [roots, characters]
+            .every((group) => group.mismatched.length === 0 && group.onlyLocal.length === 0 && group.onlyRemote.length === 0)
+            && duplicateCharIds.length === 0 && serverDuplicateCharIds.length === 0
+        return { localHash, serverHash: remote.serverHash, roots, characters, duplicateCharIds, serverDuplicateCharIds, compositionOnly }
     }
 
     async init(data: any) {
@@ -1002,6 +1104,7 @@ export class RisuSavePatcher {
         const { compare } = await import('fast-json-patch')
         const expectedHash: string = this.hash();
         const patch: any[] = []
+        this.lastChangedCharacterIds = []
 
         const {
             characters: lastCharacters = [],
@@ -1178,12 +1281,18 @@ export class RisuSavePatcher {
             const normChars = normalizeJSON(curCharacters.map(withStubs))
             patch.push({ op: 'replace', path: '/characters', value: normChars })
             // Update all character hashes
+            const previousCharHashes = new Map<string, number>()
             for (const lastId of lastIds) {
-                if (lastId) delete this.hashBlocks[lastId];
+                if (lastId) {
+                    previousCharHashes.set(lastId, this.hashBlocks[lastId])
+                    delete this.hashBlocks[lastId];
+                }
             }
             for (const char of normChars) {
                 if (char?.chaId) {
-                    this.hashBlocks[char.chaId] = calculateHash(char);
+                    const charHash = calculateHash(char)
+                    if (previousCharHashes.get(char.chaId) !== charHash) this.lastChangedCharacterIds.push(char.chaId)
+                    this.hashBlocks[char.chaId] = charHash;
                 }
             }
             this.lastSyncedDb.characters = normChars;
@@ -1215,6 +1324,7 @@ export class RisuSavePatcher {
                 const changedByHash = !!(curCharId && curCharHash !== this.hashBlocks[curCharId])
 
                 if (trackedBySave || changedByHash) {
+                    if (changedByHash && curCharId) this.lastChangedCharacterIds.push(curCharId)
                     // Iterate instead of spreading — a single character's diff
                     // can exceed spread-argument limits (e.g. a shifted
                     // multi-thousand-entry lorebook). Same rule as the

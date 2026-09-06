@@ -35,7 +35,7 @@ import { formatReasoningParts } from "src/ts/preset/adapter/reasoning";
 import { TOOL_CAPABLE_ADAPTER_KINDS, type AdapterKind, type ModelPreset } from "src/ts/preset/types";
 import { resolveWireModelId } from "src/ts/preset/adapter/wireInvariants";
 import { pumpPresetStream } from "./presetStreamPump";
-import { makeJobFetch } from "./jobFetch";
+import { makeJobFetch, ModelJobBusyError, ModelJobConnectionLostError } from "./jobFetch";
 import { toLogSource, toRequestKind } from "./logSource";
 import { resolveChatModelBinding, buildModelPresetCredential, applyPromptPresetParams, presetSupportsVision } from "./modelPresetBinding";
 import { expandAdapterMessages, toAdapterMessage, toolResponseText } from "./modelPresetMessages";
@@ -1034,6 +1034,11 @@ async function requestModelPreset(arg:RequestDataArgumentExtended, preset:ModelP
             result: err instanceof Error ? err.message : String(err),
             model: wireModel,
             modelLabel: preset.name,
+            // The server-side job is still running (or another one holds the
+            // chat): a re-send would only hit the per-chat guard again, so
+            // spending the retry budget here just replaces the real failure
+            // text with "busy" (issue #87).
+            noRetry: err instanceof ModelJobBusyError || err instanceof ModelJobConnectionLostError,
         }
     }
 }

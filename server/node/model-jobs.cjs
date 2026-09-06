@@ -230,7 +230,7 @@ function createModelJobs(opts = {}) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?)
     `);
     const stmtGet = db.prepare(`SELECT * FROM model_jobs WHERE id = ?`);
-    const stmtRunningForChat = db.prepare(`SELECT id FROM model_jobs WHERE chat_id = ? AND status = 'running' AND kind = 'main' LIMIT 1`);
+    const stmtRunningForChat = db.prepare(`SELECT id, generation_id FROM model_jobs WHERE chat_id = ? AND status = 'running' AND kind = 'main' LIMIT 1`);
     const stmtSetUpstream = db.prepare(`UPDATE model_jobs SET upstream_status = ?, content_type = ? WHERE id = ?`);
     const stmtFinalize = db.prepare(`UPDATE model_jobs SET status = ?, error = ?, ended_at = ?, bytes = ? WHERE id = ?`);
     const stmtClaim = db.prepare(`UPDATE model_jobs SET claimed = 1 WHERE id = ?`);
@@ -500,7 +500,9 @@ function createModelJobs(opts = {}) {
         if (kind === 'main') {
             const running = stmtRunningForChat.get(chatId);
             if (running) {
-                return { error: 'A job is already running for this chat', httpStatus: 409, jobId: running.id };
+                // jobId + generationId let the client tell "my own job from a
+                // retried send — reattach" apart from a real conflict.
+                return { error: 'A job is already running for this chat', httpStatus: 409, jobId: running.id, generationId: running.generation_id };
             }
         }
 
@@ -677,7 +679,7 @@ function createModelJobs(opts = {}) {
                 timeoutMs: req.body?.timeoutMs
             });
             if (result.error) {
-                res.status(result.httpStatus).send({ error: result.error, jobId: result.jobId });
+                res.status(result.httpStatus).send({ error: result.error, jobId: result.jobId, generationId: result.generationId });
                 return;
             }
             res.send({ jobId: result.jobId });

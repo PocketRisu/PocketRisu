@@ -272,7 +272,7 @@ type NdjsonEvent =
   | { type: 'progress'; bytes: number; totalBytes: number }
   | { type: 'heartbeat' }
   | { type: 'done'; ok: boolean; assetsRestored?: number; coldStorageFailed?: number }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; code?: string }
 
 interface NdjsonImportResult {
   response: Response
@@ -623,5 +623,105 @@ describe('malformed import safety', () => {
     const afterExport = await client.exportBackup()
     const after = normalizeBackup(afterExport)
     expect(after.normalized.characterCount).toBe(1)
+  })
+})
+
+// ─── Unreadable database payloads ───────────────────────────────────────────
+// v1.11.2 field report: upstream RisuAI web-account backups carry an
+// `encryption.risudat` marker and an AES-GCM encrypted database.risudat. The
+// import stored the ciphertext as database.bin and only then tried to decode
+// it, so every following boot failed in /api/read with HTTP 500 ("invalid
+// distance" / "invalid length/literal" from fflate) — infinite loading.
+
+async function readDatabaseStatus(
+  client: { fetch: (path: string, init?: RequestInit) => Promise<Response> },
+): Promise<number> {
+  const res = await client.fetch('/api/read', {
+    headers: { 'file-path': Buffer.from('database/database.bin', 'utf-8').toString('hex') },
+  })
+  return res.status
+}
+
+// Deterministic "ciphertext": no RisuSave magic header, not valid deflate.
+function pseudoRandomBytes(length: number, seed = 0x9e3779b9): Buffer {
+  const out = Buffer.alloc(length)
+  let x = seed >>> 0
+  for (let i = 0; i < length; i++) {
+    x ^= x << 13; x >>>= 0
+    x ^= x >>> 17
+    x ^= x << 5; x >>>= 0
+    out[i] = x & 0xff
+  }
+  return out
+}
+
+describe('unreadable database payloads', () => {
+  test('encrypted upstream account backup is rejected with BACKUP_ENCRYPTED, prior data intact, server still serves', async () => {
+    const srv = await spawnServer()
+    servers.push(srv)
+    const client = await createClient(srv.port, srv.password)
+
+    await client.importBackup(createSeedBackup({ characterCount: 1 }))
+    const before = normalizeBackup(await client.exportBackup())
+
+    // Same entry order upstream writes: assets, marker, then the database.
+    const encrypted = encodeBackup([
+      { name: 'some-asset.png', data: Buffer.from('not-a-real-png') },
+      { name: 'encryption.risudat', data: Buffer.from(JSON.stringify({ time: 1700000000000, type: 'account' })) },
+      { name: 'database.risudat', data: pseudoRandomBytes(4096) },
+    ])
+
+    const ndjson = await importViaNdjson(client, encrypted)
+    expect(ndjson.done).toBeUndefined()
+    expect(ndjson.errors.length).toBeGreaterThanOrEqual(1)
+    expect(ndjson.errors[0].code).toBe('BACKUP_ENCRYPTED')
+
+    expect(await readDatabaseStatus(client)).toBe(200)
+    const after = normalizeBackup(await client.exportBackup())
+    expect(after.normalized.characters).toEqual(before.normalized.characters)
+  })
+
+  test('undecodable database.risudat without a marker is rejected before it replaces the live database', async () => {
+    const srv = await spawnServer()
+    servers.push(srv)
+    const client = await createClient(srv.port, srv.password)
+
+    await client.importBackup(createSeedBackup({ characterCount: 1 }))
+    const before = normalizeBackup(await client.exportBackup())
+
+    const garbage = encodeBackup([
+      { name: 'database.risudat', data: pseudoRandomBytes(4096, 0x1234567) },
+    ])
+
+    const ndjson = await importViaNdjson(client, garbage)
+    expect(ndjson.done).toBeUndefined()
+    expect(ndjson.errors.length).toBeGreaterThanOrEqual(1)
+    expect(ndjson.errors[0].code).toBe('BACKUP_DATABASE_UNREADABLE')
+
+    expect(await readDatabaseStatus(client)).toBe(200)
+    const after = normalizeBackup(await client.exportBackup())
+    expect(after.normalized.characters).toEqual(before.normalized.characters)
+  })
+
+  test('fresh install survives an unreadable backup (the reported first-boot brick)', async () => {
+    const srv = await spawnServer()
+    servers.push(srv)
+    const client = await createClient(srv.port, srv.password)
+
+    const encrypted = encodeBackup([
+      { name: 'encryption.risudat', data: Buffer.from(JSON.stringify({ time: 1700000000000, type: 'account' })) },
+      { name: 'database.risudat', data: pseudoRandomBytes(4096, 0xabcdef) },
+    ])
+    const ndjson = await importViaNdjson(client, encrypted)
+    expect(ndjson.done).toBeUndefined()
+    expect(ndjson.errors[0]?.code).toBe('BACKUP_ENCRYPTED')
+
+    // Before the fix this was HTTP 500 on every subsequent load.
+    expect(await readDatabaseStatus(client)).toBe(200)
+
+    // And a proper backup still imports afterwards.
+    const res = await client.importBackup(createSeedBackup({ characterCount: 1 }))
+    expect(res.ok).toBe(true)
+    expect(normalizeBackup(await client.exportBackup()).normalized.characterCount).toBe(1)
   })
 })

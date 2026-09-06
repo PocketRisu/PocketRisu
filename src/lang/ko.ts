@@ -44,6 +44,8 @@ export const languageKorean = {
     persistFailureAttemptedSize: "시도 크기",
     storageRequestTooLarge:
       "저장 요청이 너무 커서 실패했습니다 (HTTP 413). 서버 또는 리버스 프록시(Nginx 등)의 요청 본문 크기 제한을 확인하세요.",
+    backupEncryptedAccount:
+      "이 백업은 RisuAI 웹 계정(동기화)에 로그인한 상태에서 내보낸 파일이라 데이터베이스가 암호화되어 있어 PocketRisu에서 읽을 수 없습니다. RisuAI에서 계정을 로그아웃(데이터가 기기로 이동됨)하거나 부분 백업으로 다시 내보낸 뒤 불러와 주세요. 기존 데이터는 바뀌지 않았습니다.",
     chatGuardTitle: "채팅 데이터 보호 작동 — 안전 저장 모드로 전환됨",
     chatGuardDesc:
       "비정상적인 저장 패턴이 차단되어 안전 저장(full-write)으로 전환됐어요. 변경사항은 그 경로로 디스크에 저장됩니다. 반복되면 브라우저 콘솔 로그와 함께 제보해주세요.",
@@ -535,6 +537,8 @@ export const languageKorean = {
     inlayFilterOrphanMessage: "메시지에 없음",
     inlayScanMessages: "메시지 스캔",
     inlayScanning: "스캔 중...",
+    inlayScanFailed: "메시지 스캔에 실패해 미참조 목록을 표시하지 않습니다",
+    inlayDeleteSkippedReferenced: "다시 스캔한 결과 참조가 확인된 {count}개는 삭제에서 제외했습니다",
     inlayScanDone: "{count}개 메시지 스캔 완료",
   },
   confirm: "확인",
@@ -606,6 +610,19 @@ export const languageKorean = {
   chatLoadInitialPages: "채팅 초기 로딩 개수",
   chatLoadAdditionalPages: "채팅 추가 로딩 개수",
   removeCharacter: "캐릭터 삭제",
+  deactivateCharacter: "캐릭터 비활성화",
+  deactivateCharacterConfirm: (name: string) =>
+    `"${name}" 캐릭터와 채팅을 비활성화합니다.\n\n사용하지 않는 캐릭터를 비활성화하면 로딩과 저장이 가벼워져 성능 개선에 도움이 됩니다. 목록에는 남지만 열 수 없고, 플러그인이나 스크립트, 검색, 데이터셋 내보내기에서는 삭제된 것처럼 보입니다. 데이터는 서버에 보관되며 언제든 다시 활성화할 수 있습니다.\n\n비활성화할까요?`,
+  deactivateCharacterDone: "캐릭터를 비활성화했습니다.",
+  deactivateCharacterUnsaved: "아직 서버에 저장되지 않은 채팅이 있어 비활성화할 수 없습니다. 잠시 후 다시 시도하세요.",
+  deactivateCharacterFailed: "비활성화에 실패했습니다: ",
+  rebaseSkippedArchived: (names: string) =>
+    `"${names}" 캐릭터가 다른 기기에서 비활성화되어 이 기기의 저장되지 않은 변경을 반영하지 못했습니다.`,
+  activateCharacterConfirm: (name: string) => `"${name}" 캐릭터가 비활성화되어 있습니다. 활성화할까요?`,
+  activateCharacterMissing: "보관된 캐릭터 데이터를 찾을 수 없어 활성화할 수 없습니다. 서버 로그와 스토리지 대시보드를 확인하세요.",
+  activateCharacterFailed: "활성화에 실패했습니다: ",
+  activateCharacterRemoveStub: "이 캐릭터를 목록에서 제거할까요? (다른 데이터는 삭제되지 않습니다)",
+  deactivatedBadge: "비활성화",
   exportCharacter: "캐릭터 엑스포트",
   characterPackage: "캐릭터 패키지",
   characterPackageExport: "패키지 내보내기",
@@ -1173,7 +1190,7 @@ export const languageKorean = {
   list: "리스트",
   trash: "휴지통",
   trashDesc:
-    "삭제된 캐릭터는 휴지통에 보관됩니다. 복구하거나 영구 삭제할 수 있습니다. 3일 후에는 자동으로 영구 삭제됩니다.",
+    "휴지통의 캐릭터는 비활성화 상태로 서버에 보관되어 성능에 영향을 주지 않습니다. 자동으로 삭제되지 않으며, 언제든 복원하거나 영구 삭제할 수 있습니다.",
   shareExport: "공유/엑스포트",
   risupresetDesc:
     "Risupreset 포맷은 포맷을 공유하기 위한 PocketRisu 전용 포맷입니다.",
@@ -2048,6 +2065,11 @@ export const languageKorean = {
   httpInsecureWarningBody:
     "플러그인 등 일부 기능이 동작하지 않을 수 있습니다. 원격 접속 기능을 사용하면 HTTPS로 연결할 수 있습니다.",
   httpInsecureOpenRemoteAccess: "설정 열기",
+  transferSizeWarningTitle: "전송 데이터 용량이 권장 크기를 넘었습니다",
+  transferSizeWarningBody:
+    "현재 약 {{size}}로, 원격 접속 시 저장이 실패할 수 있습니다. 사용하지 않는 캐릭터를 비활성화하면 전송 데이터 용량이 줄어듭니다.",
+  transferSizeOpenCharacterManager: "캐릭터 관리",
+  transferSizeDismiss: "이번 세션에서 숨기기",
 
   // 시스템 페이지
   system: "시스템",
@@ -2240,6 +2262,10 @@ export const languageKorean = {
   storageRowKvDatabase: "database.bin (활성)",
   storageRowKvDatabaseDesc:
     "risuai.db 내부에 있는 단일 BLOB 행. 캐릭터 메타·채팅·설정이 통째로 들어갑니다. 2 GB 단일 BLOB 한계의 적용 대상.",
+  storageRowTransferSize: "전송 데이터 용량 (채팅 제외)",
+  storageRowTransferSizeLimit: "권장 {{limit}} 이하",
+  storageRowTransferSizeDesc:
+    "저장할 때 서버로 보내는 데이터의 크기입니다 (이 기기에서 마지막 저장 기준). 권장 크기를 넘으면 원격 접속 시 저장이 실패할 수 있으니, 사용하지 않는 캐릭터를 비활성화해 전송 데이터 용량을 줄이세요.",
   storageRowKvDbBackups: "DB 백업 (인프로세스)",
   storageRowKvDbBackupsDesc:
     "risuai.db 내부에 자동으로 보관되는 database.bin 스냅샷. 약 500 MB 한도로 자동 로테이션.",
@@ -2253,6 +2279,9 @@ export const languageKorean = {
     "캐릭터별 원격 동기화 캐시 (remotes/{chaId}.local.bin).",
   storageRowKvColdStorage: "콜드 스토리지",
   storageRowKvColdStorageDesc: "레거시·휴면 저장 영역. 보통 비어 있습니다.",
+  storageRowKvArchive: "비활성화 캐릭터",
+  storageRowKvArchiveDesc:
+    "비활성화한 캐릭터의 본문(채팅·에셋 목록 포함)과 색인. 활성화해도 자동으로 지워지지 않으며, 백업 내보내기에는 항상 완전한 캐릭터로 포함됩니다.",
   storageRowKvUncategorized: "기타 데이터",
   storageRowKvUncategorizedDesc:
     "위 분류에 들어가지 않는 키. 마이그레이션 잔여물이나 임시 항목 등이 여기 잡힙니다.",
@@ -2359,6 +2388,17 @@ export const languageKorean = {
   storageCharactersChat: "채팅",
   storageCharactersTrashed: "휴지통",
   storageCharactersGoTo: "이 캐릭터로 이동",
+  storageCharactersDeactivated: "비활성화",
+  storageArchiveOrphanHeader: (count: number, size: number) =>
+    `참조되지 않는 비활성화 데이터: ${count}개, ${(size / 1024 / 1024).toFixed(1)} MB`,
+  storageArchiveOrphanDesc:
+    "다시 활성화했거나 삭제·백업 복원으로 목록에서 빠진 캐릭터의 보관 데이터입니다. 스냅샷 복원에 대비해 자동으로 지우지 않습니다.",
+  storageArchiveOrphanPurge: "보관 데이터 정리",
+  storageArchiveOrphanConfirm: (count: number, size: number) =>
+    `참조되지 않는 비활성화 데이터 ${count}개(${(size / 1024 / 1024).toFixed(1)} MB)를 삭제할까요? 이 데이터를 가리키는 옛 스냅샷은 복원 후 해당 캐릭터를 열 수 없게 됩니다. 되돌릴 수 없습니다.`,
+  storageArchiveOrphanDone: (count: number, size: number) =>
+    `비활성화 데이터 ${count}개(${(size / 1024 / 1024).toFixed(1)} MB)를 정리했습니다.`,
+  storageCharactersDeactivatedMissing: "비활성화 · 데이터 없음",
   storageCharactersOrphan: (count: number, size: number) =>
     `고아 미디어 (어떤 캐릭터도 참조하지 않음): ${count}개, ${(size / 1024 / 1024).toFixed(1)} MB`,
   storageCharactersEmpty: "캐릭터 없음",
@@ -2525,6 +2565,57 @@ export const languageKorean = {
   recentChatsTitle: "최근 대화",
   noRecentChatsDesc: "아직 대화한 봇이 없어요",
   hideRecentChats: "대화 목록 숨기기",
+  hideDeactivatedCharacters: "비활성화된 캐릭터 숨기기",
+  hiddenFromSidebarHint: "사이드바에서만 숨겨지며 데이터에는 영향이 없습니다. 비활성화와 달리 성능에도 영향이 없습니다.",
+
+  characterManager: "캐릭터 관리",
+  characterManagerHint: "사용하지 않는 캐릭터는 비활성화하거나 휴지통으로 보내 두면 로딩과 저장이 가벼워집니다. 데이터는 서버에 보관되며 언제든 다시 활성화하거나 복원할 수 있습니다.",
+  characterListSettings: "캐릭터 목록 설정",
+  sortSidebarOrder: "사이드바 순서",
+  sortRecentChats: "최근 대화순",
+  sortByName: "이름순",
+  sortByCreated: "추가일순",
+  sortByChatCount: "채팅 수",
+  hiddenBadge: "숨김",
+  hideFromSidebar: "사이드바에서 숨기기",
+  showInSidebar: "사이드바에 표시",
+  selectionCount: (n: number) => `${n}개 선택`,
+  clearSelection: "선택 해제",
+  folderSettings: "폴더 설정",
+  folderColor: "폴더 색상",
+  folderImage: "폴더 이미지",
+  selectImage: "이미지 선택",
+  resetImage: "기본 이미지로",
+  moveOutOfFolder: "폴더 밖으로",
+  noFolder: "폴더 밖",
+  restore: "복원",
+  deletePermanently: "영구 삭제",
+  deactivateSelectedConfirm: (n: number) => `선택한 ${n}개 캐릭터를 비활성화할까요?\n\n사용하지 않는 캐릭터를 비활성화하면 성능 개선에 도움이 됩니다. 데이터는 서버에 보관되며 언제든 다시 활성화할 수 있습니다.`,
+  trashSelectedConfirm: (n: number) => `선택한 ${n}개 캐릭터를 휴지통으로 보낼까요?`,
+  noCharactersFound: "캐릭터가 없습니다",
+  openCharacter: "열기",
+  activateCharacter: "캐릭터 활성화",
+  filterAll: "전체 보기",
+  filterHiddenOnly: "숨긴 캐릭터만",
+  filterArchivedOnly: "비활성화만",
+  folderIcon: "폴더 아이콘",
+  folderShowName: "아이콘에 폴더 이름 표시",
+  followGlobalSetting: "전역 설정 따름",
+  showLabel: "표시",
+  hideLabel: "숨김",
+  defaultLabel: "기본",
+  emptyTrash: "휴지통 비우기",
+  gridHideNames: "이름 숨기기",
+  moveToTrash: "휴지통으로 보내기",
+  moveToTrashConfirm: "휴지통으로 보낼까요? 캐릭터는 비활성화되어 서버에 보관되며, 휴지통에서 언제든 복원할 수 있습니다: ",
+  trashCharacterDone: "휴지통으로 보냈습니다.",
+  deleteCharacterFailed: "영구 삭제에 실패했습니다: ",
+  folderDisplayMode: "표시 방식",
+  folderModeIcon: "아이콘",
+  folderModeImage: "이미지",
+  folderModeName: "이름",
+  folderImageHint: "이미지를 선택하면 아이콘 자리에 표시됩니다.",
+  emptyTrashConfirm: (n: number) => `휴지통의 캐릭터 ${n}개를 영구 삭제할까요? 되돌릴 수 없습니다.`,
 
   showRequestStatus: "요청 상태 표시",
   requestStatus: {
