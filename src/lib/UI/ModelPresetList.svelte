@@ -2,7 +2,8 @@
     import { DBState, settingsOpen, SettingsMenuIndex } from 'src/ts/stores.svelte';
     import { language } from "src/lang";
     import { notifySuccess } from "src/ts/alert";
-    import { ArrowLeft, CheckIcon, HistoryIcon, PinIcon, PinOffIcon, Settings, TriangleAlert } from "@lucide/svelte";
+    import { groupByFolder } from "src/ts/folders";
+    import { ArrowLeft, CheckIcon, ChevronRight, HistoryIcon, PinIcon, PinOffIcon, Settings, TriangleAlert } from "@lucide/svelte";
     import ShButton from "./GUI/ShButton.svelte";
     import ModelList from "./ModelList.svelte";
     import { getModelInfo } from "src/ts/model/modellist";
@@ -34,8 +35,10 @@
     // Legacy model lists run long (plugin providers add many), so legacy
     // models get their own tab instead of sharing the preset list.
     let activeTab = $state<'preset' | 'legacy'>('preset');
+    let expandedFolders = $state<Set<string>>(new Set());
 
     let presets = $derived(DBState.db.modelPresets ?? []);
+    let groups = $derived(groupByFolder(presets.map(preset => preset.folderId), DBState.db.modelPresetFolders ?? []));
     let legacy = $derived(allowLegacy ? parseLegacySlot(value) : null);
     let bound = $derived(value && !legacy ? (presets.find(p => p.id === value) ?? null) : null);
     // value set but no matching preset → dangling (deleted). Treated as unset by
@@ -67,12 +70,26 @@
         openOptions = true;
     }
 
+    function toggleFolder(id: string) {
+        const next = new Set(expandedFolders);
+        next.has(id) ? next.delete(id) : next.add(id);
+        expandedFolders = next;
+    }
+
     function goToPresetSettings() {
         openOptions = false;
         settingsOpen.set(true);
         SettingsMenuIndex.set(16);
     }
 </script>
+
+{#snippet presetRow(index: number)}
+    {@const preset = presets[index]}
+    <button class="shrink-0 w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-selected rounded" class:bg-selected={preset.id === value} onclick={() => pick(preset.id)}>
+        <span class="truncate flex-1">{preset.name}</span>
+        {#if preset.id === value}<CheckIcon size={14} class="shrink-0 text-primary" />{/if}
+    </button>
+{/snippet}
 
 {#if openOptions}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -113,11 +130,25 @@
                 {#if presets.length === 0}
                     <div class="px-3 py-4 text-sm text-textcolor2 text-center">{language.modelPresetEmpty}</div>
                 {:else}
-                    {#each presets as preset (preset.id)}
-                        <button class="shrink-0 w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm hover:bg-selected rounded" class:bg-selected={preset.id === value} onclick={() => pick(preset.id)}>
-                            <span class="truncate flex-1">{preset.name}</span>
-                            {#if preset.id === value}<CheckIcon size={14} class="shrink-0 text-primary" />{/if}
-                        </button>
+                    {#each groups as group (group.folder?.id ?? '')}
+                        {#if group.folder && group.indexes.length > 0}
+                            {@const folder = group.folder}
+                            <button class="shrink-0 w-full flex items-center gap-1 px-3 py-1.5 text-sm font-medium hover:bg-selected rounded" onclick={() => toggleFolder(folder.id)}>
+                                <span class="truncate flex-1 text-left">{folder.name}</span>
+                                <ChevronRight size={14} class={`transition-transform shrink-0${expandedFolders.has(folder.id) ? ' rotate-90' : ''}`} />
+                            </button>
+                            {#if expandedFolders.has(folder.id)}
+                                <div class="pl-4 flex flex-col">
+                                    {#each group.indexes as index (presets[index].id)}
+                                        {@render presetRow(index)}
+                                    {/each}
+                                </div>
+                            {/if}
+                        {:else if !group.folder}
+                            {#each group.indexes as index (presets[index].id)}
+                                {@render presetRow(index)}
+                            {/each}
+                        {/if}
                     {/each}
                 {/if}
 
