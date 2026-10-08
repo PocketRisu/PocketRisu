@@ -100,6 +100,16 @@ function requestUpstreamStream(targetUrl, arg) {
             });
         });
 
+        // Native Node.js HTTP agents may enable TCP keepalive with a very
+        // short probe interval (1s / 10 retries). If an intermediary stops
+        // answering probes while a model is thinking, Linux can terminate the
+        // connection with read ETIMEDOUT well before the request timeout.
+        // Keep this upstream model-job socket alive via the request timeout
+        // instead of aggressive TCP keepalive probes.
+        req.on('socket', (socket) => {
+            socket.setKeepAlive(false);
+        });
+
         req.on('error', (error) => {
             finishReject(error);
         });
