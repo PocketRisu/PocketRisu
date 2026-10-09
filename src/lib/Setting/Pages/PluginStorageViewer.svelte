@@ -6,7 +6,7 @@
     //   - save:  server kv via pluginStorageStore (travels with the save;
     //            listed from the key index, values fetched only when opened)
     //   - local: localStorage `safe_plugin_*`  (device-local, strings only)
-    //   - idb:   SafeLocalPluginStorage  (IndexedDB, device-local, JSON)
+    //   - idb:   SafeLocalPluginStorage  (server KV, JSON or binary)
     // Origin plugin is best-effort: new V3 writes are tagged into a sidecar
     // meta store (pluginStorageMeta), but legacy/V2 keys have no record and show
     // as unknown. Edit/delete are allowed directly, guarded by confirm.
@@ -24,6 +24,7 @@
     } from '@lucide/svelte'
     import { alertConfirm, notifyError, notifySuccess } from 'src/ts/alert'
     import { SafeLocalStorage, SafeLocalPluginStorage } from 'src/ts/plugins/pluginSafeClass'
+    import { requiresLocalPluginStorageEncoding } from 'src/ts/plugins/localPluginStorageValue'
     import * as pluginStorageStore from 'src/ts/plugins/pluginStorageStore'
     import { getOwners, removeOwner } from 'src/ts/plugins/pluginStorageMeta'
     import { language } from 'src/lang'
@@ -39,6 +40,7 @@
         str: string
         size: number
         type: string
+        binary: boolean
         owner?: string
         // false for 'save' rows until opened: raw/str/type are placeholders.
         loaded: boolean
@@ -205,12 +207,13 @@
             for (let i = 0; i < keys.length; i++) {
                 const key = keys[i]
                 if (!read) {
-                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', owner: owners[key], loaded: false })
+                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', binary: false, owner: owners[key], loaded: false })
                     continue
                 }
                 const raw = await read(key)
                 const str = valueToString(raw)
-                list.push({ key, raw, str, size: str.length * 2, type: detectType(str), owner: owners[key], loaded: true })
+                const binary = requiresLocalPluginStorageEncoding(raw)
+                list.push({ key, raw, str, size: str.length * 2, type: binary ? 'binary' : detectType(str), binary, owner: owners[key], loaded: true })
                 loadProgress = i + 1
                 // Periodically yield to keep the UI responsive and let the
                 // progress bar update.
@@ -239,6 +242,7 @@
         entry.raw = raw
         entry.str = str
         entry.type = detectType(str)
+        entry.binary = requiresLocalPluginStorageEncoding(raw)
         entry.loaded = true
     }
 
@@ -256,7 +260,7 @@
     }
 
     function startEdit() {
-        if (!selected) return
+        if (!selected || selected.binary) return
         editText = prettyPrint(selected.str)
         editing = true
     }
@@ -270,7 +274,7 @@
     }
 
     async function saveEdit() {
-        if (!selected) return
+        if (!selected || selected.binary) return
         saving = true
         try {
             let saveValue: unknown
@@ -521,7 +525,7 @@
                 <ShButton variant="outline" onclick={() => (detailOpen = false)}>
                     {language.close}
                 </ShButton>
-                <ShButton variant="primary" onclick={startEdit}>
+                <ShButton variant="primary" onclick={startEdit} disabled={selected?.binary}>
                     <PencilIcon size={14} />
                     {language.edit}
                 </ShButton>

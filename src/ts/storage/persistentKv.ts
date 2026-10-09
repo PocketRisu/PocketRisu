@@ -63,6 +63,16 @@ export async function writePersistentJson<T>(storageKey: string, value: T): Prom
     await forageStorage.setItem(storageKey, encoder.encode(JSON.stringify(value)));
 }
 
+export async function readPersistentBytes(storageKey: string): Promise<Uint8Array | null> {
+    await ensureStorageReady();
+    return await forageStorage.getItem(storageKey);
+}
+
+export async function writePersistentBytes(storageKey: string, value: Uint8Array): Promise<void> {
+    await ensureStorageReady();
+    await forageStorage.setItem(storageKey, value);
+}
+
 export async function removePersistentKey(storageKey: string): Promise<void> {
     await ensureStorageReady();
     await forageStorage.removeItem(storageKey);
@@ -75,7 +85,12 @@ export async function listPersistentKeys(prefix = ""): Promise<string[]> {
 
 export async function clearPersistentPrefix(prefix: string): Promise<void> {
     const keys = await listPersistentKeys(prefix);
-    await Promise.all(keys.map((key) => removePersistentKey(key)));
+    // A failed delete must not release a clear barrier while other deletes
+    // can still erase values written by the next operation.
+    const results = await Promise.allSettled(keys.map((key) => removePersistentKey(key)));
+    for (const result of results) {
+        if (result.status === 'rejected') throw result.reason;
+    }
 }
 
 export async function makeHashedStorageKey(prefix: string, rawKey: string): Promise<string> {

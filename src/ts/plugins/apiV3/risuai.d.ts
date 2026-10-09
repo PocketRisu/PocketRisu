@@ -1098,7 +1098,10 @@ interface SafeLocalPluginStorage {
     /**
      * Sets an item in storage
      * @param key - Storage key
-     * @param value - Value to store (any JSON-serializable value)
+     * @param value - JSON data, Blob/File, ArrayBuffer, typed arrays, DataView,
+     * Date, Map, Set, RegExp, or BigInt; these may be nested in objects and arrays.
+     * Views retain their complete backing buffer, byteOffset, and length; shared references are preserved within a value.
+     * Cycles and resizable buffers are preserved. Unsupported native values reject with DataCloneError.
      * @returns Promise that resolves when item is stored
      */
     setItem<T>(key: string, value: T): Promise<void>;
