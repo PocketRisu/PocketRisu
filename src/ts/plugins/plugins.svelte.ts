@@ -12,6 +12,7 @@ import { SafeDocument, SafeIdbFactory, SafeLocalStorage } from "./pluginSafeClas
 import { loadV3Plugins, reloadV3Plugin } from "./apiV3/v3.svelte";
 import { pluginCodeTranspiler } from "./apiV3/transpiler";
 import * as pluginStorageStore from "./pluginStorageStore";
+import { fetchPluginUpdateResource } from "./pluginUpdateFetch";
 import { PLUGIN_CUSTOM_STORAGE_KEY, applyPluginDbKey, pluginCustomStorageProxy } from "./pluginDbProxy";
 import { hydratePluginCharacterSnapshotSync, restorePluginCharacterManifest, restorePluginDbKey } from './pluginCharacterSnapshot';
 
@@ -88,12 +89,7 @@ export const checkPluginUpdate = async (plugin: RisuPlugin) => {
             }
         }
 
-        const response = (await fetch(plugin.updateURL, {
-            method: 'GET',
-            headers: {
-                'Range': 'bytes=0-512'
-            }
-        }))
+        const response = await fetchPluginUpdateResource(plugin.updateURL, true)
 
         if(response.status >= 200 && response.status < 300){
             const text = await response.text()
@@ -123,7 +119,7 @@ export async function updatePlugin(plugin: RisuPlugin) {
         if(!plugin.updateURL){
             return false
         }
-        const response = await fetch(plugin.updateURL)
+        const response = await fetchPluginUpdateResource(plugin.updateURL, false)
         if(response.status >= 200 && response.status < 300){
             const jsFile = await response.text()
             await importPlugin(jsFile, {
