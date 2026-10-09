@@ -1,13 +1,6 @@
 import { toGetter } from "../globalApi.svelte";
-import { clearPersistentPrefix, decodeStorageKeyComponent, listPersistentKeys, makeEncodedStorageKey, readPersistentJson, removePersistentKey, writePersistentJson } from "../storage/persistentKv";
 import { recordOwner, removeOwner, clearOwners } from "./pluginStorageMeta";
-
-const pluginStorage = new Map<string, unknown>();
-const pluginStoragePrefix = 'cache/plugin-storage/';
-// Latest write per cache key, so a failed write only rolls back if no later
-// write (even of the same value) has taken the slot since.
-const latestWrite = new Map<string, number>();
-let writeSeq = 0;
+import { ensureLocalPluginStorageMigrated, localPluginStorage } from "./localPluginStorage";
 
 export class SafeLocalStorage {
     getItem(key: string): string | null {
@@ -62,39 +55,12 @@ export class SafeLocalPluginStorage {
         this.owner = owner;
     }
     async getItem<T>(key: string): Promise<T | null> {
-        const cacheKey = `safe_plugin_${key}`;
-        if (pluginStorage.has(cacheKey)) {
-            return (pluginStorage.get(cacheKey) as T) ?? null;
-        }
-        const payload = await readPersistentJson<T>(makeEncodedStorageKey(pluginStoragePrefix, key));
-        if (payload !== null) {
-            pluginStorage.set(cacheKey, payload);
-        }
-        return payload;
+        await ensureLocalPluginStorageMigrated();
+        return await localPluginStorage.getItem<T>(`safe_plugin_${key}`);
     }
-    // The cache is updated first so a plugin that reads straight back without
-    // awaiting sees its write (upstream's IndexedDB queue gave that ordering).
-    // If the server rejects the write (423 session lock, timeout) the cache is
-    // rolled back and the error reaches the plugin — otherwise the plugin, and
-    // the user, would believe a value is saved that a reload or another
-    // device will never see.
     async setItem<T>(key: string, value: T): Promise<void> {
-        const cacheKey = `safe_plugin_${key}`;
-        const had = pluginStorage.has(cacheKey);
-        const previous = pluginStorage.get(cacheKey);
-        const token = ++writeSeq;
-        latestWrite.set(cacheKey, token);
-        pluginStorage.set(cacheKey, value);
-        try {
-            await writePersistentJson(makeEncodedStorageKey(pluginStoragePrefix, key), value);
-        } catch (e) {
-            // Only undo our own write; a newer one may already own the slot.
-            if (latestWrite.get(cacheKey) === token) {
-                if (had) pluginStorage.set(cacheKey, previous);
-                else pluginStorage.delete(cacheKey);
-            }
-            throw e;
-        }
+        await ensureLocalPluginStorageMigrated();
+        await localPluginStorage.setItem(`safe_plugin_${key}`, value);
         if (this.owner) {
             // Sidecar metadata only; its failure must not read as a lost write.
             try { await recordOwner('idb', key, this.owner); }
@@ -102,41 +68,24 @@ export class SafeLocalPluginStorage {
         }
     }
     async removeItem(key: string): Promise<void> {
-        const cacheKey = `safe_plugin_${key}`;
-        const had = pluginStorage.has(cacheKey);
-        const previous = pluginStorage.get(cacheKey);
-        const token = ++writeSeq;
-        latestWrite.set(cacheKey, token);
-        pluginStorage.delete(cacheKey);
-        try {
-            await removePersistentKey(makeEncodedStorageKey(pluginStoragePrefix, key));
-        } catch (e) {
-            if (had && latestWrite.get(cacheKey) === token) pluginStorage.set(cacheKey, previous);
-            throw e;
-        }
+        await ensureLocalPluginStorageMigrated();
+        await localPluginStorage.removeItem(`safe_plugin_${key}`);
         if (this.owner) {
             try { await removeOwner('idb', key); }
             catch (e) { console.warn(`[plugin storage] owner record removal for "${key}" failed`, e); }
         }
     }
     async keys(): Promise<string[]> {
+        await ensureLocalPluginStorageMigrated();
         const keys: string[] = [];
-        const storageKeys = await listPersistentKeys(pluginStoragePrefix);
-        for (const key of storageKeys) {
-            const encodedKey = key.slice(pluginStoragePrefix.length, -'.json'.length);
-            keys.push(decodeStorageKeyComponent(encodedKey));
-        }
+        await localPluginStorage.iterate((_value, key) => {
+            if (key.startsWith('safe_plugin_')) keys.push(key.substring('safe_plugin_'.length));
+        });
         return keys;
     }
     async clear(): Promise<void> {
-        // A write still in flight must not restore anything into the cleared cache.
-        latestWrite.clear();
-        for (const key of [...pluginStorage.keys()]) {
-            if (key.startsWith('safe_plugin_')) {
-                pluginStorage.delete(key);
-            }
-        }
-        await clearPersistentPrefix(pluginStoragePrefix);
+        const keys = await this.keys();
+        for (const key of keys) await this.removeItem(key);
         if (this.owner) await clearOwners('idb');
     }
 }

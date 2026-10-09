@@ -79,4 +79,14 @@ If the app becomes slow or unresponsive, disable the option for that plugin and 
 - PocketRisu v1.10.x and older cannot read plugin data from the server store. Before downgrading, restore the pre-update snapshot from Settings > DB backup list.
 
 
+## 6. Browser-local plugin storage
+
+`risuai.getLocalPluginStorage()` is separate from `risuai.pluginStorage` above. It uses upstream RisuAI's localForage database `plugin`, store `plugin`, and key prefix `safe_plugin_`. With the IndexedDB driver, values such as Blob and ArrayBuffer retain their native types. Values and ownership metadata live in the accessing browser's origin.
+
+On first use, existing PocketRisu server values are copied once. Existing browser values are preserved, and server originals are never deleted. After copying succeeds, reads, writes, deletions, and clears use browser storage exclusively; later server changes are not reimported. A failed copy remains incomplete and is retried on the next call.
+
+These values are not shared across devices, browsers, or origins, and are excluded from `.bin` backups. The storage API's `clear()` retains the migration marker, preventing deleted values from being reimported. Clearing all browser site data also clears this marker, making the next access a first use again. Binary contents previously lost through JSON serialization cannot be recovered by copying.
+
+Safe first-use copying requires IndexedDB or Web Locks. If neither is available and values still need importing, migration reports an error without changing existing data. A `saveAsset()` path stored only in the browser is invisible to server asset cleanup; store the Blob itself for local audio or image retention.
+
 ← [Back to README](../../README.md)

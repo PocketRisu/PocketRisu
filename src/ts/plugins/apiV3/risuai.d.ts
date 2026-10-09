@@ -1065,6 +1065,8 @@ interface PluginStorage {
 
 /**
  * Device-local storage that persists outside of save files.
+ * Uses the same browser localForage database (`plugin`) and store (`plugin`) as RisuAI.
+ * PocketRisu copies legacy server values once per browser origin, preserving existing browser values.
  * Uses generic types for flexible value storage.
  * Storage is shared between all plugins under a common prefix.
  *
@@ -1098,7 +1100,7 @@ interface SafeLocalPluginStorage {
     /**
      * Sets an item in storage
      * @param key - Storage key
-     * @param value - Value to store (any JSON-serializable value)
+     * @param value - Value supported by localForage (including Blob and ArrayBuffer with IndexedDB)
      * @returns Promise that resolves when item is stored
      */
     setItem<T>(key: string, value: T): Promise<void>;

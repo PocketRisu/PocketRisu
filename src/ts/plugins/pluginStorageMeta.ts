@@ -13,19 +13,11 @@
 //   - save  → db.pluginStorageMeta (persisted in the save's ROOT block)
 //   - local → a single localStorage JSON blob (not safe_plugin_* prefixed, so
 //             it never shows up in the viewer's local listing)
-//   - idb   → persistentKv under a dedicated prefix (separate from the data
-//             prefix, so it never shows up in the viewer's idb listing)
+//   - idb   → browser plugin store under an unprefixed internal key (excluded
+//             from the safe_plugin_* data listing)
 
 import { getDatabase } from "../storage/database.svelte";
-import {
-    listPersistentKeys,
-    makeEncodedStorageKey,
-    decodeStorageKeyComponent,
-    readPersistentJson,
-    writePersistentJson,
-    removePersistentKey,
-    clearPersistentPrefix,
-} from "../storage/persistentKv";
+import { ensureLocalPluginStorageMigrated, localPluginStorage, pluginOwnerPrefix } from "./localPluginStorage";
 
 export type PluginStorageBackend = "save" | "local" | "idb";
 export interface PluginOwnerRecord {
@@ -34,7 +26,6 @@ export interface PluginOwnerRecord {
 }
 
 const LOCAL_META_KEY = "risu_plugin_storage_owners";
-const IDB_META_PREFIX = "cache/plugin-storage-meta/";
 
 // ── local backend blob helpers ──────────────────────────────────────────────
 function readLocalMeta(): Record<string, PluginOwnerRecord> {
@@ -67,7 +58,9 @@ export function recordOwner(backend: PluginStorageBackend, key: string, plugin: 
         writeLocalMeta(map);
         return;
     }
-    return writePersistentJson(makeEncodedStorageKey(IDB_META_PREFIX, key), record);
+    return ensureLocalPluginStorageMigrated().then(async () => {
+        await localPluginStorage.setItem(pluginOwnerPrefix + key, record);
+    });
 }
 
 export function removeOwner(backend: PluginStorageBackend, key: string): void | Promise<void> {
@@ -82,7 +75,7 @@ export function removeOwner(backend: PluginStorageBackend, key: string): void | 
         writeLocalMeta(map);
         return;
     }
-    return removePersistentKey(makeEncodedStorageKey(IDB_META_PREFIX, key));
+    return ensureLocalPluginStorageMigrated().then(() => localPluginStorage.removeItem(pluginOwnerPrefix + key));
 }
 
 export function clearOwners(backend: PluginStorageBackend): void | Promise<void> {
@@ -95,7 +88,11 @@ export function clearOwners(backend: PluginStorageBackend): void | Promise<void>
         writeLocalMeta({});
         return;
     }
-    return clearPersistentPrefix(IDB_META_PREFIX);
+    return ensureLocalPluginStorageMigrated().then(async () => {
+        for (const key of await localPluginStorage.keys()) {
+            if (key.startsWith(pluginOwnerPrefix)) await localPluginStorage.removeItem(key);
+        }
+    });
 }
 
 // ── read side (called from the viewer) ──────────────────────────────────────
@@ -116,12 +113,9 @@ export async function getOwners(backend: PluginStorageBackend): Promise<Record<s
         }
         return out;
     }
-    const storageKeys = await listPersistentKeys(IDB_META_PREFIX);
-    for (const fullKey of storageKeys) {
-        const encoded = fullKey.slice(IDB_META_PREFIX.length, -".json".length);
-        const rawKey = decodeStorageKeyComponent(encoded);
-        const record = await readPersistentJson<PluginOwnerRecord>(fullKey);
-        if (record?.plugin) out[rawKey] = record.plugin;
-    }
+    await ensureLocalPluginStorageMigrated();
+    await localPluginStorage.iterate<PluginOwnerRecord, void>((record, key) => {
+        if (key.startsWith(pluginOwnerPrefix) && record?.plugin) out[key.slice(pluginOwnerPrefix.length)] = record.plugin;
+    });
     return out;
 }

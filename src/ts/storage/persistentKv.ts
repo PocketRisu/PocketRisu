@@ -38,6 +38,11 @@ export async function readPersistentJson<T>(storageKey: string): Promise<T | nul
     return JSON.parse(decoder.decode(data)) as T;
 }
 
+export async function readPersistentBytes(storageKey: string): Promise<Uint8Array | null> {
+    await ensureStorageReady();
+    return await forageStorage.getItem(storageKey);
+}
+
 // Many keys in one round trip per chunk (bulk read); absent keys are left out
 // of the result. A remote link pays one request instead of one per key.
 export async function readPersistentJsonMany<T>(storageKeys: string[]): Promise<Map<string, T>> {

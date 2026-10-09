@@ -6,7 +6,7 @@
     //   - save:  server kv via pluginStorageStore (travels with the save;
     //            listed from the key index, values fetched only when opened)
     //   - local: localStorage `safe_plugin_*`  (device-local, strings only)
-    //   - idb:   SafeLocalPluginStorage  (IndexedDB, device-local, JSON)
+    //   - idb:   SafeLocalPluginStorage  (browser localForage, device-local)
     // Origin plugin is best-effort: new V3 writes are tagged into a sidecar
     // meta store (pluginStorageMeta), but legacy/V2 keys have no record and show
     // as unknown. Edit/delete are allowed directly, guarded by confirm.
@@ -39,6 +39,7 @@
         str: string
         size: number
         type: string
+        editable: boolean
         owner?: string
         // false for 'save' rows until opened: raw/str/type are placeholders.
         loaded: boolean
@@ -101,6 +102,18 @@
     const hasUnknown = $derived(entries.some((e) => !e.owner))
 
     // ── helpers ────────────────────────────────────────────────────────────
+    // Native IndexedDB values cannot all round-trip through this JSON editor.
+    function canEditAsJson(value: unknown, seen = new WeakSet<object>()): boolean {
+        if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+        if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0)
+        if (!value || typeof value !== 'object' || seen.has(value)) return false
+        seen.add(value)
+        if (Array.isArray(value)) {
+            if (Object.keys(value).length !== value.length
+                || Object.keys(value).some((key, i) => key !== String(i))) return false
+        } else if (Object.getPrototypeOf(value) !== Object.prototype) return false
+        return Object.values(value).every((item) => canEditAsJson(item, seen))
+    }
     function valueToString(val: unknown): string {
         if (typeof val === 'string') return val
         if (val === null || val === undefined) return ''
@@ -205,12 +218,12 @@
             for (let i = 0; i < keys.length; i++) {
                 const key = keys[i]
                 if (!read) {
-                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', owner: owners[key], loaded: false })
+                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', editable: true, owner: owners[key], loaded: false })
                     continue
                 }
                 const raw = await read(key)
                 const str = valueToString(raw)
-                list.push({ key, raw, str, size: str.length * 2, type: detectType(str), owner: owners[key], loaded: true })
+                list.push({ key, raw, str, size: str.length * 2, type: detectType(str), editable: canEditAsJson(raw), owner: owners[key], loaded: true })
                 loadProgress = i + 1
                 // Periodically yield to keep the UI responsive and let the
                 // progress bar update.
@@ -239,6 +252,7 @@
         entry.raw = raw
         entry.str = str
         entry.type = detectType(str)
+        entry.editable = canEditAsJson(raw)
         entry.loaded = true
     }
 
@@ -256,7 +270,7 @@
     }
 
     function startEdit() {
-        if (!selected) return
+        if (!selected || !selected.editable) return
         editText = prettyPrint(selected.str)
         editing = true
     }
@@ -270,7 +284,7 @@
     }
 
     async function saveEdit() {
-        if (!selected) return
+        if (!selected || !selected.editable) return
         saving = true
         try {
             let saveValue: unknown
@@ -521,7 +535,7 @@
                 <ShButton variant="outline" onclick={() => (detailOpen = false)}>
                     {language.close}
                 </ShButton>
-                <ShButton variant="primary" onclick={startEdit}>
+                <ShButton variant="primary" onclick={startEdit} disabled={!selected?.editable}>
                     <PencilIcon size={14} />
                     {language.edit}
                 </ShButton>
