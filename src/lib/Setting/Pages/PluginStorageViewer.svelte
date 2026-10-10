@@ -24,7 +24,7 @@
     } from '@lucide/svelte'
     import { alertConfirm, notifyError, notifySuccess } from 'src/ts/alert'
     import { SafeLocalStorage, SafeLocalPluginStorage } from 'src/ts/plugins/pluginSafeClass'
-    import { isLocalPluginStorageJsonEditable } from 'src/ts/plugins/localPluginStorageValue'
+    import { describePluginStorageValue, type PluginStorageDisplay } from './pluginStorageDisplay'
     import * as pluginStorageStore from 'src/ts/plugins/pluginStorageStore'
     import { getOwners, removeOwner } from 'src/ts/plugins/pluginStorageMeta'
     import { language } from 'src/lang'
@@ -34,13 +34,9 @@
     // Sentinel filter value for entries with no recorded origin plugin.
     const UNKNOWN = '__risu_unknown__'
 
-    interface Entry {
+    interface Entry extends PluginStorageDisplay {
         key: string
         raw: unknown
-        str: string
-        size: number
-        type: string
-        binary: boolean
         owner?: string
         // false for 'save' rows until opened: raw/str/type are placeholders.
         loaded: boolean
@@ -103,28 +99,6 @@
     const hasUnknown = $derived(entries.some((e) => !e.owner))
 
     // ── helpers ────────────────────────────────────────────────────────────
-    function valueToString(val: unknown): string {
-        if (typeof val === 'string') return val
-        if (val === null || val === undefined) return ''
-        try {
-            return JSON.stringify(val)
-        } catch {
-            return String(val)
-        }
-    }
-
-    function detectType(raw: string): string {
-        if (!raw) return 'empty'
-        try {
-            const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed)) return 'array'
-            if (typeof parsed === 'object' && parsed !== null) return 'object'
-            return typeof parsed
-        } catch {
-            return 'string'
-        }
-    }
-
     function prettyPrint(raw: string): string {
         try {
             return JSON.stringify(JSON.parse(raw), null, 2)
@@ -207,13 +181,11 @@
             for (let i = 0; i < keys.length; i++) {
                 const key = keys[i]
                 if (!read) {
-                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', binary: false, owner: owners[key], loaded: false })
+                    list.push({ key, raw: null, str: '', size: pluginStorageStore.size(key) ?? 0, type: '', jsonEditable: false, binarySize: false, owner: owners[key], loaded: false })
                     continue
                 }
                 const raw = await read(key)
-                const str = valueToString(raw)
-                const binary = !isLocalPluginStorageJsonEditable(raw)
-                list.push({ key, raw, str, size: str.length * 2, type: binary ? 'binary' : detectType(str), binary, owner: owners[key], loaded: true })
+                list.push({ key, raw, ...describePluginStorageValue(raw), owner: owners[key], loaded: true })
                 loadProgress = i + 1
                 // Periodically yield to keep the UI responsive and let the
                 // progress bar update.
@@ -238,12 +210,8 @@
     async function ensureLoaded(entry: Entry) {
         if (entry.loaded) return
         const raw = await pluginStorageStore.getItem(entry.key)
-        const str = valueToString(raw)
-        entry.raw = raw
-        entry.str = str
-        entry.type = detectType(str)
-        entry.binary = !isLocalPluginStorageJsonEditable(raw)
-        entry.loaded = true
+        // Retain the save index's actual record size, including after loading.
+        Object.assign(entry, describePluginStorageValue(raw), { raw, size: entry.size, binarySize: false, loaded: true })
     }
 
     async function openDetail(entry: Entry) {
@@ -260,7 +228,7 @@
     }
 
     function startEdit() {
-        if (!selected || selected.binary) return
+        if (!selected || !selected.jsonEditable) return
         editText = prettyPrint(selected.str)
         editing = true
     }
@@ -274,7 +242,7 @@
     }
 
     async function saveEdit() {
-        if (!selected || selected.binary) return
+        if (!selected || !selected.jsonEditable) return
         saving = true
         try {
             let saveValue: unknown
@@ -465,8 +433,11 @@
                 {#if entry.owner}
                     <ShBadge variant="secondary" className="max-w-[35%] overflow-hidden">{entry.owner}</ShBadge>
                 {/if}
-                <span class="text-textcolor2 text-[10px] uppercase tracking-wide shrink-0 opacity-70">{entry.loaded ? entry.type : language.pluginStorageNotLoaded}</span>
-                <span class="text-textcolor2 text-xs shrink-0 tabular-nums">{formatSize(entry.size)}</span>
+                <span class="text-textcolor2 text-[10px] tracking-wide shrink-0 opacity-70">{entry.loaded ? entry.type : language.pluginStorageNotLoaded}</span>
+                {#if entry.mimeType}
+                    <span class="text-textcolor2 text-xs max-w-[25%] truncate" title={entry.mimeType}>{entry.mimeType}</span>
+                {/if}
+                <span class="text-textcolor2 text-xs shrink-0 tabular-nums" title={`${entry.binarySize ? language.pluginStorageMetaBinarySize : language.pluginStorageMetaSize}: ${entry.size.toLocaleString()} B`}>{formatSize(entry.size)}</span>
                 <button
                     class="shrink-0 text-textcolor2 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-1"
                     aria-label={language.remove}
@@ -488,8 +459,16 @@
     {#if selected}
         <div class="flex flex-wrap gap-x-6 gap-y-1 text-xs mb-3">
             <span class="text-textcolor2">{language.pluginStorageMetaType}: <span class="text-textcolor font-mono">{selected.type}</span></span>
-            <span class="text-textcolor2">{language.pluginStorageMetaSize}: <span class="text-textcolor font-mono">{formatSize(selected.size)}</span></span>
-            <span class="text-textcolor2">{language.pluginStorageMetaChars}: <span class="text-textcolor font-mono">{selected.str.length.toLocaleString()}</span></span>
+            <span class="text-textcolor2">{selected.binarySize ? language.pluginStorageMetaBinarySize : language.pluginStorageMetaSize}: <span class="text-textcolor font-mono" title={`${selected.size.toLocaleString()} B`}>{formatSize(selected.size)}</span></span>
+            {#if selected.mimeType}
+                <span class="text-textcolor2">{language.pluginStorageMetaMime}: <span class="text-textcolor font-mono break-all">{selected.mimeType}</span></span>
+            {/if}
+            {#if selected.fileName !== undefined}
+                <span class="text-textcolor2">{language.pluginStorageMetaFileName}: <span class="text-textcolor font-mono break-all">{selected.fileName}</span></span>
+            {/if}
+            {#if selected.jsonEditable}
+                <span class="text-textcolor2">{language.pluginStorageMetaChars}: <span class="text-textcolor font-mono">{selected.str.length.toLocaleString()}</span></span>
+            {/if}
             <span class="text-textcolor2">{language.pluginStorageOwner}: <span class="text-textcolor font-mono">{selected.owner ?? language.pluginStorageOwnerUnknown}</span></span>
         </div>
 
@@ -525,7 +504,7 @@
                 <ShButton variant="outline" onclick={() => (detailOpen = false)}>
                     {language.close}
                 </ShButton>
-                <ShButton variant="primary" onclick={startEdit} disabled={selected?.binary}>
+                <ShButton variant="primary" onclick={startEdit} disabled={!selected?.jsonEditable}>
                     <PencilIcon size={14} />
                     {language.edit}
                 </ShButton>
