@@ -11,6 +11,7 @@ const latestWrite = new Map<string, number>();
 let writeSeq = 0;
 const pendingStorageOperations = new Map<string, Promise<unknown>>();
 let storageClear = Promise.resolve();
+let storageEnumeration = Promise.resolve();
 
 function containsStorageBuffer(value: unknown, seen = new WeakSet<object>()): boolean {
     if (!value || typeof value !== 'object') return false;
@@ -41,11 +42,13 @@ function readStorageCacheEntry<T>(entry: StorageCacheEntry): T | null {
     return (entry.cloneOnRead ? structuredClone(entry.value) : entry.value) as T | null;
 }
 
-// Blob encoding is asynchronous. Keep writes/removes ordered for the same key,
-// and keep a clear between operations that were submitted before/after it.
-async function queueStorageOperation<T>(key: string, operation: () => Promise<T>): Promise<T> {
+// Capture barriers at submission time. Reads wait only for their key and an
+// actual clear; mutations also wait for earlier enumerations to finish.
+async function queueStorageOperation<T>(key: string, operation: () => Promise<T>, mutation = true): Promise<T> {
     const previous = pendingStorageOperations.get(key) ?? Promise.resolve();
-    const next = Promise.all([previous.catch(() => {}), storageClear.catch(() => {})]).then(operation);
+    const barriers = [previous.catch(() => {}), storageClear.catch(() => {})];
+    if (mutation) barriers.push(storageEnumeration);
+    const next = Promise.all(barriers).then(operation);
     pendingStorageOperations.set(key, next);
     try { return await next; }
     finally {
@@ -122,7 +125,7 @@ export class SafeLocalPluginStorage {
                 pluginStorage.set(cacheKey, entry);
             }
             return readStorageCacheEntry<T>(entry);
-        });
+        }, false);
     }
     // Reads wait for submitted writes, as with upstream's IndexedDB queue.
     // Cache only the persisted representation, never the caller's mutable value.
@@ -175,14 +178,14 @@ export class SafeLocalPluginStorage {
         }
     }
     async keys(): Promise<string[]> {
-        // A global read barrier also prevents later mutations from overtaking
-        // enumeration while earlier Blob writes are still pending.
-        const listing = Promise.allSettled([storageClear, ...pendingStorageOperations.values()]).then(async () => {
+        // Later mutations cannot overtake enumeration, but unrelated reads may
+        // proceed while this listing waits for earlier operations.
+        const listing = Promise.allSettled([storageClear, storageEnumeration, ...pendingStorageOperations.values()]).then(async () => {
             const storageKeys = await listPersistentKeys(pluginStoragePrefix);
             return storageKeys.map((key) => decodeStorageKeyComponent(
                 key.slice(pluginStoragePrefix.length, -'.json'.length))).sort();
         });
-        storageClear = listing.then(() => {}, () => {});
+        storageEnumeration = listing.then(() => {}, () => {});
         return listing;
     }
     async clear(): Promise<void> {
@@ -193,7 +196,7 @@ export class SafeLocalPluginStorage {
                 pluginStorage.delete(key);
             }
         }
-        storageClear = Promise.allSettled([storageClear, ...pendingStorageOperations.values()])
+        storageClear = Promise.allSettled([storageClear, storageEnumeration, ...pendingStorageOperations.values()])
             .then(() => clearPersistentPrefix(pluginStoragePrefix));
         await storageClear;
         if (this.owner) await clearOwners('idb');

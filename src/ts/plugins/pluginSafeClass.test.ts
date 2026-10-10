@@ -1,5 +1,6 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { Blob as NativeBlob } from 'node:buffer'
+import { setImmediate } from 'node:timers/promises'
 
 // Use a Blob that Node's structuredClone can copy, as the browser bridge does.
 vi.stubGlobal('Blob', NativeBlob)
@@ -513,6 +514,145 @@ describe('SafeLocalPluginStorage binary persistence', () => {
         slow.release()
         await write
         expect(await keys).toEqual(['a', 'z'])
+    })
+
+    test.each(['warm', 'cold'] as const)('keys waiting for a slow write does not block an unrelated %s read from another instance', async (cache) => {
+        let storage = new Storage('p')
+        await storage.setItem('ready', 'available')
+        if (cache === 'cold') storage = await reload()
+        const slow = delayedBlob()
+        const write = storage.setItem('slow', slow.blob)
+        await slow.reading
+        const keys = storage.keys()
+        let readDone = false
+        const read = new Storage('other-plugin').getItem('ready').then((value) => { readDone = true; return value })
+        try {
+            await setImmediate()
+            expect(readDone).toBe(true)
+        } finally {
+            slow.release()
+            await Promise.allSettled([write, keys, read])
+        }
+        expect(await read).toBe('available')
+        expect(await keys).toEqual(['ready', 'slow'])
+    })
+
+    function holdKeyListing() {
+        let release: () => void
+        let started: () => void
+        const gate = new Promise<void>((resolve) => { release = resolve })
+        const listing = new Promise<void>((resolve) => { started = resolve })
+        return {
+            listing,
+            release: () => release(),
+            async list(prefix: string) {
+                const keys = [...kv.keys()].filter((key) => key.startsWith(prefix))
+                started()
+                await gate
+                return keys
+            },
+        }
+    }
+
+    test.each(['warm', 'cold'] as const)('a slow key listing does not block an unrelated %s read', async (cache) => {
+        let storage = new Storage('p')
+        await storage.setItem('ready', 'available')
+        if (cache === 'cold') storage = await reload()
+        const { forageStorage } = await import('../globalApi.svelte')
+        const held = holdKeyListing()
+        const list = vi.spyOn(forageStorage, 'keys').mockImplementationOnce(held.list)
+        const keys = storage.keys()
+        await held.listing
+        let readDone = false
+        const read = storage.getItem('ready').then((value) => { readDone = true; return value })
+        try {
+            await setImmediate()
+            expect(readDone).toBe(true)
+        } finally {
+            held.release()
+            await Promise.allSettled([keys, read])
+            list.mockRestore()
+        }
+        expect(await read).toBe('available')
+        expect(await keys).toEqual(['ready'])
+    })
+
+    test.each(['set', 'remove', 'clear'] as const)('a subsequent %s cannot overtake a held key listing', async (kind) => {
+        const storage = new Storage('p')
+        await storage.setItem('keep', 'old')
+        const { forageStorage } = await import('../globalApi.svelte')
+        const held = holdKeyListing()
+        const list = vi.spyOn(forageStorage, 'keys').mockImplementationOnce(held.list)
+        const keys = storage.keys()
+        await held.listing
+        const set = vi.spyOn(forageStorage, 'setItem')
+        const remove = vi.spyOn(forageStorage, 'removeItem')
+        const mutation = kind === 'set' ? storage.setItem('later', 'new')
+            : kind === 'remove' ? storage.removeItem('keep') : storage.clear()
+        try {
+            await setImmediate()
+            expect(set).not.toHaveBeenCalled()
+            expect(remove).not.toHaveBeenCalled()
+        } finally {
+            held.release()
+            await Promise.allSettled([keys, mutation])
+            list.mockRestore()
+            set.mockRestore()
+            remove.mockRestore()
+        }
+        expect(await keys).toEqual(['keep'])
+        await mutation
+        expect(await storage.keys()).toEqual(kind === 'set' ? ['keep', 'later'] : [])
+    })
+
+    test('a rejected key listing does not poison later reads or writes', async () => {
+        const storage = new Storage('p')
+        await storage.setItem('keep', 'old')
+        const { forageStorage } = await import('../globalApi.svelte')
+        const list = vi.spyOn(forageStorage, 'keys').mockRejectedValueOnce(new Error('listing failed'))
+        const keys = storage.keys().catch((error) => error.message)
+        const read = storage.getItem('keep')
+        const write = storage.setItem('later', 'new')
+        try {
+            expect(await keys).toBe('listing failed')
+            expect(await read).toBe('old')
+            await write
+            expect(await storage.keys()).toEqual(['keep', 'later'])
+        } finally {
+            await Promise.allSettled([keys, read, write])
+            list.mockRestore()
+        }
+    })
+
+    test('multiple listings and a clear retain submission order while unrelated reads proceed', async () => {
+        const storage = new Storage('p')
+        await storage.setItem('ready', 'available')
+        const slow = delayedBlob()
+        const first = storage.setItem('a', slow.blob)
+        await slow.reading
+        const firstKeys = storage.keys()
+        let readDone = false
+        const read = storage.getItem('ready').then((value) => { readDone = true; return value })
+        const second = storage.setItem('b', 'second')
+        const secondKeys = storage.keys()
+        const clear = storage.clear()
+        const third = storage.setItem('c', 'third')
+        const thirdKeys = storage.keys()
+        try {
+            await setImmediate()
+            expect(readDone).toBe(true)
+        } finally {
+            slow.release()
+            await Promise.allSettled([first, firstKeys, read, second, secondKeys, clear, third, thirdKeys])
+        }
+        expect(await read).toBe('available')
+        expect(await firstKeys).toEqual(['a', 'ready'])
+        expect(await secondKeys).toEqual(['a', 'b', 'ready'])
+        expect(await thirdKeys).toEqual(['c'])
+        const fresh = await reload()
+        expect(await fresh.getItem('a')).toBeNull()
+        expect(await fresh.getItem('b')).toBeNull()
+        expect(await fresh.getItem('c')).toBe('third')
     })
 
     test.each(['warm', 'cold'] as const)('a %s read submitted before a write returns the earlier value', async (cache) => {
