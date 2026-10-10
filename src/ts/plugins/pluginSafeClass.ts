@@ -3,13 +3,43 @@ import { clearPersistentPrefix, decodeStorageKeyComponent, listPersistentKeys, m
 import { recordOwner, removeOwner, clearOwners } from "./pluginStorageMeta";
 import { decodeLocalPluginStorageValue, encodeLocalPluginStorageValue } from "./localPluginStorageValue";
 
-const pluginStorage = new Map<string, unknown>();
+type StorageCacheEntry = { value: unknown; cloneOnRead: boolean };
+const pluginStorage = new Map<string, StorageCacheEntry>();
 const pluginStoragePrefix = 'cache/plugin-storage/';
 // Reads may populate the cache only if no mutation was submitted meanwhile.
 const latestWrite = new Map<string, number>();
 let writeSeq = 0;
 const pendingStorageOperations = new Map<string, Promise<unknown>>();
 let storageClear = Promise.resolve();
+
+function containsStorageBuffer(value: unknown, seen = new WeakSet<object>()): boolean {
+    if (!value || typeof value !== 'object') return false;
+    if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (value instanceof Map) {
+        for (const [key, item] of value) {
+            if (containsStorageBuffer(key, seen) || containsStorageBuffer(item, seen)) return true;
+        }
+        return false;
+    }
+    if (value instanceof Set) {
+        for (const item of value) if (containsStorageBuffer(item, seen)) return true;
+        return false;
+    }
+    return Object.values(value).some((item) => containsStorageBuffer(item, seen));
+}
+
+function storageCacheEntry(value: unknown): StorageCacheEntry {
+    return { value, cloneOnRead: containsStorageBuffer(value) };
+}
+
+function readStorageCacheEntry<T>(entry: StorageCacheEntry): T | null {
+    // The RPC bridge transfers buffers, so those reads need independent copies.
+    // Other values retain the legacy host-reference behavior; postMessage clones
+    // them for plugins. Host callers must treat the cached value as read-only.
+    return (entry.cloneOnRead ? structuredClone(entry.value) : entry.value) as T | null;
+}
 
 // Blob encoding is asynchronous. Keep writes/removes ordered for the same key,
 // and keep a clear between operations that were submitted before/after it.
@@ -81,17 +111,17 @@ export class SafeLocalPluginStorage {
         const clear = storageClear;
         return queueStorageOperation(cacheKey, async () => {
             if (pluginStorage.has(cacheKey)) {
-                // The RPC bridge transfers ArrayBuffers, detaching this copy.
-                return structuredClone((pluginStorage.get(cacheKey) as T) ?? null);
+                return readStorageCacheEntry<T>(pluginStorage.get(cacheKey));
             }
             const data = await readPersistentBytes(makeEncodedStorageKey(pluginStoragePrefix, key));
             const payload = data ? decodeLocalPluginStorageValue<T>(data) : null;
+            const entry = storageCacheEntry(payload);
             // Return this read's result, but never refill a cache invalidated
             // by a later mutation. FIFO matches IndexedDB read-before-write.
             if (payload !== null && latestWrite.get(cacheKey) === token && storageClear === clear) {
-                pluginStorage.set(cacheKey, payload);
+                pluginStorage.set(cacheKey, entry);
             }
-            return structuredClone(payload);
+            return readStorageCacheEntry<T>(entry);
         });
     }
     // Reads wait for submitted writes, as with upstream's IndexedDB queue.
@@ -112,7 +142,7 @@ export class SafeLocalPluginStorage {
                 const data = result.data;
                 await writePersistentBytes(makeEncodedStorageKey(pluginStoragePrefix, key), data);
                 if (latestWrite.get(cacheKey) === token) {
-                    pluginStorage.set(cacheKey, decodeLocalPluginStorageValue(data));
+                    pluginStorage.set(cacheKey, storageCacheEntry(decodeLocalPluginStorageValue(data)));
                 }
             } catch (e) {
                 // A previous queued write might also have failed. Reload the

@@ -372,6 +372,46 @@ describe('SafeLocalPluginStorage binary persistence', () => {
         expect(new Uint8Array(await fresh.getItem<ArrayBuffer>('buffer'))).toEqual(new Uint8Array([1, 2, 3]))
     })
 
+    test.each([
+        ['ordinary JSON', () => ({ name: 'x', values: [1, 2, 3] })],
+        ['rich values without buffers', () => ({ blob: new Blob(['clip']), date: new Date('2026-01-01'), map: new Map([['x', 1]]), set: new Set([2]), regexp: /clip/i })],
+    ] as const)('does not clone %s on cold or warm reads', async (_name, makeValue) => {
+        const value = makeValue()
+        const expected = structuredClone(value)
+        let storage = new Storage('p')
+        await storage.setItem('no-buffer', value)
+        for (const cache of ['warm', 'cold']) {
+            if (cache === 'cold') storage = await reload()
+            const clone = vi.spyOn(globalThis, 'structuredClone')
+            try {
+                expect(await storage.getItem('no-buffer')).toEqual(expected)
+                expect(await storage.getItem('no-buffer')).toEqual(expected)
+                expect(clone).not.toHaveBeenCalled()
+            } finally { clone.mockRestore() }
+        }
+    })
+
+    test.each([
+        ['nested object', (bytes: Uint8Array) => ({ child: { bytes } }), (value: any) => value.child.bytes.buffer],
+        ['array', (bytes: Uint8Array) => [bytes], (value: any) => value[0].buffer],
+        ['DataView', (bytes: Uint8Array) => new DataView(bytes.buffer), (value: any) => value.buffer],
+        ['Map key', (bytes: Uint8Array) => new Map([[bytes, 'clip']]), (value: any) => value.keys().next().value.buffer],
+        ['Map value', (bytes: Uint8Array) => new Map([['clip', bytes]]), (value: any) => value.get('clip').buffer],
+        ['Set entry', (bytes: Uint8Array) => new Set([bytes]), (value: any) => value.values().next().value.buffer],
+        ['cycle', (bytes: Uint8Array) => { const value: any = { bytes }; value.self = value; return value }, (value: any) => value.bytes.buffer],
+    ] as const)('protects buffers in a %s from transfers on warm and cold reads', async (_name, wrap, getBuffer) => {
+        let storage = new Storage('p')
+        await storage.setItem('transfer', wrap(new Uint8Array([1, 2, 3])))
+        for (const cache of ['warm', 'cold']) {
+            if (cache === 'cold') storage = await reload()
+            const first = await storage.getItem('transfer')
+            const buffer = getBuffer(first)
+            structuredClone(first, { transfer: [buffer] })
+            expect(buffer.byteLength).toBe(0)
+            expect(new Uint8Array(getBuffer(await storage.getItem('transfer')))).toEqual(new Uint8Array([1, 2, 3]))
+        }
+    })
+
     test('reads existing JSON records and keeps new JSON records unchanged', async () => {
         const { makeEncodedStorageKey } = await import('../storage/persistentKv')
         const storageKey = makeEncodedStorageKey('cache/plugin-storage/', 'legacy')
