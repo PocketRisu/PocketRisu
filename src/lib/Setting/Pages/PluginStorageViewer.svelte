@@ -24,7 +24,7 @@
     } from '@lucide/svelte'
     import { alertConfirm, notifyError, notifySuccess } from 'src/ts/alert'
     import { SafeLocalStorage, SafeLocalPluginStorage } from 'src/ts/plugins/pluginSafeClass'
-    import { requiresLocalPluginStorageEncoding } from 'src/ts/plugins/localPluginStorageValue'
+    import { isLocalPluginStorageJsonEditable } from 'src/ts/plugins/localPluginStorageValue'
     import * as pluginStorageStore from 'src/ts/plugins/pluginStorageStore'
     import { getOwners, removeOwner } from 'src/ts/plugins/pluginStorageMeta'
     import { language } from 'src/lang'
@@ -212,7 +212,7 @@
                 }
                 const raw = await read(key)
                 const str = valueToString(raw)
-                const binary = requiresLocalPluginStorageEncoding(raw)
+                const binary = !isLocalPluginStorageJsonEditable(raw)
                 list.push({ key, raw, str, size: str.length * 2, type: binary ? 'binary' : detectType(str), binary, owner: owners[key], loaded: true })
                 loadProgress = i + 1
                 // Periodically yield to keep the UI responsive and let the
@@ -242,7 +242,7 @@
         entry.raw = raw
         entry.str = str
         entry.type = detectType(str)
-        entry.binary = requiresLocalPluginStorageEncoding(raw)
+        entry.binary = !isLocalPluginStorageJsonEditable(raw)
         entry.loaded = true
     }
 

@@ -68,6 +68,7 @@ describe('plugin storage JSON editor', () => {
         ['Date', () => new Date('2026-01-01')],
         ['shared references', () => { const child = {}; return { a: child, b: child } }],
         ['cyclic object', () => { const value: any = {}; value.self = value; return value }],
+        ['legacy special primitives', () => ({ missing: undefined, number: NaN, array: [undefined, , 3] })],
     ] as const)('prevents a JSON edit from replacing %s with its lossy display', async (_type, makeValue) => {
         const value = makeValue()
         await openLocalEntry(value)
@@ -93,5 +94,14 @@ describe('plugin storage JSON editor', () => {
         button('pluginStorageSave').click()
         await vi.waitFor(() => expect(setItem).toHaveBeenCalledWith('entry', { text: 'new' }))
         expect(values.get('entry')).toEqual({ text: 'new' })
+    })
+
+    test('allows editing ordinary values after lossy JSON persistence', async () => {
+        const { encodeLocalPluginStorageValue, decodeLocalPluginStorageValue } = await import('src/ts/plugins/localPluginStorageValue')
+        const persisted = decodeLocalPluginStorageValue(await encodeLocalPluginStorageValue({ opt: undefined, score: NaN, array: [1, , 3] }))
+        await openLocalEntry(persisted)
+        button('edit').click()
+        await tick()
+        expect(document.querySelector('textarea')).not.toBeNull()
     })
 })

@@ -44,17 +44,31 @@ function isLengthTracking(view: ArrayBufferView, name: string): boolean {
     return false;
 }
 
-// The storage viewer must not round-trip these values through its JSON editor.
+// Ordinary values retain JSON's lossy behavior. Other native values go through
+// the graph encoder, which rejects unsupported types instead of storing {}.
 export function requiresLocalPluginStorageEncoding(value: unknown, seen = new WeakSet<object>()): boolean {
-    if (value === undefined || typeof value === 'bigint') return true;
-    if (typeof value === 'number') return !Number.isFinite(value) || Object.is(value, -0);
+    if (typeof value === 'bigint') return true;
     if (!value || typeof value !== 'object') return false;
-    if (seen.has(value)) return true;
+    if (seen.has(value)) return false;
     seen.add(value);
-    if (Object.prototype.toString.call(value) !== '[object Object]' && !Array.isArray(value)) return true;
-    if (Array.isArray(value) && (Object.keys(value).length !== value.length
-        || Object.keys(value).some((key, i) => key !== String(i)))) return true;
+    const tag = Object.prototype.toString.call(value);
+    if (['[object Number]', '[object Boolean]', '[object String]'].includes(tag)) return false;
+    if (tag !== '[object Object]' && !Array.isArray(value)) return true;
     return Object.values(value).some((item) => requiresLocalPluginStorageEncoding(item, seen));
+}
+
+// Older graph records can contain values that new writes normalize to JSON.
+// Editing those records must still protect their primitives/object identity.
+export function isLocalPluginStorageJsonEditable(value: unknown, seen = new WeakSet<object>()): boolean {
+    if (value === undefined || typeof value === 'bigint') return false;
+    if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0);
+    if (!value || typeof value !== 'object') return true;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (Object.prototype.toString.call(value) !== '[object Object]' && !Array.isArray(value)) return false;
+    if (Array.isArray(value) && (Object.keys(value).length !== value.length
+        || Object.keys(value).some((key, i) => key !== String(i)))) return false;
+    return Object.values(value).every((item) => isLocalPluginStorageJsonEditable(item, seen));
 }
 
 type StoredValue = null | boolean | string | number | { ref: number };

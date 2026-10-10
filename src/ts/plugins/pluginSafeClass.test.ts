@@ -261,12 +261,71 @@ describe('SafeLocalPluginStorage binary persistence', () => {
         ['RegExp', () => /audio/gi],
         ['BigInt', () => 123456789012345678901234567890n],
         ['boxed values', () => [Object(123n), new Number(NaN), new Boolean(false), new String('text')]],
-        ['special numbers', () => [NaN, Infinity, -Infinity, -0]],
-        ['undefined and sparse arrays', () => ({ missing: undefined, array: [undefined, , 3] })],
     ] as const)('returns the structured-clone shape of %s after reload', async (_name, makeValue) => {
         const value = makeValue()
         await new Storage('p').setItem('clone', value)
         expect(await (await reload()).getItem('clone')).toEqual(structuredClone(value))
+    })
+
+    test.each([
+        ['optional undefined properties', () => ({ name: 'x', opt: undefined })],
+        ['undefined array entries', () => [1, undefined, 3]],
+        ['sparse arrays', () => [1, , 3]],
+        ['non-finite numbers', () => ({ score: NaN, high: Infinity, low: -Infinity })],
+        ['negative zero', () => ({ number: -0 })],
+        ['root undefined', () => undefined],
+        ['shared ordinary objects', () => { const child = { n: 1 }; return { a: child, b: child } }],
+        ['boxed JSON primitives', () => [new Number(NaN), new Boolean(false), new String('text')]],
+    ] as const)('keeps %s on the legacy JSON path, including warm reads', async (_name, makeValue) => {
+        const { makeEncodedStorageKey } = await import('../storage/persistentKv')
+        const storage = new Storage('p')
+        const value = makeValue()
+        const json = JSON.stringify(value === undefined ? null : value)
+        await storage.setItem('ordinary', value)
+        expect(new TextDecoder().decode(kv.get(makeEncodedStorageKey('cache/plugin-storage/', 'ordinary')))).toBe(json)
+        expect(await storage.getItem('ordinary')).toEqual(JSON.parse(json))
+        expect(await (await reload()).getItem('ordinary')).toEqual(JSON.parse(json))
+    })
+
+    test('rejects ordinary cycles without replacing persisted data', async () => {
+        const storage = new Storage('p')
+        await storage.setItem('cycle', 'persisted')
+        const value: any = {}
+        value.self = value
+        await expect(storage.setItem('cycle', value)).rejects.toBeInstanceOf(TypeError)
+        expect(await storage.getItem('cycle')).toBe('persisted')
+        expect(await (await reload()).getItem('cycle')).toBe('persisted')
+    })
+
+    test('retains special primitives and sparse arrays when rich values require encoding', async () => {
+        const value = { audio: new Uint8Array([1]), missing: undefined, array: [undefined, , 3], numbers: [NaN, Infinity, -Infinity, -0] }
+        await new Storage('p').setItem('mixed', value)
+        expect(await (await reload()).getItem('mixed')).toEqual(structuredClone(value))
+    })
+
+    test('reads existing binary records containing ordinary cycles and special primitives', async () => {
+        const { makeEncodedStorageKey } = await import('../storage/persistentKv')
+        const metadata = new TextEncoder().encode(JSON.stringify([
+            { type: 'Object', properties: [['missing', { ref: 1 }], ['number', { ref: 2 }], ['array', { ref: 3 }], ['self', { ref: 0 }]] },
+            { type: 'Primitive', name: 'undefined', value: 'undefined' },
+            { type: 'Primitive', name: 'number', value: '-0' },
+            { type: 'Array', length: 3, properties: [['0', { ref: 1 }], ['2', 3]] },
+        ]))
+        const root = new TextEncoder().encode('{"ref":0}')
+        const record = new Uint8Array(13 + metadata.length + root.length)
+        record.set([0, 80, 76, 83, 1])
+        const header = new DataView(record.buffer)
+        header.setUint32(5, metadata.length, true)
+        header.setUint32(9, root.length, true)
+        record.set(metadata, 13)
+        record.set(root, 13 + metadata.length)
+        kv.set(makeEncodedStorageKey('cache/plugin-storage/', 'legacy-rich'), record)
+        const restored: any = await (await reload()).getItem('legacy-rich')
+        expect(Object.hasOwn(restored, 'missing')).toBe(true)
+        expect(restored.missing).toBeUndefined()
+        expect(Object.is(restored.number, -0)).toBe(true)
+        expect(restored.array).toEqual([undefined, , 3])
+        expect(restored.self).toBe(restored)
     })
 
     test('stores a shared backing buffer once, while retaining bytes outside the view', async () => {
@@ -372,6 +431,21 @@ describe('SafeLocalPluginStorage binary persistence', () => {
         restored.bytes[0] = 8
         expect((await storage.getItem<typeof value>('snapshot')).bytes[0]).toBe(1)
         expect(await (await reload()).getItem('snapshot')).toEqual({ bytes: new Uint8Array([1, 2]), text: 'saved' })
+    })
+
+    test('snapshots ordinary JSON values before a preceding Blob write finishes', async () => {
+        const storage = new Storage('p')
+        const slow = delayedBlob()
+        const first = storage.setItem('snapshot', slow.blob)
+        await slow.reading
+        const value = { text: 'saved', score: NaN, optional: undefined }
+        const second = storage.setItem('snapshot', value)
+        value.text = 'changed'
+        value.score = 5
+        slow.release()
+        await Promise.all([first, second])
+        expect(await storage.getItem('snapshot')).toEqual({ text: 'saved', score: null })
+        expect(await (await reload()).getItem('snapshot')).toEqual({ text: 'saved', score: null })
     })
 
     test('a read waiting on failed writes returns persisted data, including two failures', async () => {
