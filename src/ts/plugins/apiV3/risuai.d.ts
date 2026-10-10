@@ -1064,7 +1064,8 @@ interface PluginStorage {
 }
 
 /**
- * Device-local storage that persists outside of save files.
+ * Server-backed storage shared by devices connected to the same server.
+ * Data is stored separately and is excluded from save-file backups.
  * Uses generic types for flexible value storage.
  * Storage is shared between all plugins under a common prefix.
  *
@@ -1438,8 +1439,8 @@ interface RisuaiPluginAPI {
     safeLocalStorage: SafeLocalStorage;
 
     /**
-     * Gets a device-local storage instance shared between plugins
-     * @returns SafeLocalPluginStorage instance for device-local storage
+     * Gets a server-backed storage instance shared between plugins
+     * @returns SafeLocalPluginStorage instance for storage on the connected server
      *
      * @example
      * ```typescript
