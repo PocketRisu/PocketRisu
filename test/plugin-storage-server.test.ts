@@ -16,6 +16,7 @@ import { describe, test, expect, afterAll } from 'vitest'
 import { createHash } from 'node:crypto'
 import { writeFile, rm } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Packr } from 'msgpackr'
 import * as fflate from 'fflate'
 import { spawnServer, type ServerHandle } from './compat/helpers/spawnServer.js'
@@ -292,8 +293,8 @@ describe('F1: snapshots carry plugin storage', () => {
     })
 
     test('R4: a failed snapshot does not advance the backup cooldown', async () => {
-        const preload = new URL('./compat/helpers/fail-snapshot-preload.cjs', import.meta.url).pathname
-        const { srv, client } = await boot({ POCKETRISU_BACKUP_INTERVAL_MS: '1500', NODE_OPTIONS: `--require ${preload}` })
+        const preload = fileURLToPath(new URL('./compat/helpers/fail-snapshot-preload.cjs', import.meta.url))
+        const { srv, client } = await boot({ POCKETRISU_BACKUP_INTERVAL_MS: '1500', NODE_OPTIONS: `--require ${JSON.stringify(preload)}` })
         expect((await client.importBackup(backupWith({ a: 'A' }))).ok).toBe(true)
         const count0 = (await snapshots(client)).length
         expect(count0).toBeGreaterThan(0)

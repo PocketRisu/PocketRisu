@@ -1,13 +1,60 @@
 import { toGetter } from "../globalApi.svelte";
-import { clearPersistentPrefix, decodeStorageKeyComponent, listPersistentKeys, makeEncodedStorageKey, readPersistentJson, removePersistentKey, writePersistentJson } from "../storage/persistentKv";
+import { clearPersistentPrefix, decodeStorageKeyComponent, listPersistentKeys, makeEncodedStorageKey, readPersistentBytes, removePersistentKey, writePersistentBytes } from "../storage/persistentKv";
 import { recordOwner, removeOwner, clearOwners } from "./pluginStorageMeta";
+import { decodeLocalPluginStorageValue, encodeLocalPluginStorageValue } from "./localPluginStorageValue";
 
-const pluginStorage = new Map<string, unknown>();
+type StorageCacheEntry = { value: unknown; cloneOnRead: boolean };
+const pluginStorage = new Map<string, StorageCacheEntry>();
 const pluginStoragePrefix = 'cache/plugin-storage/';
-// Latest write per cache key, so a failed write only rolls back if no later
-// write (even of the same value) has taken the slot since.
+// Reads may populate the cache only if no mutation was submitted meanwhile.
 const latestWrite = new Map<string, number>();
 let writeSeq = 0;
+const pendingStorageOperations = new Map<string, Promise<unknown>>();
+let storageClear = Promise.resolve();
+let storageEnumeration = Promise.resolve();
+
+function containsStorageBuffer(value: unknown, seen = new WeakSet<object>()): boolean {
+    if (!value || typeof value !== 'object') return false;
+    if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return true;
+    if (seen.has(value)) return false;
+    seen.add(value);
+    if (value instanceof Map) {
+        for (const [key, item] of value) {
+            if (containsStorageBuffer(key, seen) || containsStorageBuffer(item, seen)) return true;
+        }
+        return false;
+    }
+    if (value instanceof Set) {
+        for (const item of value) if (containsStorageBuffer(item, seen)) return true;
+        return false;
+    }
+    return Object.values(value).some((item) => containsStorageBuffer(item, seen));
+}
+
+function storageCacheEntry(value: unknown): StorageCacheEntry {
+    return { value, cloneOnRead: containsStorageBuffer(value) };
+}
+
+function readStorageCacheEntry<T>(entry: StorageCacheEntry): T | null {
+    // The RPC bridge transfers buffers, so those reads need independent copies.
+    // Other values retain the legacy host-reference behavior; postMessage clones
+    // them for plugins. Host callers must treat the cached value as read-only.
+    return (entry.cloneOnRead ? structuredClone(entry.value) : entry.value) as T | null;
+}
+
+// Capture barriers at submission time. Reads wait only for their key and an
+// actual clear; mutations also wait for earlier enumerations to finish.
+async function queueStorageOperation<T>(key: string, operation: () => Promise<T>, mutation = true): Promise<T> {
+    const previous = pendingStorageOperations.get(key) ?? Promise.resolve();
+    const barriers = [previous.catch(() => {}), storageClear.catch(() => {})];
+    if (mutation) barriers.push(storageEnumeration);
+    const next = Promise.all(barriers).then(operation);
+    pendingStorageOperations.set(key, next);
+    try { return await next; }
+    finally {
+        if (pendingStorageOperations.get(key) === next) pendingStorageOperations.delete(key);
+    }
+}
 
 export class SafeLocalStorage {
     getItem(key: string): string | null {
@@ -63,38 +110,50 @@ export class SafeLocalPluginStorage {
     }
     async getItem<T>(key: string): Promise<T | null> {
         const cacheKey = `safe_plugin_${key}`;
-        if (pluginStorage.has(cacheKey)) {
-            return (pluginStorage.get(cacheKey) as T) ?? null;
-        }
-        const payload = await readPersistentJson<T>(makeEncodedStorageKey(pluginStoragePrefix, key));
-        if (payload !== null) {
-            pluginStorage.set(cacheKey, payload);
-        }
-        return payload;
+        const token = latestWrite.get(cacheKey);
+        const clear = storageClear;
+        return queueStorageOperation(cacheKey, async () => {
+            if (pluginStorage.has(cacheKey)) {
+                return readStorageCacheEntry<T>(pluginStorage.get(cacheKey));
+            }
+            const data = await readPersistentBytes(makeEncodedStorageKey(pluginStoragePrefix, key));
+            const payload = data ? decodeLocalPluginStorageValue<T>(data) : null;
+            const entry = storageCacheEntry(payload);
+            // Return this read's result, but never refill a cache invalidated
+            // by a later mutation. FIFO matches IndexedDB read-before-write.
+            if (payload !== null && latestWrite.get(cacheKey) === token && storageClear === clear) {
+                pluginStorage.set(cacheKey, entry);
+            }
+            return readStorageCacheEntry<T>(entry);
+        }, false);
     }
-    // The cache is updated first so a plugin that reads straight back without
-    // awaiting sees its write (upstream's IndexedDB queue gave that ordering).
-    // If the server rejects the write (423 session lock, timeout) the cache is
-    // rolled back and the error reaches the plugin — otherwise the plugin, and
-    // the user, would believe a value is saved that a reload or another
-    // device will never see.
+    // Reads wait for submitted writes, as with upstream's IndexedDB queue.
+    // Cache only the persisted representation, never the caller's mutable value.
     async setItem<T>(key: string, value: T): Promise<void> {
         const cacheKey = `safe_plugin_${key}`;
-        const had = pluginStorage.has(cacheKey);
-        const previous = pluginStorage.get(cacheKey);
         const token = ++writeSeq;
         latestWrite.set(cacheKey, token);
-        pluginStorage.set(cacheKey, value);
-        try {
-            await writePersistentJson(makeEncodedStorageKey(pluginStoragePrefix, key), value);
-        } catch (e) {
-            // Only undo our own write; a newer one may already own the slot.
-            if (latestWrite.get(cacheKey) === token) {
-                if (had) pluginStorage.set(cacheKey, previous);
-                else pluginStorage.delete(cacheKey);
+        pluginStorage.delete(cacheKey);
+        // Capture bytes/properties now, before a preceding slow Blob finishes.
+        // Handle rejection immediately even if this key's queue is still busy.
+        const encoded = encodeLocalPluginStorageValue(value).then(
+            (data) => ({ data }), (error: unknown) => ({ error }));
+        await queueStorageOperation(cacheKey, async () => {
+            try {
+                const result = await encoded;
+                if ('error' in result) throw result.error;
+                const data = result.data;
+                await writePersistentBytes(makeEncodedStorageKey(pluginStoragePrefix, key), data);
+                if (latestWrite.get(cacheKey) === token) {
+                    pluginStorage.set(cacheKey, storageCacheEntry(decodeLocalPluginStorageValue(data)));
+                }
+            } catch (e) {
+                // A previous queued write might also have failed. Reload the
+                // actual server value instead of restoring a speculative value.
+                if (latestWrite.get(cacheKey) === token) pluginStorage.delete(cacheKey);
+                throw e;
             }
-            throw e;
-        }
+        });
         if (this.owner) {
             // Sidecar metadata only; its failure must not read as a lost write.
             try { await recordOwner('idb', key, this.owner); }
@@ -103,30 +162,31 @@ export class SafeLocalPluginStorage {
     }
     async removeItem(key: string): Promise<void> {
         const cacheKey = `safe_plugin_${key}`;
-        const had = pluginStorage.has(cacheKey);
-        const previous = pluginStorage.get(cacheKey);
         const token = ++writeSeq;
         latestWrite.set(cacheKey, token);
         pluginStorage.delete(cacheKey);
-        try {
-            await removePersistentKey(makeEncodedStorageKey(pluginStoragePrefix, key));
-        } catch (e) {
-            if (had && latestWrite.get(cacheKey) === token) pluginStorage.set(cacheKey, previous);
-            throw e;
-        }
+        await queueStorageOperation(cacheKey, async () => {
+            try { await removePersistentKey(makeEncodedStorageKey(pluginStoragePrefix, key)); }
+            catch (e) {
+                if (latestWrite.get(cacheKey) === token) pluginStorage.delete(cacheKey);
+                throw e;
+            }
+        });
         if (this.owner) {
             try { await removeOwner('idb', key); }
             catch (e) { console.warn(`[plugin storage] owner record removal for "${key}" failed`, e); }
         }
     }
     async keys(): Promise<string[]> {
-        const keys: string[] = [];
-        const storageKeys = await listPersistentKeys(pluginStoragePrefix);
-        for (const key of storageKeys) {
-            const encodedKey = key.slice(pluginStoragePrefix.length, -'.json'.length);
-            keys.push(decodeStorageKeyComponent(encodedKey));
-        }
-        return keys;
+        // Later mutations cannot overtake enumeration, but unrelated reads may
+        // proceed while this listing waits for earlier operations.
+        const listing = Promise.allSettled([storageClear, storageEnumeration, ...pendingStorageOperations.values()]).then(async () => {
+            const storageKeys = await listPersistentKeys(pluginStoragePrefix);
+            return storageKeys.map((key) => decodeStorageKeyComponent(
+                key.slice(pluginStoragePrefix.length, -'.json'.length))).sort();
+        });
+        storageEnumeration = listing.then(() => {}, () => {});
+        return listing;
     }
     async clear(): Promise<void> {
         // A write still in flight must not restore anything into the cleared cache.
@@ -136,7 +196,9 @@ export class SafeLocalPluginStorage {
                 pluginStorage.delete(key);
             }
         }
-        await clearPersistentPrefix(pluginStoragePrefix);
+        storageClear = Promise.allSettled([storageClear, storageEnumeration, ...pendingStorageOperations.values()])
+            .then(() => clearPersistentPrefix(pluginStoragePrefix));
+        await storageClear;
         if (this.owner) await clearOwners('idb');
     }
 }

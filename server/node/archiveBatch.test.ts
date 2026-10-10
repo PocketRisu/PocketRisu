@@ -216,7 +216,7 @@ afterEach(async () => {
 
 
 const utils = createRequire(import.meta.url)('./utils.cjs')
-const PRELOAD = new URL('../../test/compat/helpers/fail-db-persist-preload.cjs', import.meta.url).pathname
+const PRELOAD = fileURLToPath(new URL('../../test/compat/helpers/fail-db-persist-preload.cjs', import.meta.url))
 
 async function diskDb(): Promise<any> {
     const raw = withDb((db) => db.prepare('SELECT value FROM kv WHERE key = ?').get('database/database.bin'))
@@ -296,7 +296,7 @@ describe('a failed database persist', () => {
     // next edit, and a restart in between lost it.
     it('is retried until the change reaches disk', async () => {
         await stopServer()
-        extraEnv = { NODE_OPTIONS: `--require ${PRELOAD}`, POCKETRISU_PERSIST_RETRY_MS: '1000' }
+        extraEnv = { NODE_OPTIONS: `--require ${JSON.stringify(PRELOAD)}`, POCKETRISU_PERSIST_RETRY_MS: '1000' }
         try {
             await startServer()
             await seedDb({ characters: [char('a', [chat('a1', 'A')])], characterOrder: ['a'] })
