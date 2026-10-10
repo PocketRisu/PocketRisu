@@ -67,6 +67,7 @@
 
     function openPicker() {
         activeTab = legacy ? 'legacy' : 'preset';
+        expandedFolders = new Set(bound?.folderId ? [bound.folderId] : []);
         openOptions = true;
     }
 
