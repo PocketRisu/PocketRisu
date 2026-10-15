@@ -78,9 +78,8 @@ export async function prepareAdapterRequest(
     // with an OAuth token. buildModelPresetCredential already collapses the
     // pool / inline / userValues sources into credential.apiKey, so this is the
     // one place where the SA JSON is available for ALL credential modes — the
-    // Vertex endpoint builder needs it to recover project_id when the preset
-    // uses a pooled/inline key and leaves Project ID blank (the JSON is then
-    // absent from userValues.serviceAccountJson). See vertexEndpoint.ts.
+    // Vertex endpoint builder reads project_id from it (when Project ID is
+    // blank) in preference to userValues.serviceAccountJson. See buildRequest.ts.
     const serviceAccountJson =
         input.preset.profileSnapshot.auth.kind === 'google-service-account' &&
         typeof input.credential?.apiKey === 'string'

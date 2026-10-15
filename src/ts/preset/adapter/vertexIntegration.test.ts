@@ -131,6 +131,32 @@ describe('Vertex Gemini native end-to-end (bundled registry)', () => {
         expect(calls).toHaveLength(1)
     })
 
+    // The reported failure: a preset whose Service Account JSON was typed in the
+    // editor and then saved to the key pool (apiKeyRef / inlineCredential) keeps
+    // that old string in userValues.serviceAccountJson. The credential chain wins
+    // for auth, so the OAuth swap succeeds — but the URL's project must come from
+    // the SAME credential, not from the stale field. Before the fix this threw
+    // "Could not determine the Vertex project …" even though the active saved key
+    // carried a project_id, and fixing the saved key never cleared it.
+    test('stale userValues Service Account JSON does not shadow the credential project', async () => {
+        const { cache, calls } = stubCache('ya29.gemini')
+        const preset = bundledPreset('vertex-gemini-native:gemini-3-flash', {
+            serviceAccountJson: 'AIzaSyStaleDirectModeValue',
+        })
+
+        const prepared = await prepareAdapterRequest({
+            preset,
+            credential: { apiKey: VALID_SA_JSON },
+            tokenCache: cache,
+        })
+
+        expect(prepared.url).toBe(
+            'https://aiplatform.googleapis.com/v1/projects/demo/locations/global/publishers/google/models',
+        )
+        expect(prepared.headers.Authorization).toBe('Bearer ya29.gemini')
+        expect(calls).toHaveLength(1)
+    })
+
     // The modelId combobox added to the base provider drives the Vertex URL path
     // the same way it does for AI Studio. resolveWireModelId is the exact helper
     // googleGemini.ts uses to pick the model that gets appended to the
