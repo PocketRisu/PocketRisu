@@ -876,6 +876,48 @@ describe('buildPreparedRequest — Vertex project/location resolution', () => {
         )
     })
 
+    // Regression: the URL's project must come from the credential that actually
+    // authenticated the request. userValues.serviceAccountJson can lag behind the
+    // winning credential (a value typed before the key was saved to the pool, a
+    // non-SA-JSON paste, an imported preset whose inlineCredential is an object).
+    // Trusting it first authenticated with the pooled SA JSON but assembled the
+    // URL from the stale string — throwing the misleading "check the Service
+    // Account JSON (it must contain a project_id)" error that fixing the saved
+    // key could never clear.
+    test('vertex-gemini: threaded credential SA JSON wins over a stale non-SA-JSON userValues field', () => {
+        const preset = vertexPreset('vertex-gemini', {
+            location: 'global',
+            serviceAccountJson: 'AIzaSyStaleDirectModeValue',
+        })
+        const result = buildPreparedRequest({
+            preset,
+            credential: { apiKey: 'ya29.token' },
+            serviceAccountJson: SA_JSON,
+        })
+        expect(result.url).toBe(
+            'https://aiplatform.googleapis.com/v1/projects/sa-project/locations/global/publishers/google/models',
+        )
+    })
+
+    test('vertex-openai: threaded credential SA JSON wins over a stale other-project SA JSON', () => {
+        const preset = vertexPreset('vertex-openai', {
+            serviceAccountJson: JSON.stringify({
+                type: 'service_account',
+                project_id: 'stale-project',
+                private_key: 'x',
+                client_email: 'svc@stale-project.iam.gserviceaccount.com',
+            }),
+        })
+        const result = buildPreparedRequest({
+            preset,
+            credential: { apiKey: 'ya29.token' },
+            serviceAccountJson: SA_JSON,
+        })
+        expect(result.url).toBe(
+            'https://aiplatform.googleapis.com/v1/projects/sa-project/locations/global/endpoints/openapi/chat/completions',
+        )
+    })
+
     test('throws invalid-request when neither userValues, projectId, nor threaded SA JSON yields a project', () => {
         const preset = vertexPreset('vertex-gemini', {})
         try {

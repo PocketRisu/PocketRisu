@@ -137,12 +137,13 @@ function resolveEndpointUrl(
 // invalid-request if neither is available). location: custom.location, or
 // 'global' when the schema default is absent / the field was cleared to blank.
 //
-// SA JSON source: the direct-mode userValues field is preferred, falling back to
-// `credentialServiceAccountJson` (threaded from the credential chain by
-// prepareAdapterRequest). The fallback is what covers pooled / inline SA keys,
-// where the JSON is stored in db.apiKeyPool / preset.inlineCredential and never
-// written to userValues.serviceAccountJson. Both sources carry the same
-// project_id, so preferring userValues keeps the direct-mode path unchanged.
+// SA JSON source: `credentialServiceAccountJson` (threaded by
+// prepareAdapterRequest from the credential that actually authenticated, per
+// `buildModelPresetCredential`'s apiKeyRef → inlineCredential → userValue order)
+// wins, so the URL names the project the token belongs to. The userValues field
+// is only a fallback: with a pooled / inline key it can hold a stale leftover
+// string that must not shadow the real credential. In direct mode both are the
+// same string.
 function resolveVertexEndpointInput(
     snapshot: ResolvedModelProfileSnapshot,
     userValues: Record<string, unknown>,
@@ -152,11 +153,11 @@ function resolveVertexEndpointInput(
     const rawLocation = pickCustomString(snapshot, userValues, VERTEX_CUSTOM_PATH_LOCATION)
     const location =
         typeof rawLocation === 'string' && rawLocation.trim().length > 0 ? rawLocation : 'global'
-    const userValuesSaJson = userValues[VERTEX_SERVICE_ACCOUNT_JSON_KEY]
     const serviceAccountJson =
-        typeof userValuesSaJson === 'string' && userValuesSaJson.trim().length > 0
-            ? userValuesSaJson
-            : credentialServiceAccountJson
+        typeof credentialServiceAccountJson === 'string'
+            && credentialServiceAccountJson.trim().length > 0
+            ? credentialServiceAccountJson
+            : userValues[VERTEX_SERVICE_ACCOUNT_JSON_KEY]
     const project = resolveVertexProject(explicitProject, serviceAccountJson)
     return { project, location }
 }
