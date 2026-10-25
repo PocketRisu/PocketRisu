@@ -1,7 +1,7 @@
 <script lang="ts">
     import { CheckIcon, XIcon } from '@lucide/svelte';
     import { createEventDispatcher, onDestroy } from 'svelte';
-    import { DBState } from 'src/ts/stores.svelte';
+    import { DBState, holdChatEditorOverlay } from 'src/ts/stores.svelte';
     import { language } from 'src/lang';
     import { 
         findAllOriginalRangesFromHtml,
@@ -81,6 +81,13 @@
     }
 
     let showMatchFailedModal = $state(false);
+
+    // Any of the modals below is open. While it is, the chat layer is lifted
+    // above the docked sidebar (see ChatScreen).
+    const modalOpen = $derived(isEditing || isConfirmingDelete || showMatchFailedModal || matchingState.mode !== null);
+    $effect(() => {
+        if (modalOpen) return holdChatEditorOverlay();
+    });
 
     const SELECTOR = EDITABLE_BLOCK_SELECTORS.join(', ');
 

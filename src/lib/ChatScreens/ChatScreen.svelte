@@ -2,7 +2,7 @@
     import { getCustomBackground, getEmotion } from "../../ts/util";
     
     import { DBState } from 'src/ts/stores.svelte';
-    import { CharEmotion, selectedCharID, openModuleListStore } from "../../ts/stores.svelte";
+    import { CharEmotion, selectedCharID, openModuleListStore, chatEditorOverlay } from "../../ts/stores.svelte";
     import ResizeBox from './ResizeBox.svelte'
     import DefaultChatScreen from "./DefaultChatScreen.svelte";
     import defaultWallpaper from '../../etc/bg.jpg'
@@ -37,11 +37,20 @@
             }
         })()
     });
+
+    // The isolated layer also traps the app's own editors (fullscreen composer,
+    // partial-edit modals), so the docked sidebar's fields and icons (z-10/20)
+    // painted over them. While one is open the layer is lifted to 25: above
+    // those, below the narrow-screen sidebar drawer (30), the hotkey-opened
+    // preset/persona/model lists (40) and dialogs (40-60). A focused sidebar
+    // field (focus-within:z-40) still stays on top. A class, not an inline
+    // style, so a z-index a plugin sets on this element is left alone.
+    const chatLayerLifted = $derived(chatEditorOverlay.count > 0)
 </script>
 
 <!-- `isolate` keeps bot HTML/CSS z-index (panels, tooltips) inside the chat layer so app popups and alerts stay on top. -->
 {#if DBState.db.theme === 'waifu'}
-    <div class="isolate grow h-full flex justify-center relative" style="{bgImg.length < 4 ? wallPaper : bgImg}">
+    <div class="isolate grow h-full flex justify-center relative" style="{bgImg.length < 4 ? wallPaper : bgImg}" class:z-25={chatLayerLifted}>
         <SideBarArrow />
         <BackgroundDom />
         {#if $selectedCharID >= 0}
@@ -56,7 +65,7 @@
         </div>
     </div>
 {:else if DBState.db.theme === 'waifuMobile'}
-    <div class="isolate grow h-full relative" style={bgImg.length < 4 ? wallPaper : bgImg}>
+    <div class="isolate grow h-full relative" style={bgImg.length < 4 ? wallPaper : bgImg} class:z-25={chatLayerLifted}>
         <SideBarArrow />
         <BackgroundDom />
         <div class="w-full absolute z-10 bottom-0 left-0"
@@ -74,7 +83,7 @@
         {/if}
     </div>
 {:else}
-    <div class="isolate grow h-full min-w-0 relative justify-center flex">
+    <div class="isolate grow h-full min-w-0 relative justify-center flex" class:z-25={chatLayerLifted}>
         <SideBarArrow />
         <BackgroundDom />
         <div style={bgImg} class="h-full w-full" class:max-w-6xl={DBState.db.classicMaxWidth}>
