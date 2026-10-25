@@ -1,12 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import pkg from './session-lock.cjs'
 
 const { createSessionLock } = pkg as {
     createSessionLock: (opts?: { now?: () => number }) => {
-        register: (id: string) => void
+        register: (id: string, missedWrites?: boolean) => void
         checkWrite: (id: string, userActive?: boolean) => { ok: boolean, tookOver?: boolean, passive?: boolean }
         peek: (id: string) => string
         revokeAll: () => void
+        claim: (id: string) => boolean
+        unclaim: (id: string) => void
+        writeStarted: () => void
+        writeEnded: () => void
+        isIdle: () => boolean
+        whenIdle: (timeoutMs: number) => Promise<boolean>
         activeId: () => string | null
     }
 }
@@ -179,5 +185,212 @@ describe('session-lock', () => {
         expect(lock.checkWrite('pc-reloaded')).toEqual({ ok: true, passive: true })
         expect(lock.checkWrite('pc-reloaded', true)).toEqual({ ok: true, tookOver: true })
         expect(lock.activeId()).toBe('pc-reloaded')
+    })
+
+    // Reload-loop report (2026-10-25): a home PC tab the launcher opened holds
+    // the lock and keeps saving on its own, so the phone is stale again after
+    // every reload before its first action can take over.
+    it('claim takes the lock from a holder that keeps saving on its own', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        lock.register('phone')                                // phone opens…
+        expect(lock.checkWrite('home').ok).toBe(true)         // …the unattended tab saves again
+        expect(lock.checkWrite('phone', true).ok).toBe(false) // phone is stale → 423
+        lock.register('phone')                                // reload: fresh again…
+        expect(lock.checkWrite('home').ok).toBe(true)         // …until the next automatic save
+        expect(lock.checkWrite('phone', true).ok).toBe(false) // the loop
+        lock.claim('phone-next')                              // OK on the dialog, before reloading
+        expect(lock.activeId()).toBe('phone-next')
+        expect(lock.checkWrite('home').ok).toBe(false)        // the unattended tab is locked out
+        expect(lock.checkWrite('home', true).ok).toBe(false)
+        lock.register('phone-next')                           // the reload boots with the claimed id
+        expect(lock.activeId()).toBe('phone-next')
+        expect(lock.checkWrite('phone-next')).toEqual({ ok: true })
+    })
+
+    it('the claiming page keeps its old id and stays locked out until it reloads', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        lock.register('phone')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        lock.claim('phone-next')
+        expect(lock.checkWrite('phone', true).ok).toBe(false) // its outdated copy cannot write
+        expect(lock.peek('phone')).toBe('stale')
+        expect(lock.peek('phone-next')).toBe('active')
+    })
+
+    it('after a claim the normal rules continue: a later page takes over with its first action', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        lock.claim('phone-next')
+        lock.register('phone-next')
+        expect(lock.checkWrite('phone-next', true).ok).toBe(true)
+        lock.register('pc-room')                              // opened after the phone's last write
+        expect(lock.checkWrite('pc-room', true)).toEqual({ ok: true, tookOver: true })
+        expect(lock.checkWrite('phone-next', true).ok).toBe(false)
+    })
+
+    it('claim ignores an empty id', () => {
+        const { lock } = makeLock()
+        lock.register('pc')
+        expect(lock.claim('')).toBe(false)
+        expect(lock.activeId()).toBe('pc')
+    })
+
+    // A page that booted with the id loaded its copy before the claim (a tab
+    // duplicated while the claim was on its way).
+    it('claim refuses an id a page already booted with', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        lock.register('phone-next')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        expect(lock.claim('phone-next')).toBe(false)
+        expect(lock.activeId()).toBe('home')
+    })
+
+    it('reloads under the claimed id keep the lock without claiming again', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.claim('phone-next')).toBe(true)
+        lock.register('phone-next')                           // the reload after the claim
+        lock.register('phone-next')                           // F5
+        expect(lock.activeId()).toBe('phone-next')
+        expect(lock.checkWrite('phone-next')).toEqual({ ok: true })
+        expect(lock.claim('phone-next')).toBe(false)          // booted now, so no second claim
+        expect(lock.peek('home')).toBe('stale')
+    })
+
+    it('an account import after a claim revokes the claimed id too', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.claim('phone-next')).toBe(true)
+        lock.register('phone-next')
+        expect(lock.checkWrite('phone-next').ok).toBe(true)
+        lock.revokeAll()
+        expect(lock.checkWrite('phone-next', true).ok).toBe(false)
+        expect(lock.peek('phone-next')).toBe('stale')
+    })
+
+    // A page boots only once accepted writes still under way have landed,
+    // since it reads its data right after (server.cjs whenSessionWritesIdle).
+    it('whenIdle waits until every write under way has ended', async () => {
+        const { lock } = makeLock()
+        await expect(lock.whenIdle(1000)).resolves.toBe(true) // nothing under way
+        lock.writeStarted()
+        lock.writeStarted()
+        expect(lock.isIdle()).toBe(false)
+        let idle: boolean | undefined
+        const waiting = lock.whenIdle(1000).then((value) => { idle = value })
+        lock.writeEnded()
+        await Promise.resolve()
+        expect(idle).toBeUndefined()                          // one still under way
+        lock.writeEnded()
+        await waiting
+        expect(idle).toBe(true)
+        expect(lock.isIdle()).toBe(true)
+        lock.writeEnded()                                     // an extra end never goes below zero
+        lock.writeStarted()
+        expect(lock.isIdle()).toBe(false)
+    })
+
+    it('whenIdle gives up after its timeout', async () => {
+        vi.useFakeTimers()
+        try {
+            const { lock } = makeLock()
+            lock.writeStarted()
+            const waiting = lock.whenIdle(10_000)
+            vi.advanceTimersByTime(10_000)
+            await expect(waiting).resolves.toBe(false)
+            lock.writeEnded()                                 // a later end does not reach it
+            await expect(lock.whenIdle(10_000)).resolves.toBe(true)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    // Its wait ran out: the page may have read the data before those writes
+    // landed, so it must not pass as booted after them.
+    it('a page registered with missedWrites is stale until it boots again', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        lock.register('phone', true)
+        expect(lock.peek('phone')).toBe('stale')
+        expect(lock.checkWrite('phone', true).ok).toBe(false)
+        expect(lock.checkWrite('phone').ok).toBe(false)       // no passive pass either
+        lock.register('phone')                                // the reload, once nothing was under way
+        expect(lock.peek('phone')).toBe('fresh')
+        expect(lock.checkWrite('phone', true)).toEqual({ ok: true, tookOver: true })
+    })
+
+    // A reload of the holder's tab, or a tab duplicated from it, boots with
+    // the holder's id: being the holder must not let its outdated copy write.
+    it('a missedWrites boot under the holder id takes the lock from that id', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        lock.register('home', true)
+        expect(lock.activeId()).toBe(null)
+        expect(lock.peek('home')).toBe('stale')
+        expect(lock.checkWrite('home').ok).toBe(false)
+        expect(lock.checkWrite('home', true).ok).toBe(false)
+        lock.register('home')                                 // reloads once nothing is under way
+        expect(lock.checkWrite('home', true)).toEqual({ ok: true, tookOver: true })
+    })
+
+    it('a missedWrites boot does not adopt a free lock, not even by writing', () => {
+        const { lock } = makeLock()
+        lock.register('phone', true)
+        expect(lock.activeId()).toBe(null)
+        expect(lock.peek('phone')).toBe('stale')
+        expect(lock.checkWrite('phone').ok).toBe(false)
+        expect(lock.checkWrite('phone', true).ok).toBe(false)
+        lock.register('pc')
+        expect(lock.activeId()).toBe('pc')
+    })
+
+    // A claim the server refused (503) leaves no lock with an id nobody will
+    // ever boot with: the holder it replaced gets it back.
+    it('unclaim hands the lock back to the holder the claim replaced', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.checkWrite('home').ok).toBe(true)
+        lock.register('phone')
+        expect(lock.checkWrite('home').ok).toBe(true)         // phone is stale
+        expect(lock.claim('phone-next')).toBe(true)
+        expect(lock.checkWrite('home').ok).toBe(false)        // locked out while the claim waits
+        lock.unclaim('phone-next')
+        expect(lock.activeId()).toBe('home')
+        expect(lock.checkWrite('home')).toEqual({ ok: true })
+        expect(lock.peek('phone')).toBe('stale')              // the asking page is no better off
+        lock.unclaim('phone-next')                            // a second call changes nothing
+        expect(lock.activeId()).toBe('home')
+    })
+
+    it('unclaim leaves a lock that has moved on since', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.claim('phone-next')).toBe(true)
+        lock.register('pc-room')                              // opened after the claim
+        expect(lock.checkWrite('pc-room', true).tookOver).toBe(true)
+        lock.unclaim('phone-next')
+        expect(lock.activeId()).toBe('pc-room')
+
+        expect(lock.claim('tablet-next')).toBe(true)
+        lock.register('tablet-next')                          // the claim completed
+        lock.unclaim('tablet-next')
+        expect(lock.activeId()).toBe('tablet-next')
+    })
+
+    it('unclaim of an earlier claim passes its holder on to a later one', () => {
+        const { lock } = makeLock()
+        lock.register('home')
+        expect(lock.claim('a-next')).toBe(true)
+        expect(lock.claim('b-next')).toBe(true)
+        lock.unclaim('a-next')                                // b holds: nothing to hand back yet
+        expect(lock.activeId()).toBe('b-next')
+        lock.unclaim('b-next')
+        expect(lock.activeId()).toBe('home')                  // not a-next, which nobody will boot
     })
 })

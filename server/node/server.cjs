@@ -1525,6 +1525,11 @@ const inlayMigrationMarker = path.join(inlayDir, '.migrated_to_fs')
 const hexRegex = /^[0-9a-fA-F]+$/;
 const BACKUP_IMPORT_MAX_BYTES = Number(process.env.RISU_BACKUP_IMPORT_MAX_BYTES ?? '0');
 const BACKUP_ENTRY_NAME_MAX_BYTES = 1024;
+// Backup uploads are cut off once the client has sent nothing for this long
+// (upload-stall.cjs).
+const BACKUP_UPLOAD_STALL_MS = Number(process.env.POCKETRISU_BACKUP_UPLOAD_STALL_MS) || 2 * 60 * 1000;
+const { watchUploadStall: watchUploadStallFor } = require('./upload-stall.cjs');
+const watchUploadStall = (req) => watchUploadStallFor(req, BACKUP_UPLOAD_STALL_MS);
 // Minimum free disk space headroom multiplier: require 2× the backup size to be free
 const BACKUP_DISK_HEADROOM = 2;
 // Heartbeat interval for NDJSON import progress stream. 5 s by default —
@@ -2144,8 +2149,27 @@ async function checkDiskSpace(requiredBytes) {
 // freshly-booted session, and only stale sessions get 423.
 const { createSessionLock } = require('./session-lock.cjs');
 const sessionLock = createSessionLock();
+const SESSION_WRITE_MAX_MS = process.env.POCKETRISU_SESSION_WRITE_MAX_MS
+    ? Number(process.env.POCKETRISU_SESSION_WRITE_MAX_MS)
+    : 5 * 60 * 1000;
+// Below the client's 30 s request timeout, so the page gets an answer.
+const SESSION_IDLE_WAIT_MS = 10 * 1000;
 
-function checkActiveSession(req, res, { allowDuringAccountImport = false } = {}) {
+// Waits until no accepted write is under way, then runs onIdle in that same
+// synchronous step: another request can start a write between a waiter's
+// wake-up and the code after its await. Returns false without running
+// onIdle if the wait takes longer than SESSION_IDLE_WAIT_MS.
+async function whenSessionWritesIdle(onIdle) {
+    const deadline = Date.now() + SESSION_IDLE_WAIT_MS;
+    while (!sessionLock.isIdle()) {
+        const left = deadline - Date.now();
+        if (left <= 0 || !await sessionLock.whenIdle(left)) return false;
+    }
+    onIdle();
+    return true;
+}
+
+function checkActiveSession(req, res, { allowDuringAccountImport = false, changesData = true, replacesData = false } = {}) {
     // A started RisuAI account import will replace all data: nothing may
     // write until it ends. Its own routes work from any open import screen.
     if (risuAccountImport.isBlocking()) {
@@ -2162,7 +2186,51 @@ function checkActiveSession(req, res, { allowDuringAccountImport = false } = {})
     if (result.tookOver) {
         console.log('[Session] Write lock taken over by a freshly-booted session')
     }
-    if (result.ok) return true
+    if (result.ok) {
+        // Under way until the route answers, which it does once its write is
+        // applied (session-lock.cjs writeStarted). That answer comes with
+        // 'prefinish' even when the client has gone; 'close' fires as soon as
+        // the connection drops, while the route goes on writing. Routes that
+        // leave the data as it was (a backup copy, compacting the database)
+        // can run for minutes and a page booting meanwhile reads the same
+        // data, so they are not counted.
+        if (!changesData) return true
+        sessionLock.writeStarted()
+        // 'running' → 'released' (by the cap) → 'ended'
+        let state = 'running'
+        const end = () => {
+            if (state === 'ended') return
+            clearTimeout(cap)
+            // Pages booted after the cap let them through read the data
+            // without this write: none of them may save over it now.
+            if (state === 'released') sessionLock.revokeAll()
+            else sessionLock.writeEnded()
+            state = 'ended'
+        }
+        res.once('prefinish', end)
+        // A route that fails after its answer started never answers in full;
+        // the error middleware ends it then.
+        res.locals.endSessionWrite = end
+        // A write still running after SESSION_WRITE_MAX_MS must not hold every
+        // page boot back. Whatever it has put in the storage queue lands
+        // first; whatever it does later is covered by end(). Backup imports
+        // (replacesData) replace the data outside that queue, so a release
+        // would let pages boot fresh and save right before the import
+        // overwrites them: those keep counting until they end, and cut off a
+        // stalled upload themselves (watchUploadStall).
+        let cap = null
+        if (!replacesData) {
+            cap = setTimeout(() => {
+                queueStorageOperation(async () => {}).then(() => {
+                    if (state !== 'running') return
+                    state = 'released'
+                    sessionLock.writeEnded()
+                })
+            }, SESSION_WRITE_MAX_MS)
+            cap.unref()
+        }
+        return true
+    }
     res.status(423).json({ error: 'Session deactivated' })
     return false
 }
@@ -3921,6 +3989,38 @@ app.get('/api/session/lock-status', async (req, res) => {
     res.json({ state: risuAccountImport.isBlocking() ? 'stale' : sessionLock.peek(typeof id === 'string' ? id : '') })
 })
 
+// "Keep using this tab" from the deactivated dialog: hands the write lock to
+// the id the tab boots with after its reload (session-lock.cjs claim()).
+app.post('/api/session/claim', async (req, res) => {
+    if (!await checkAuth(req, res)) return
+    if (risuAccountImport.isBlocking()) {
+        res.status(423).json({ error: 'A RisuAI account import is in progress', code: 'ACCOUNT_IMPORT_ACTIVE' })
+        return
+    }
+    const id = req.headers['x-session-id']
+    if (typeof id !== 'string' || id === '') {
+        res.status(400).json({ error: 'Missing session id' })
+        return
+    }
+    if (!sessionLock.claim(id)) {
+        res.status(409).json({ error: 'Session id already in use' })
+        return
+    }
+    // Writes accepted before the claim may still be under way. Answer once
+    // they have landed, so the reload that follows reads them instead of a
+    // copy it would later save over them: it boots as the holder, so no
+    // stale check would stop it. If they take too long, refuse and give the
+    // lock back; the client then keeps its old id and that page stays stale.
+    if (!await whenSessionWritesIdle(() => {})) {
+        sessionLock.unclaim(id)
+        res.status(503).json({ error: 'Earlier writes are still in progress' })
+        return
+    }
+    await queueStorageOperation(async () => {})
+    console.log('[Session] Write lock claimed by user request')
+    res.json({ ok: true })
+})
+
 // ── Session cookie issuance (F-0) ──────────────────────────────────────────
 // Called once after JWT auth succeeds. Issues a long-lived cookie so that
 // <img src="/api/asset/..."> requests can be authenticated without JS.
@@ -3928,8 +4028,11 @@ app.post('/api/session', async (req, res) => {
     if (!await checkAuth(req, res)) return
     const clientSessionId = req.headers['x-session-id']
     if (typeof clientSessionId === 'string') {
-        // Registers the boot; takes the lock only if nobody holds it.
-        sessionLock.register(clientSessionId)
+        // Registers the boot; takes the lock only if nobody holds it. The
+        // page reads its data after this answer, so writes still under way
+        // land first; if they take too long, the boot counts as stale.
+        const register = () => sessionLock.register(clientSessionId)
+        if (!await whenSessionWritesIdle(register)) sessionLock.register(clientSessionId, true)
         console.log('[Session] Session boot registered')
     }
     const token = nodeCrypto.randomBytes(32).toString('hex')
@@ -5628,7 +5731,7 @@ app.post('/api/backup/import/prepare', async (req, res, next) => {
 
 app.post('/api/backup/import', async (req, res, next) => {
     if(!await checkAuth(req, res)){ return; }
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { replacesData: true })) return;
 
     if (importInProgress) {
         res.status(409).json({ error: 'Another import is already in progress' });
@@ -5652,6 +5755,7 @@ app.post('/api/backup/import', async (req, res, next) => {
     // and bounce the request back to the client as 502 Bad Gateway.
     const wantsNdjson = String(req.headers['accept'] ?? '').includes('application/x-ndjson');
     let heartbeatTimer = null;
+    const stall = watchUploadStall(req);
 
     try {
         const contentType = String(req.headers['content-type'] ?? '');
@@ -5685,6 +5789,7 @@ app.post('/api/backup/import', async (req, res, next) => {
                 maxBytes: BACKUP_IMPORT_MAX_BYTES,
                 totalBytes,
                 onProgress: (received, total) => {
+                    stall.received();
                     const now = Date.now();
                     if (now - lastProgressWrite < 200) return;
                     lastProgressWrite = now;
@@ -5700,7 +5805,7 @@ app.post('/api/backup/import', async (req, res, next) => {
             }) + '\n');
             res.end();
         } else {
-            const result = await importBackupFromSource(req, { maxBytes: BACKUP_IMPORT_MAX_BYTES });
+            const result = await importBackupFromSource(req, { maxBytes: BACKUP_IMPORT_MAX_BYTES, onProgress: stall.received });
             res.json({
                 ok: true,
                 assetsRestored: result.assetsRestored,
@@ -5719,6 +5824,7 @@ app.post('/api/backup/import', async (req, res, next) => {
         }
     } finally {
         if (heartbeatTimer) clearInterval(heartbeatTimer);
+        stall.stop();
         importInProgress = false;
         if (httpServer && prevRequestTimeout !== undefined) {
             httpServer.requestTimeout = prevRequestTimeout;
@@ -5848,7 +5954,7 @@ app.post('/api/risu-account/apply', async (req, res, next) => {
 // Save current data as a .bin backup file on the server
 app.post('/api/backup/server/save', async (req, res, next) => {
     if (!await checkAuth(req, res)) { return; }
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { changesData: false })) return;
     try {
         await flushPendingDb();
 
@@ -6006,7 +6112,7 @@ app.get('/api/backup/server/list', async (req, res, next) => {
 // Restore from a server backup file
 app.post('/api/backup/server/restore', async (req, res, next) => {
     if (!await checkAuth(req, res)) { return; }
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { replacesData: true })) return;
 
     if (importInProgress) {
         res.status(409).json({ error: 'Another import is already in progress' });
@@ -6693,7 +6799,7 @@ app.post('/api/migrate/save-folder/execute', async (req, res, next) => {
 
 app.post('/api/migrate/save-folder/upload', async (req, res, next) => {
     if (!await checkAuth(req, res)) return;
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { replacesData: true })) return;
     if (importInProgress) {
         res.status(409).json({ error: 'Another import is already in progress' });
         return;
@@ -6706,11 +6812,13 @@ app.post('/api/migrate/save-folder/upload', async (req, res, next) => {
     const httpServer = req.socket.server;
     const prevRequestTimeout = httpServer?.requestTimeout;
     if (httpServer) httpServer.requestTimeout = 0;
+    const stall = watchUploadStall(req);
 
     try {
         const chunks = [];
         let totalSize = 0;
         for await (const chunk of req) {
+            stall.received();
             totalSize += chunk.length;
             if (BACKUP_IMPORT_MAX_BYTES > 0 && totalSize > BACKUP_IMPORT_MAX_BYTES) {
                 res.status(413).json({ error: 'Zip file exceeds max allowed size' });
@@ -6750,6 +6858,7 @@ app.post('/api/migrate/save-folder/upload', async (req, res, next) => {
     } catch (error) {
         res.status(400).json({ error: error.message || 'Import failed' });
     } finally {
+        stall.stop();
         importInProgress = false;
         if (httpServer && prevRequestTimeout !== undefined) {
             httpServer.requestTimeout = prevRequestTimeout;
@@ -8321,7 +8430,7 @@ app.post('/api/db/assets/auto-sweep', async (req, res, next) => {
 
 app.post('/api/db/optimize', async (req, res, next) => {
     if (!await checkAuth(req, res)) return;
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { changesData: false })) return;
     try {
         const saveDir = path.join(process.cwd(), 'save');
         const dbFilePath = path.join(saveDir, 'risuai.db');
@@ -8378,7 +8487,7 @@ app.post('/api/db/optimize', async (req, res, next) => {
 
 app.post('/api/db/wal-checkpoint', async (req, res, next) => {
     if (!await checkAuth(req, res)) return;
-    if (!checkActiveSession(req, res)) return;
+    if (!checkActiveSession(req, res, { changesData: false })) return;
     try {
         const saveDir = path.join(process.cwd(), 'save');
         const walFilePath = path.join(saveDir, 'risuai.db-wal');
@@ -9313,6 +9422,12 @@ app.post('/api/tunnel/stop', async (req, res) => {
 });
 
 // ─── Express error middleware — must be registered after all routes ─────────
+// A counted write whose route failed is over, even when no answer goes out
+// (checkActiveSession).
+app.use((err, req, res, next) => {
+    res.locals.endSessionWrite?.();
+    next(err);
+});
 app.use(expressErrorMiddleware);
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);

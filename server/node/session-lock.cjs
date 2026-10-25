@@ -13,7 +13,9 @@
 // Rules:
 //  - register(id): called at page load. Records the session's boot time but
 //    does NOT steal an active lock — opening the app must never kick the
-//    device being used. Adopts the lock only when nobody holds it.
+//    device being used. Adopts the lock only when nobody holds it. The
+//    server calls it once accepted writes still under way have ended
+//    (isIdle), since the page reads its data right after.
 //  - checkWrite(id, userActive): called on every data write. The active
 //    session passes and refreshes its lastWriteAt. A non-active session takes
 //    over IFF BOTH hold:
@@ -30,6 +32,12 @@
 //    lock holder did not write.
 //    Stale → rejected (423 → the client reloads; after the reload its boot is
 //    recent, so its next user action takes over cleanly).
+//  - claim(id): the user confirmed on a locked-out page that they want to
+//    keep working there. Moves the lock at once, without the fresh-boot
+//    condition: the holder may be a page nobody is looking at that keeps
+//    saving on its own (a home PC tab the launcher opened), and each of its
+//    writes would turn the other device stale again before its first action
+//    — a 423 → reload loop the gesture takeover alone never escapes.
 //
 // Serial device switching (the single-user pattern) therefore never shows a
 // block: you stop writing on A, open B (booted after A's last write), and B's
@@ -43,15 +51,28 @@ function createSessionLock(opts = {}) {
 
     let active = null; // { id, lastWriteAt } | null
     const boots = new Map(); // sessionId -> boot timestamp (insertion-ordered)
+    let running = 0;
+    const idleWaiters = new Set();
+    const claimedFrom = new Map(); // claimed id -> the holder it replaced
 
-    function register(id) {
+    function register(id, missedWrites = false) {
         if (typeof id !== 'string' || id === '') return;
         // Delete-then-set refreshes insertion order so pruning drops the
         // longest-unseen sessions (bounded memory; single-user scale anyway).
         boots.delete(id);
-        boots.set(id, now());
+        claimedFrom.delete(id); // a claim the page now boots with is done
+        // 0: booted before every write (see writeStarted).
+        boots.set(id, missedWrites ? 0 : now());
         if (boots.size > MAX_TRACKED_BOOTS) {
             boots.delete(boots.keys().next().value);
+        }
+        if (missedWrites) {
+            // Its copy may lack those writes, so it must not write as the
+            // holder either: a reload of the holder's tab, or a tab
+            // duplicated from it, boots with the holder's id. Nobody holds
+            // the lock then, and it does not adopt a free one.
+            if (active && active.id === id) revokeAll();
+            return;
         }
         if (!active) {
             active = { id, lastWriteAt: now() };
@@ -65,6 +86,8 @@ function createSessionLock(opts = {}) {
             return { ok: true }; // client without session support
         }
         if (!active) {
+            // A free lock is not for a page whose boot missed writes.
+            if (boots.get(id) === 0) return { ok: false };
             active = { id, lastWriteAt: now() };
             return { ok: true };
         }
@@ -94,6 +117,79 @@ function createSessionLock(opts = {}) {
         active = { id: null, lastWriteAt: now() };
     }
 
+    // Every page loaded before now becomes stale, the previous holder
+    // included. The id is the one the claiming tab boots with AFTER its
+    // reload, not its current one: the page that asked still holds its old
+    // copy and must stay locked out until the reload loads the latest state.
+    // An id that already booted is refused for the same reason: whatever page
+    // booted with it loaded its copy before the claim.
+    function claim(id) {
+        if (typeof id !== 'string' || id === '' || boots.has(id)) return false;
+        claimedFrom.set(id, active);
+        if (claimedFrom.size > MAX_TRACKED_BOOTS) {
+            claimedFrom.delete(claimedFrom.keys().next().value);
+        }
+        active = { id, lastWriteAt: now() };
+        return true;
+    }
+
+    // The claim of id was refused after all (server.cjs answers 503 when
+    // earlier writes do not land in time): the page keeps its old id, so
+    // nothing will ever boot with this one. Hand the lock back to the holder
+    // it replaced, unless the lock has moved on since; that holder lost
+    // nothing meanwhile, as no write was accepted under an id nobody booted.
+    function unclaim(id) {
+        if (!claimedFrom.has(id)) return;
+        const replaced = claimedFrom.get(id);
+        claimedFrom.delete(id);
+        if (active && active.id === id) {
+            active = replaced;
+            return;
+        }
+        // A later claim replaced this one: it hands back further.
+        for (const [later, holder] of claimedFrom) {
+            if (holder && holder.id === id) claimedFrom.set(later, replaced);
+        }
+    }
+
+    // Writes checkWrite accepted whose requests are still under way. Each is
+    // stamped when accepted, but it lands later (the body still uploading,
+    // the storage queue): a page booting meanwhile would read the state
+    // without it and still count as booted after it. So a boot is registered
+    // only in a step where isIdle() holds; a page whose wait ran out
+    // registers with missedWrites and is stale from the start.
+    function writeStarted() {
+        running++;
+    }
+    function writeEnded() {
+        if (running > 0) running--;
+        if (running === 0) {
+            for (const wake of [...idleWaiters]) wake();
+        }
+    }
+    function isIdle() {
+        return running === 0;
+    }
+    // True once nothing is under way, false after timeoutMs. A write can
+    // start again before the caller resumes: check isIdle() then. A wait
+    // that gives up leaves no waiter behind, since overlapping writes may
+    // keep the count above zero for long.
+    function whenIdle(timeoutMs) {
+        if (running === 0) return Promise.resolve(true);
+        return new Promise((resolve) => {
+            const wake = () => {
+                idleWaiters.delete(wake);
+                clearTimeout(timer);
+                resolve(true);
+            };
+            const timer = setTimeout(() => {
+                idleWaiters.delete(wake);
+                resolve(false);
+            }, timeoutMs);
+            idleWaiters.add(wake);
+        });
+    }
+
     function activeId() {
         return active ? active.id : null;
     }
@@ -110,7 +206,7 @@ function createSessionLock(opts = {}) {
     // path still 423s a genuinely stale session, so no data is at risk.
     function peek(id) {
         if (typeof id !== 'string' || id === '') return 'active';
-        if (!active) return 'free';
+        if (!active) return boots.get(id) === 0 ? 'stale' : 'free';
         if (active.id === id) return 'active';
         const boot = boots.get(id);
         if (boot === undefined) return 'unknown';
@@ -118,7 +214,7 @@ function createSessionLock(opts = {}) {
         return 'stale';
     }
 
-    return { register, checkWrite, peek, revokeAll, activeId };
+    return { register, checkWrite, peek, revokeAll, claim, unclaim, writeStarted, writeEnded, isIdle, whenIdle, activeId };
 }
 
 module.exports = { createSessionLock };
