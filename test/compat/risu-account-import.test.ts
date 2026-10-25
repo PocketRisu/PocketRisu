@@ -93,6 +93,9 @@ describe('RisuAI account import', () => {
     expect(removal.status).toBe(423)
     const lock = await (await client.fetch('/api/session/lock-status', { headers: { 'x-session-id': 'page-before' } })).json() as any
     expect(lock.state).toBe('stale')
+    const claim = await client.fetch('/api/session/claim', { method: 'POST', headers: { 'x-session-id': 'page-after' } })
+    expect(claim.status).toBe(423)
+    expect(await claim.json()).toMatchObject({ code: 'ACCOUNT_IMPORT_ACTIVE' })
 
     const done = await apply(client)
     expect(done).toMatchObject({ state: 'idle', blocking: false, result: { missing: 1, coldStorageFailed: 0, pluginStorageColdFailed: 0 }, staged: null })
