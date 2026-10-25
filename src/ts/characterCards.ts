@@ -380,6 +380,44 @@ export const getRealmInfo = async (realmPath:string) => {
 
 export const showRealmInfoStore:Writable<null|hubType> = writable(null)
 
+// Returns false when the file type is not importable or the import failed.
+export async function importFileByName(name:string, data:Uint8Array):Promise<boolean> {
+    if(name.endsWith('.charx') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')){
+        // importCharacterProcess returns the last index even when the user
+        // declines the card, so count the characters instead.
+        const before = getDatabase().characters.length
+        await importCharacterProcess({
+            name: name,
+            data: data
+        })
+        return getDatabase().characters.length > before
+    }
+    if(name.endsWith('.risupreset') || name.endsWith('.risup')){
+        await importPreset({
+            name: name,
+            data: data
+        })
+        openSettings(SettingsRoute.ChatBot)
+        notifySuccess(language.successImport)
+        return true
+    }
+    if(name.endsWith('risum')){
+        // View, not copy: asset modules can be hundreds of MB.
+        const md = await readModule(Buffer.from(data.buffer, data.byteOffset, data.byteLength))
+        // readModule has already told the user why.
+        if(!md){
+            return false
+        }
+        md.id = v4()
+        const db = getDatabase()
+        db.modules.push(md)
+        notifySuccess(language.successImport)
+        openSettings(SettingsRoute.Module)
+        return true
+    }
+    return false
+}
+
 export async function characterURLImport() {
     const realmPath = (new URLSearchParams(location.search)).get('realm')
     try {
@@ -429,7 +467,7 @@ export async function characterURLImport() {
                 method: 'GET',
             })
             const data = new Uint8Array(await res.arrayBuffer())
-            await importFile(getFileName(res), data)
+            await importFileByName(getFileName(res), data)
             checkCharOrder()
         } catch (error) {
             notifyError(language.errors.noData)
@@ -504,7 +542,7 @@ export async function characterURLImport() {
             for(const f of files){
                 const file = await f.getFile()
                 const data = new Uint8Array(await file.arrayBuffer())
-                await importFile(f.name, data);
+                await importFileByName(f.name, data);
             }
         }
         //@ts-expect-error launchQueue is File Handling API for PWA, not yet in TypeScript's Window interface
@@ -514,34 +552,6 @@ export async function characterURLImport() {
                 handleFiles(files)
             }
         });
-    }
-
-    async function importFile(name:string, data:Uint8Array) {
-        if(name.endsWith('.charx') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png')){
-            await importCharacterProcess({
-                name: name,
-                data: data
-            })
-            return
-        }
-        if(name.endsWith('.risupreset') || name.endsWith('.risup')){
-            await importPreset({
-                name: name,
-                data: data
-            })
-            openSettings(SettingsRoute.ChatBot)
-            notifySuccess(language.successImport)
-            return
-        }
-        if(name.endsWith('risum')){
-            const md = await readModule(Buffer.from(data))
-            md.id = v4()
-            const db = getDatabase()
-            db.modules.push(md)
-            notifySuccess(language.successImport)
-            openSettings(SettingsRoute.Module)
-            return
-        }
     }
 
     function getFileName(res : Response) : string {

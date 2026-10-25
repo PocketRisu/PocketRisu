@@ -8,7 +8,8 @@
     import FolderedList, { type FolderedItemPlacement } from "src/lib/UI/FolderedList.svelte";
     import ModuleMenu from "src/lib/Setting/Pages/Module/ModuleMenu.svelte";
     import { exportModule, exportModuleLegacy, hydrateModuleAssets, importModule, refreshModules, type RisuModule } from "src/ts/process/modules";
-    import { SquarePen, Globe, Share2Icon, PlusIcon, HardDriveUpload, Waypoints } from "@lucide/svelte";
+    import { SquarePen, Globe, Share2Icon, PlusIcon, HardDriveUpload, Waypoints, CloudDownload } from "@lucide/svelte";
+    import { protonImportDialogOpen } from "src/ts/proton/protonImport";
     import { v4 } from "uuid";
     import { tooltip } from "src/ts/gui/tooltip";
     import { alertConfirm, alertError, alertSelect, notifySuccess } from "src/ts/alert";
@@ -103,6 +104,7 @@
                 mode = 1
             }}><PlusIcon />{language.createModule}</ShButton>
             <ShButton size="sm" variant="outline" onclick={() => importModule()}><HardDriveUpload />{language.importModule}</ShButton>
+            <ShButton size="sm" variant="outline" onclick={() => protonImportDialogOpen.set(true)} title={language.protonImport} aria-label={language.protonImport}><CloudDownload /></ShButton>
             <ShButton size="sm" variant="outline" onclick={() => importMCPModule()} title="MCP"><Waypoints /></ShButton>
         {/snippet}
         {#snippet itemContent(index)}

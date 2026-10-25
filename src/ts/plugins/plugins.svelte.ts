@@ -469,7 +469,8 @@ export async function importPlugin(code:string|null = null, argu:{
         else{
             loadPlugins()
         }
-        
+        return true
+
     } catch (error) {
         console.error(error)
         alertError(language.errors.noData)

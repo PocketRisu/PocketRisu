@@ -3546,7 +3546,16 @@ const reverseProxyFunc = async (req, res, next) => {
         head.delete('content-security-policy');
         head.delete('content-security-policy-report-only');
         head.delete('clear-site-data');
-        head.delete('Cache-Control');
+        // Targets picked by the risu-url header all share the /proxy(2) URL, so
+        // no cache (browser or CDN) may store a relay response for reuse, and
+        // upstream cache headers (Expires, CDN-only ones) must not override that.
+        head.set('Cache-Control', 'private, no-store');
+        head.delete('Expires');
+        head.delete('CDN-Cache-Control');
+        head.delete('Cloudflare-CDN-Cache-Control');
+        head.delete('Surrogate-Control');
+        head.delete('Edge-Control');
+        head.delete('X-Accel-Expires');
         head.delete('Content-Encoding');
         // Node's fetch already decompressed the body, so the upstream
         // (compressed) Content-Length no longer matches and would truncate the
@@ -3639,7 +3648,16 @@ const reverseProxyFunc_get = async (req, res, next) => {
         head.delete('content-security-policy');
         head.delete('content-security-policy-report-only');
         head.delete('clear-site-data');
-        head.delete('Cache-Control');
+        // Targets picked by the risu-url header all share the /proxy(2) URL, so
+        // no cache (browser or CDN) may store a relay response for reuse, and
+        // upstream cache headers (Expires, CDN-only ones) must not override that.
+        head.set('Cache-Control', 'private, no-store');
+        head.delete('Expires');
+        head.delete('CDN-Cache-Control');
+        head.delete('Cloudflare-CDN-Cache-Control');
+        head.delete('Surrogate-Control');
+        head.delete('Edge-Control');
+        head.delete('X-Accel-Expires');
         head.delete('Content-Encoding');
         // Node's fetch already decompressed the body, so the upstream
         // (compressed) Content-Length no longer matches and would truncate the
