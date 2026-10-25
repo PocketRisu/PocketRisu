@@ -2816,7 +2816,7 @@ async function fetchNativeRaw(url: string, arg: FetchNativeArgs, hooks?: {
 
 const defaultProxyJobHeartbeatSec = 15
 
-async function fetchViaProxy2(
+export async function fetchViaProxy2(
     url: string,
     headers: Record<string, string>,
     realBody: Uint8Array | undefined,

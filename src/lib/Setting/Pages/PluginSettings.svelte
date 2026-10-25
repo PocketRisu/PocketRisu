@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { PlusIcon, LinkIcon, CodeXmlIcon, PowerIcon, PowerOffIcon, ShieldIcon, HardDriveUploadIcon } from "@lucide/svelte";
+    import { PlusIcon, LinkIcon, CodeXmlIcon, PowerIcon, PowerOffIcon, ShieldIcon, HardDriveUploadIcon, CloudDownloadIcon } from "@lucide/svelte";
+    import { protonImportDialogOpen } from "src/ts/proton/protonImport";
     import { language } from "src/lang";
     import SettingPage from "src/lib/UI/GUI/SettingPage.svelte";
     import ShButton from "src/lib/UI/GUI/ShButton.svelte";
@@ -127,6 +128,7 @@
 >
     {#snippet actions()}
         <ShButton size="sm" onclick={() => importPlugin()}><HardDriveUploadIcon />{language.pluginImport}</ShButton>
+        <ShButton size="sm" variant="outline" onclick={() => protonImportDialogOpen.set(true)} title={language.protonImport} aria-label={language.protonImport}><CloudDownloadIcon /></ShButton>
         <ShButton size="sm" variant="outline" onclick={openDevTools} title={language.pluginDevTools}><CodeXmlIcon /></ShButton>
     {/snippet}
     {#snippet itemContent(index)}

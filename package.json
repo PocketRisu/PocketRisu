@@ -30,6 +30,8 @@
     "@lucide/svelte": "^0.562.0",
     "@mlc-ai/web-llm": "^0.2.80",
     "@mlc-ai/web-tokenizers": "^0.1.6",
+    "@protontech/crypto": "2.2.0",
+    "@protontech/drive-sdk": "0.23.0",
     "@risuai/ccardlib": "^0.4.2",
     "@smithy/protocol-http": "^3.3.0",
     "@smithy/signature-v4": "^2.3.0",
@@ -130,6 +132,9 @@
       "msgpackr-extract",
       "onnxruntime-node",
       "protobufjs"
-    ]
+    ],
+    "patchedDependencies": {
+      "@protontech/crypto@2.2.0": "patches/@protontech__crypto@2.2.0.patch"
+    }
   }
 }

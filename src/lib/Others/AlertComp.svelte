@@ -437,6 +437,21 @@
                         e.preventDefault()
                         alertStore.set({
                             type: 'none',
+                            msg: 'importProton'
+                        })
+                    }}>
+                        <div class="flex flex-col justify-start items-start">
+                            <span>{language.protonImport}</span>
+                        </div>
+                        <div class="ml-9 float-right flex-1 flex justify-end">
+                            <ChevronRightIcon />
+                        </div>
+                    </button>
+                    <button class="border-darkborderc border py-2 px-8 flex rounded-md hover:ring-2 items-center mt-2" onclick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        alertStore.set({
+                            type: 'none',
                             msg: 'createfromScratch'
                         })
                     }}>
