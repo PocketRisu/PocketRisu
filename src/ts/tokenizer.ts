@@ -465,7 +465,20 @@ async function getPersistedStrongBan(cacheKey: string) {
 
 export async function strongBan(data:string, bias:{[key:number]:number}) {
 
-    const cacheKey = 'strongBan_' + data
+    // Token ids only mean something in one vocab, so key the persisted ids by
+    // the same tokenizer inputs encode() picks a vocab from. The old key was
+    // the text alone and kept serving ids from whichever vocab counted first.
+    const db = getDatabase()
+    const pluginTokenizer = pluginV2.providerOptions.get(db.currentPluginProvider)?.tokenizer ?? "none"
+    const cacheKey = 'strongBan_' + getHash(
+        data,
+        db.aiModel,
+        db.customTokenizer,
+        db.currentPluginProvider,
+        db.googleClaudeTokenizing,
+        getModelInfo(db.aiModel),
+        pluginTokenizer
+    )
     const cached = await getPersistedStrongBan(cacheKey)
     if(cached){
         return cached

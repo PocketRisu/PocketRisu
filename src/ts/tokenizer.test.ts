@@ -4,7 +4,7 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LLMTokenizer } from "./model/types";
 
-const { database, modelTokenizers, providerOptions } = vi.hoisted(() => ({
+const { database, modelTokenizers, providerOptions, persisted } = vi.hoisted(() => ({
     database: {
         aiModel: "",
         customTokenizer: "",
@@ -14,6 +14,7 @@ const { database, modelTokenizers, providerOptions } = vi.hoisted(() => ({
     },
     modelTokenizers: new Map<string, number>(),
     providerOptions: new Map<string, { tokenizer: string }>(),
+    persisted: new Map<string, unknown>(),
 }));
 
 vi.mock("./storage/database.svelte", () => ({
@@ -33,8 +34,8 @@ vi.mock("./process/models/local", () => ({ tokenizeGGUFModel: async () => [] }))
 vi.mock("./globalApi.svelte", () => ({ globalFetch: async () => ({ ok: false }) }));
 vi.mock("./storage/persistentKv", () => ({
     makeHashedStorageKey: async (prefix: string, key: string) => prefix + key,
-    readPersistentJson: async () => null,
-    writePersistentJson: async () => {},
+    readPersistentJson: async (key: string) => persisted.get(key) ?? null,
+    writePersistentJson: async (key: string, value: unknown) => { persisted.set(key, value); },
 }));
 
 // The UMD bundle exports nothing when Node loads it as an ES module; it
@@ -54,7 +55,7 @@ vi.stubGlobal("fetch", async (url: string) => {
     };
 });
 
-import { encode, encodeWithTokenizer } from "./tokenizer";
+import { encode, encodeWithTokenizer, strongBan } from "./tokenizer";
 
 const sample = "안녕하세요, 오늘은 날씨가 정말 좋네요. 你好，世界。こんにちは。Hello, world!";
 const ids = async (tokens: Promise<ArrayLike<number>>) => Array.from(await tokens);
@@ -66,6 +67,7 @@ beforeEach(() => {
     database.googleClaudeTokenizing = false;
     modelTokenizers.clear();
     providerOptions.clear();
+    persisted.clear();
 });
 
 describe("encode tokenizer selection", () => {
@@ -95,6 +97,33 @@ describe("encode tokenizer selection", () => {
         const result = await ids(encode(sample));
         expect(result).toEqual(await ids(encodeWithTokenizer(sample, "gemma")));
         expect(result).not.toEqual(await ids(encodeWithTokenizer(sample, "llama3")));
+    });
+});
+
+describe("strongBan cache", () => {
+    it("recomputes the banned ids when the tokenizer changes", async () => {
+        database.aiModel = "openrouter";
+        database.customTokenizer = "llama";
+        const llamaBias = await strongBan("Hello", {});
+
+        database.customTokenizer = "llama3";
+        const llama3Bias = await strongBan("Hello", {});
+
+        const [llama3Hello] = await ids(encodeWithTokenizer("Hello", "llama3"));
+        expect(llama3Bias).not.toEqual(llamaBias);
+        expect(llama3Bias[llama3Hello]).toBe(-100);
+    });
+
+    it("ignores ids persisted under the old text-only key", async () => {
+        database.aiModel = "openrouter";
+        database.customTokenizer = "llama3";
+        persisted.set("cache/strong-ban/strongBan_Hi", { key: "strongBan_Hi", value: { 1: -100 } });
+
+        const bias = await strongBan("Hi", {});
+
+        const [llama3Hi] = await ids(encodeWithTokenizer("Hi", "llama3"));
+        expect(bias).not.toEqual({ 1: -100 });
+        expect(bias[llama3Hi]).toBe(-100);
     });
 });
 
