@@ -2006,7 +2006,8 @@ async function fetchWithProxy(url: string, arg: GlobalFetchArgs): Promise<Global
 
         const body = arg.body instanceof URLSearchParams ? arg.body.toString() : JSON.stringify(arg.body);
 
-        const response = await fetch(furl, { body, headers, method: arg.method ?? "POST", signal: arg.abortSignal });
+        // no-store: all targets share the /proxy2 URL (see fetchViaProxy2).
+        const response = await fetch(furl, { body, headers, method: arg.method ?? "POST", signal: arg.abortSignal, cache: 'no-store' });
         const isSuccess = response.ok && response.status >= 200 && response.status < 300;
 
         if (arg.rawResponse) {
@@ -2834,11 +2835,14 @@ async function fetchViaProxy2(
         proxyHeaders["Content-Type"] = headers["Content-Type"] ?? headers["content-type"] ?? "application/json"
     }
 
+    // Every target shares the one /proxy2 URL (the real one is in risu-url), so
+    // a cached GET response would be served for a different target.
     const r = await fetch(`/proxy2`, {
         body: realBody as any,
         headers: proxyHeaders,
         method: arg.method,
-        signal: arg.signal
+        signal: arg.signal,
+        cache: 'no-store',
     })
 
     return new Response(r.body, {
