@@ -585,6 +585,8 @@ export const languageVietnamese = {
     "emphasizedView": "Chế độ xem nhân vật đôi",
     "pluginWarn": "Các plugin có thể gây ra sự cố khi cài đặt các plugin độc hại.",
     "pluginConfirm": "Bạn có thực sự muốn nhập plugin này không? Chỉ nhập plugin từ các nguồn đáng tin cậy.",
+    "confirmInstallPluginViaPlugin": "Bạn đang cố cài đặt plugin \"{plugin}\" thông qua một plugin khác. Việc này có thể nguy hiểm nếu plugin nguồn không đáng tin cậy. Bạn có muốn tiếp tục không?",
+    "confirmReplacePluginViaPlugin": "Một plugin khác đang cố thay thế plugin đã cài đặt \"{plugin}\" bằng một tập lệnh khác. Việc này có thể nguy hiểm nếu plugin nguồn không đáng tin cậy. Bạn có muốn tiếp tục không?",
     "pluginContainsExternalMedia": "Plugin này chứa phương tiện bên ngoài.",
     "pluginContainsExternalJS": "Plugin này chứa Javascript bên ngoài.",
     "waifuWidth": "Chiều rộng trò chuyện Waifu",

@@ -585,6 +585,8 @@ export const languageGerman = {
     "emphasizedView": "Doppelte Charakteransicht",
     "pluginWarn": "Installieren von Plugins unbekannter Herkunft könnte Probleme verursachen oder sogar schädlichen Code enthalten",
     "pluginConfirm": "Möchten Sie dieses Plugin wirklich importieren? Importieren Sie nur Plugins aus vertrauenswürdigen Quellen.",
+    "confirmInstallPluginViaPlugin": "Sie versuchen, das Plugin „{plugin}“ über ein anderes Plugin zu installieren. Das kann gefährlich sein, wenn das Quell-Plugin nicht vertrauenswürdig ist. Möchten Sie fortfahren?",
+    "confirmReplacePluginViaPlugin": "Ein anderes Plugin versucht, das installierte Plugin „{plugin}“ durch ein anderes Skript zu ersetzen. Das kann gefährlich sein, wenn das Quell-Plugin nicht vertrauenswürdig ist. Möchten Sie fortfahren?",
     "pluginContainsExternalMedia": "Dieses Plugin enthält externe Medien.",
     "pluginContainsExternalJS": "Dieses Plugin enthält externes Javascript.",
     "waifuWidth": "Breite des Waifu Chat-Bereichs",

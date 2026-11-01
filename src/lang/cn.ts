@@ -585,6 +585,8 @@ export const languageChinese = {
     "emphasizedView": "双角色模式",
     "pluginWarn": "但安装恶意插件可能导致问题。",
     "pluginConfirm": "你真的要导入这个插件吗？只从可信的来源导入插件。",
+    "confirmInstallPluginViaPlugin": "你正在尝试通过另一个插件安装插件“{plugin}”。如果来源插件不可信，可能会有危险。确定要继续吗？",
+    "confirmReplacePluginViaPlugin": "另一个插件正在尝试用不同的脚本替换已安装的插件“{plugin}”。如果来源插件不可信，可能会有危险。确定要继续吗？",
     "pluginContainsExternalMedia": "此插件包含外部媒体。",
     "pluginContainsExternalJS": "此插件包含外部 Javascript。",
     "waifuWidth": "角色对话框宽度",

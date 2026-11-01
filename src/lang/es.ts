@@ -585,6 +585,8 @@ export const languageSpanish = {
     "emphasizedView": "Vista de Personajes Doble",
     "pluginWarn": "Instalar plugins maliciosos puede causar problemas.",
     "pluginConfirm": "¿Realmente quieres importar este plugin? Solo importa plugins de fuentes confiables.",
+    "confirmInstallPluginViaPlugin": "Estás intentando instalar el plugin \"{plugin}\" mediante otro plugin. Puede ser peligroso si el plugin de origen no es de confianza. ¿Quieres continuar?",
+    "confirmReplacePluginViaPlugin": "Otro plugin está intentando reemplazar el plugin instalado \"{plugin}\" por un script diferente. Puede ser peligroso si el plugin de origen no es de confianza. ¿Quieres continuar?",
     "pluginContainsExternalMedia": "Este plugin contiene medios externos.",
     "pluginContainsExternalJS": "Este complemento contiene Javascript externo.",
     "waifuWidth": "Ancho del Chat Waifu",
