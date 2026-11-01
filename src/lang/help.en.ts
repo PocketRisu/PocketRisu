@@ -336,7 +336,7 @@ export const helpEn = {
         assetMaxDifference:
             "Allowed difference when matching dynamic asset names. Higher values match more loosely, but may pick the wrong asset. The default is usually best.",
         heightMode:
-            "CSS unit used to measure chat screen height. If the mobile browser address bar cuts off the screen, try another unit (`svh`, `lvh`, `dvh`).\n\n- **Normal**: automatic (`100%`)\n- **Percent / VH**: traditional units, sometimes broken on mobile\n- **DVH**: dynamic viewport, changes with address-bar size\n- **SVH**: small viewport, safest visible area\n- **LVH**: large viewport, address bar hidden",
+            "CSS unit used to measure chat screen height. If the mobile browser address bar cuts off the screen, try another unit (`svh`, `lvh`, `dvh`).\n\n- **Normal**: automatic (same as DVH where supported, otherwise `100%`)\n- **Percent / VH**: traditional units, sometimes broken on mobile\n- **DVH**: dynamic viewport, changes with address-bar size\n- **SVH**: small viewport, safest visible area\n- **LVH**: large viewport, address bar hidden",
         removeIncompleteResponse:
             "Automatically remove responses that were cut off by a network error, token limit, or similar interruption. When off, truncated responses stay in chat so you can inspect or reroll them manually.",
         newOAIHandle:
