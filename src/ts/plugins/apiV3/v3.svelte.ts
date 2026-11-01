@@ -1,4 +1,4 @@
-import { allowedDbKeys, customProviderStore, getV2PluginAPIs, handlePluginInstallViaPlugin, pluginV2, type PluginV2ProviderArgument, type PluginV2ProviderOptions, type RisuPlugin } from "../plugins.svelte";
+import { allowedDbKeys, customProviderStore, getV2PluginAPIs, handlePluginInstallViaPlugin, pluginV2, type EditFunction, type PluginV2ProviderArgument, type PluginV2ProviderOptions, type RisuPlugin } from "../plugins.svelte";
 import { SandboxHost } from "./factory";
 import { getCurrentChat, getDatabase, normalizeChat } from "src/ts/storage/database.svelte";
 import { resolveClassicModelId } from "src/ts/process/request/modelPresetBinding";
@@ -24,7 +24,7 @@ import { readPersistentJson, removePersistentKey, writePersistentJson } from "sr
 import { createPluginPermissionGate, createPluginScriptHashGetter, type PluginPermission, type PluginPermissionState } from "./pluginPermissionCache";
 import { endAllGenerations } from "src/ts/process/generationState";
 import { sendChat as processSendChat, doingChat } from "src/ts/process/index.svelte";
-import { processScriptFull } from "src/ts/process/scripts";
+import { processScriptFull, type ScriptMode } from "src/ts/process/scripts";
 import { getModelInfo } from "src/ts/model/modellist";
 import type { ModelModeExtended } from "src/ts/process/request/shared";
 import { requestChatDataMain } from "src/ts/process/request/request";
@@ -768,9 +768,14 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
             customV3ProviderMetaStore.push(modelData);
             addPluginUnloadCallback(plugin.name, () => {
-                if(pluginV2.providers.get(name) !== provider) return;
-                pluginV2.providers.delete(name);
-                pluginV2.providerOptions.delete(name);
+                // loadV2Plugin() clears the provider map before V3 plugins
+                // unload, so the entry may already be gone; the name and model
+                // entries this call added still have to come out.
+                const current = pluginV2.providers.get(name);
+                if(current === provider || current === undefined){
+                    pluginV2.providers.delete(name);
+                    pluginV2.providerOptions.delete(name);
+                }
 
                 const currentProviders = get(customProviderStore);
                 const providerIndex = currentProviders.indexOf(name);
@@ -797,7 +802,10 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             registerTTSPostprocessor(func);
             addPluginUnloadCallback(plugin.name, () => unregisterTTSPostprocessor(func));
         },
-        addRisuScriptHandler: oldApis.addRisuScriptHandler,
+        addRisuScriptHandler: (name: ScriptMode, func: EditFunction) => {
+            oldApis.addRisuScriptHandler(name, func);
+            addPluginUnloadCallback(plugin.name, () => oldApis.removeRisuScriptHandler(name, func));
+        },
         removeRisuScriptHandler: oldApis.removeRisuScriptHandler,
         addRisuReplacer: async (name:string,func:Function) => {
             //permission check for replacer

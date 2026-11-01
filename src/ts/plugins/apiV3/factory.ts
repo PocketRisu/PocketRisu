@@ -461,6 +461,14 @@ await (async function() {
 })();
 `;
 
+// A callback called after terminate() fails at once instead of waiting
+// forever, marked handled like the ones terminate() rejects.
+function quietSandboxTerminated(): Promise<never> {
+    const failed = Promise.reject(new Error('Sandbox terminated'));
+    failed.catch(() => {});
+    return failed;
+}
+
 export class SandboxHost {
     private iframe: HTMLIFrameElement;
     private apiFactory: any;
@@ -475,7 +483,8 @@ export class SandboxHost {
     private messageHandlerRef: ((event: MessageEvent) => void) | null = null;
     private callbackWrapperCache = new Map<string, Function>();
 
-    private pendingCallbacks = new Map<string, { resolve: Function, reject: Function }>();
+    private pendingCallbacks = new Map<string, { resolve: Function, reject: Function, call?: Promise<unknown> }>();
+    private terminated = false;
 
     // Teardown hooks for streams bridged over MessagePort. MessagePort has no
     // 'close' event in stable browsers, so without these the other side of an
@@ -589,9 +598,10 @@ export class SandboxHost {
                 const cached = this.callbackWrapperCache.get(cbRef.id);
                 if (cached) return cached;
 
-                const wrapper = async (...innerArgs: any[]) => {
-                    return new Promise((resolve, reject) => {
-                        const reqId = 'cb_req_' + Math.random().toString(36).substring(2);
+                const wrapper = (...innerArgs: any[]) => {
+                    if (this.terminated) return quietSandboxTerminated();
+                    const reqId = 'cb_req_' + Math.random().toString(36).substring(2);
+                    const call = new Promise((resolve, reject) => {
                         this.pendingCallbacks.set(reqId, { resolve, reject });
 
                         // AbortSignal cannot be structured-cloned for postMessage.
@@ -629,6 +639,9 @@ export class SandboxHost {
                         const transferables = this.collectTransferables(message);
                         this.iframe.contentWindow?.postMessage(message, '*', transferables);
                     });
+                    const pending = this.pendingCallbacks.get(reqId);
+                    if (pending) pending.call = call;
+                    return call;
                 };
                 this.callbackWrapperCache.set(cbRef.id, wrapper);
                 return wrapper;
@@ -965,6 +978,7 @@ export class SandboxHost {
     }
 
     public terminate() {
+        this.terminated = true;
         if (this.messageHandlerRef) {
             window.removeEventListener('message', this.messageHandlerRef);
             this.messageHandlerRef = null;
@@ -974,6 +988,14 @@ export class SandboxHost {
         }
         this.closeActiveStreams();
         this.instanceRegistry.clear();
+        // Calls still waiting on the iframe would otherwise never settle, and
+        // callers such as request.ts await them with no timeout. Callers that
+        // never await (DOM listeners, observers) must not get an unhandled
+        // rejection alert for it, so each call is marked handled first.
+        for (const pending of this.pendingCallbacks.values()) {
+            pending.call?.catch(() => {});
+            pending.reject(new Error('Sandbox terminated'));
+        }
         this.pendingCallbacks.clear();
         this.abortControllers.clear();
         this.callbackWrapperCache.clear();
