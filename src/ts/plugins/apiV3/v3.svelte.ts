@@ -768,9 +768,14 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
             customV3ProviderMetaStore.push(modelData);
             addPluginUnloadCallback(plugin.name, () => {
-                if(pluginV2.providers.get(name) !== provider) return;
-                pluginV2.providers.delete(name);
-                pluginV2.providerOptions.delete(name);
+                // loadV2Plugin() clears the provider map before V3 plugins
+                // unload, so the entry may already be gone; the name and model
+                // entries this call added still have to come out.
+                const current = pluginV2.providers.get(name);
+                if(current === provider || current === undefined){
+                    pluginV2.providers.delete(name);
+                    pluginV2.providerOptions.delete(name);
+                }
 
                 const currentProviders = get(customProviderStore);
                 const providerIndex = currentProviders.indexOf(name);
