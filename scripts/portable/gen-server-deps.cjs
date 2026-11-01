@@ -141,6 +141,16 @@ for (const name of [...externals].sort()) {
     dependencies[name] = locked[name];
 }
 
+// The app's patchedDependencies patch frontend packages, and the patch files
+// are not shipped next to this manifest. A patch on a server dependency would
+// have to ship too, so that fails loudly instead of installing it unpatched.
+const patched = Object.keys(appPkg.pnpm?.patchedDependencies ?? {});
+const patchedServerDeps = patched.filter((spec) => dependencies[spec.replace(/@[^@]*$/, '')]);
+if (patchedServerDeps.length > 0) {
+    console.error(`Server dependencies are patched (${patchedServerDeps.join(', ')}), which this manifest cannot carry.`);
+    process.exit(1);
+}
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(
     path.join(outDir, 'package.json'),
@@ -153,7 +163,7 @@ fs.writeFileSync(
         dependencies,
         // Without this, pnpm 10 blocks dependency build scripts and
         // better-sqlite3's native addon never gets built.
-        pnpm: appPkg.pnpm,
+        pnpm: { onlyBuiltDependencies: appPkg.pnpm?.onlyBuiltDependencies },
     }, null, 2) + '\n',
 );
 
