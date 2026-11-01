@@ -264,6 +264,7 @@ export async function readModule(buf:Buffer):Promise<RisuModule> {
     }
 
     module.id = v4()
+    delete module.mcp
     return module
 }
 
@@ -318,6 +319,7 @@ export async function importModule(){
                 return
             }
             importData.id = v4()
+            delete importData.mcp
             // A hand-edited export may still carry a lazy manifest descriptor;
             // keeping it would make the copy edit the source module's manifest.
             if(importData.assetManifest){
