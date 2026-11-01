@@ -2075,6 +2075,10 @@ export const languageKorean = {
   nanoGPTSelectFromList: "목록에서 선택",
   nanoGPTManualInput: "수동 입력",
   nanoGPTManualModelSelect: "수동 모델 선택",
+  confirmInstallPluginViaPlugin:
+    "다른 플러그인이 \"{plugin}\" 플러그인을 설치하려고 합니다. 요청한 플러그인을 신뢰할 수 없다면 위험할 수 있습니다. 계속하시겠습니까?",
+  confirmReplacePluginViaPlugin:
+    "다른 플러그인이 설치된 \"{plugin}\" 플러그인을 다른 스크립트로 바꾸려고 합니다. 요청한 플러그인을 신뢰할 수 없다면 위험할 수 있습니다. 계속하시겠습니까?",
   nodeOnlyRestoreLastChat: "시작 시 마지막 채팅 열기",
   nodeOnlyScrollButtonType: "스크롤 버튼 타입",
   scrollButtonTypeFour: "4버튼",
