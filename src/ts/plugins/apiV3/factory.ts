@@ -13,6 +13,7 @@ interface RpcMessage {
     type: MsgType;
     reqId?: string;
     id?: string;
+    ids?: string[];
     method?: string;
     args?: any[];
     result?: any;
@@ -42,7 +43,22 @@ await (async function() {
     const pendingRequests = new Map();
     const callbackRegistry = new Map();
     const callbackIdByFunction = new WeakMap();
-    const proxyRefRegistry = new Map();
+    const proxyRefRegistry = new WeakMap();
+    const releaseBuffer = [];
+    const flushReleases = () => {
+        if (releaseBuffer.length === 0) return;
+        const ids = releaseBuffer.splice(0);
+        try {
+            send({ type: 'RELEASE_INSTANCE', ids: ids });
+        } catch (_) {
+            // Frame is tearing down; host clears its registry anyway
+        }
+    };
+    const releaseRegistry = new FinalizationRegistry((id) => {
+        // Schedule one flush per burst: first push arms the microtask.
+        if (releaseBuffer.length === 0) queueMicrotask(flushReleases);
+        releaseBuffer.push(id);
+    });
     const abortControllers = new Map();
 
     function serializeArg(arg) {
@@ -91,15 +107,25 @@ await (async function() {
                     if (prop === 'release') {
                         return () => send({ type: 'RELEASE_INSTANCE', id: val.id });
                     }
-                    return (...args) => sendRequest('CALL_INSTANCE', {
-                        id: val.id,
-                        method: prop,
-                        args: args
-                    });
+                    return (...args) => {
+                        // Extracted methods must pin their owning proxy:
+                        // without this reference the proxy could be
+                        // collected (and auto-released) while this
+                        // function is still callable.
+                        void proxy;
+                        return sendRequest('CALL_INSTANCE', {
+                            id: val.id,
+                            method: prop,
+                            args: args
+                        });
+                    };
                 }
             });
             // Store the mapping so we can serialize it back
             proxyRefRegistry.set(proxy, val.id);
+            // Held value must be the id string, never the proxy itself:
+            // the registry holds it strongly until cleanup fires.
+            releaseRegistry.register(proxy, val.id);
             return proxy;
         }
         if (val && typeof val === 'object' && val.__type === 'CALLBACK_STREAMS') {
@@ -337,7 +363,7 @@ await (async function() {
                         if (a.aborted) { controller.abort(); }
                         return controller.signal;
                     }
-                    return a;
+                    return deserializeResult(a);
                 });
                 const result = await fn(...deserializedArgs);
                 response.result = result;
@@ -435,6 +461,14 @@ await (async function() {
 })();
 `;
 
+// A callback called after terminate() fails at once instead of waiting
+// forever, marked handled like the ones terminate() rejects.
+function quietSandboxTerminated(): Promise<never> {
+    const failed = Promise.reject(new Error('Sandbox terminated'));
+    failed.catch(() => {});
+    return failed;
+}
+
 export class SandboxHost {
     private iframe: HTMLIFrameElement;
     private apiFactory: any;
@@ -444,11 +478,13 @@ export class SandboxHost {
     private csp = `connect-src 'none'; script-src 'nonce-${this.nonce}' 'wasm-unsafe-eval'; frame-src 'none'; object-src 'none'; style-src * 'unsafe-inline'; default-src 'none'; img-src * data: blob:; font-src * data: blob:; media-src * data: blob:; base-uri 'none';`;
 
     private instanceRegistry = new Map<string, any>();
+    private refIdCounter = 0;
     private abortControllers = new Map<string, AbortController>();
     private messageHandlerRef: ((event: MessageEvent) => void) | null = null;
     private callbackWrapperCache = new Map<string, Function>();
 
-    private pendingCallbacks = new Map<string, { resolve: Function, reject: Function }>();
+    private pendingCallbacks = new Map<string, { resolve: Function, reject: Function, call?: Promise<unknown> }>();
+    private terminated = false;
 
     // Teardown hooks for streams bridged over MessagePort. MessagePort has no
     // 'close' event in stable browsers, so without these the other side of an
@@ -522,7 +558,7 @@ export class SandboxHost {
             if (Array.isArray(val)) return val;
 
 
-            const id = 'ref_' + Math.random().toString(36).substring(2);
+            const id = 'ref_' + (++this.refIdCounter);
             this.instanceRegistry.set(id, val);
             return { __type: 'REMOTE_REF', id } as RemoteRef;
         }
@@ -562,9 +598,10 @@ export class SandboxHost {
                 const cached = this.callbackWrapperCache.get(cbRef.id);
                 if (cached) return cached;
 
-                const wrapper = async (...innerArgs: any[]) => {
-                    return new Promise((resolve, reject) => {
-                        const reqId = 'cb_req_' + Math.random().toString(36).substring(2);
+                const wrapper = (...innerArgs: any[]) => {
+                    if (this.terminated) return quietSandboxTerminated();
+                    const reqId = 'cb_req_' + Math.random().toString(36).substring(2);
+                    const call = new Promise((resolve, reject) => {
                         this.pendingCallbacks.set(reqId, { resolve, reject });
 
                         // AbortSignal cannot be structured-cloned for postMessage.
@@ -590,7 +627,7 @@ export class SandboxHost {
                                 }
                                 return ref;
                             }
-                            return arg;
+                            return this.serialize(arg);
                         });
 
                         const message = {
@@ -602,6 +639,9 @@ export class SandboxHost {
                         const transferables = this.collectTransferables(message);
                         this.iframe.contentWindow?.postMessage(message, '*', transferables);
                     });
+                    const pending = this.pendingCallbacks.get(reqId);
+                    if (pending) pending.call = call;
+                    return call;
                 };
                 this.callbackWrapperCache.set(cbRef.id, wrapper);
                 return wrapper;
@@ -612,6 +652,7 @@ export class SandboxHost {
                 if (instance) {
                     return instance;
                 }
+                throw new Error("Instance not found or released");
             }
             if (arg && typeof arg === 'object' && arg.constructor === Object) {
                 let out: any = null;
@@ -829,7 +870,8 @@ export class SandboxHost {
 
 
             if (data.type === 'RELEASE_INSTANCE') {
-                this.instanceRegistry.delete(data.id!);
+                if (data.id) this.instanceRegistry.delete(data.id!);
+                if (Array.isArray(data.ids)) for (const id of data.ids) this.instanceRegistry.delete(id);
                 return;
             }
 
@@ -936,6 +978,7 @@ export class SandboxHost {
     }
 
     public terminate() {
+        this.terminated = true;
         if (this.messageHandlerRef) {
             window.removeEventListener('message', this.messageHandlerRef);
             this.messageHandlerRef = null;
@@ -945,6 +988,14 @@ export class SandboxHost {
         }
         this.closeActiveStreams();
         this.instanceRegistry.clear();
+        // Calls still waiting on the iframe would otherwise never settle, and
+        // callers such as request.ts await them with no timeout. Callers that
+        // never await (DOM listeners, observers) must not get an unhandled
+        // rejection alert for it, so each call is marked handled first.
+        for (const pending of this.pendingCallbacks.values()) {
+            pending.call?.catch(() => {});
+            pending.reject(new Error('Sandbox terminated'));
+        }
         this.pendingCallbacks.clear();
         this.abortControllers.clear();
         this.callbackWrapperCache.clear();

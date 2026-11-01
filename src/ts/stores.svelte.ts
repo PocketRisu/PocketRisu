@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import { untrack } from "svelte";
 import { MEMORY_PRESET_DEFAULT, MEMORY_PRESET_OFF, getMemoryPreset, resolveMemoryPresetId, setChatMemoryPreset } from './process/memory/memoryPresets'
 import type { character, Database } from "./storage/database.svelte";
 import { type simpleCharacterArgument } from "./parser/parser.svelte";
@@ -223,6 +224,22 @@ export const pluginAlertModalStore = $state({
     open: false,
     errors: [] as PluginSafetyErrors[]
 })
+
+// App editors (fullscreen composer, partial-edit modals) open inside the
+// isolated chat layer. ChatScreen lifts the layer while any is open.
+export const chatEditorOverlay = $state({ count: 0 })
+
+/**
+ * Marks a chat-layer editor as open; call the returned function when it closes.
+ * Meant to be returned from an `$effect`, so the count follows the editor's lifetime.
+ * Untracked so the calling effect does not depend on the count it changes.
+ */
+export function holdChatEditorOverlay(): () => void {
+    untrack(() => { chatEditorOverlay.count++ })
+    return () => {
+        untrack(() => { chatEditorOverlay.count-- })
+    }
+}
 
 export const disableHighlight = writable(true)
 

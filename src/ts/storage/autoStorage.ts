@@ -74,6 +74,12 @@ export class AutoStorage{
         return this.realStorage.getWriterLockState()
     }
 
+    /** Takes the writer lock for this tab's next page load (see NodeStorage). */
+    async claimWriterLock() {
+        await this.Init()
+        return this.realStorage.claimWriterLock()
+    }
+
     /** Get the last known ETag for database.bin */
     getDbEtag(): string | null {
         return this.realStorage._lastDbEtag

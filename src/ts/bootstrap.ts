@@ -1,6 +1,5 @@
 import { migrateLegacyTrash } from "./characterArchive";
 import { changeFullscreen, checkNullish } from "./util"
-import { installDynamicViewportHeight } from "./viewportHeight"
 import { v4 as uuidv4 } from 'uuid';
 import { get } from "svelte/store";
 import { setDatabase, defaultSdDataFunc, getDatabase, changeToThemePreset } from "./storage/database.svelte";
@@ -158,11 +157,6 @@ export async function loadData() {
             updateTextThemeAndCSS()
             updateAnimationSpeed()
             updateHeightMode()
-            // Only when no explicit heightMode override is active — an explicit
-            // vh/dvh/svh/... choice must keep sizing exactly as configured.
-            if (!db.heightMode || db.heightMode === 'normal') {
-                installDynamicViewportHeight()
-            }
             updateErrorHandling()
             updateGuisize()
             if (!db.didFirstSetup) {

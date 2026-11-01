@@ -82,6 +82,11 @@ function isUserActive(): boolean {
     return Date.now() - lastUserGestureAt < USER_GESTURE_WINDOW_MS
 }
 
+const WRITER_SESSION_ID_KEY = 'risu-writer-session-id'
+function mintWriterSessionId(): string {
+    return crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2))
+}
+
 // Custom error class for database conflict detection
 export class ConflictError extends Error {
     currentEtag: string
@@ -283,12 +288,11 @@ export class NodeStorage{
     // mid-session). Still per-tab: a genuinely new tab gets a new id, and
     // same-device multi-tab is handled by the BroadcastChannel lock.
     private static sessionId: string = (() => {
-        const KEY = 'risu-writer-session-id'
-        const minted = crypto?.randomUUID?.() ?? (Date.now().toString(36) + Math.random().toString(36).slice(2))
+        const minted = mintWriterSessionId()
         try {
-            const stored = sessionStorage.getItem(KEY)
+            const stored = sessionStorage.getItem(WRITER_SESSION_ID_KEY)
             if (stored) return stored
-            sessionStorage.setItem(KEY, minted)
+            sessionStorage.setItem(WRITER_SESSION_ID_KEY, minted)
         } catch { /* storage unavailable (rare privacy modes) — per-load id */ }
         return minted
     })()
@@ -755,6 +759,36 @@ export class NodeStorage{
         } catch {
             return 'unknown'
         }
+    }
+
+    /** Hands the write lock to this tab's NEXT page load; the caller reloads
+     *  right after. The reload boots with a new id that already holds the
+     *  lock, while this page keeps its old id, so its outdated copy stays
+     *  locked out. False when the server did not take the claim: the reload
+     *  then takes the lock with its first action as before. */
+    async claimWriterLock(): Promise<boolean> {
+        const nextId = mintWriterSessionId()
+        let claimed = false
+        try {
+            claimed = await authRequest('/api/session/claim', {
+                method: 'POST',
+                headers: {
+                    'risu-auth': await this.createAuth(),
+                    'x-session-id': nextId,
+                },
+            }, async (res) => res.ok)
+        } catch {
+            return false
+        }
+        // Stored only once the server took it, with nothing awaited before
+        // the caller's reload: a page booted from this tab's storage earlier
+        // (a duplicated tab) must not come up as the writer with an older
+        // copy. Without storage the reload mints its own id; it boots after
+        // the claim, so its first action takes over.
+        if (claimed) {
+            try { sessionStorage.setItem(WRITER_SESSION_ID_KEY, nextId) } catch { /* see above */ }
+        }
+        return claimed
     }
 
     async patchItem(key: string, patchData: { patch: any[], expectedHash: string }): Promise<PatchItemResult> {

@@ -7,7 +7,7 @@
     import ShDropdownMenuTrigger from 'src/lib/UI/GUI/ShDropdownMenuTrigger.svelte';
     import ShDropdownMenuContent from 'src/lib/UI/GUI/ShDropdownMenuContent.svelte';
     import ShDropdownMenuItem from 'src/lib/UI/GUI/ShDropdownMenuItem.svelte';
-    import { selectedCharID, PlaygroundStore, createSimpleCharacter, hypaV3ModalOpen, ScrollToMessageStore, additionalChatMenu, additionalFloatingActionButtons, chatDeselected, chatPanelStore, alertStore } from "../../ts/stores.svelte";
+    import { selectedCharID, PlaygroundStore, createSimpleCharacter, hypaV3ModalOpen, ScrollToMessageStore, additionalChatMenu, additionalFloatingActionButtons, chatDeselected, chatPanelStore, alertStore, holdChatEditorOverlay } from "../../ts/stores.svelte";
     import { tick, untrack } from 'svelte';
     import Chat from "./Chat.svelte";
     import { getAdditionalChatLoadPages, getInitialChatLoadPages } from 'src/ts/chatLoadPages';
@@ -448,6 +448,10 @@ import { isMobile } from 'src/ts/platform'
     // editor. Enter inserts a newline (no send); sending is via the Send button.
     let composerFullscreen = $state(false)
     let fullscreenEle:HTMLTextAreaElement = $state()
+    // Lift the chat layer above the docked sidebar while the editor is open (see ChatScreen).
+    $effect(() => {
+        if (composerFullscreen) return holdChatEditorOverlay()
+    })
     $effect(() => {
         if (composerFullscreen && fullscreenEle) {
             const el = fullscreenEle

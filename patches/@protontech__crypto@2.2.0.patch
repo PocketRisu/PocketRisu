@@ -1,0 +1,187 @@
+diff --git a/src/constants.ts b/src/constants.ts
+index ecb36326e775c7eb9e73d63b5096d4dbf0e48450..72d03e9c2f3f82867859f82ba6f8218da51607cd 100644
+--- a/src/constants.ts
++++ b/src/constants.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import type { PartialConfig } from "./pmcrypto/index.ts";
+ import { ARGON2_PARAMS, VERIFICATION_STATUS } from "./pmcrypto/constants.ts";
+ 
+diff --git a/src/index.ts b/src/index.ts
+index 1b1abaecfee6d2f3179121e7d5026bc1a2793514..d69e4e6298c106556ca2c232b8206ef4db116fa4 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ export * from "./serverTime.ts";
+ export * from "./proxy/index.ts";
+ export * from "./constants.ts";
+diff --git a/src/pmcrypto/crypto/argon2.ts b/src/pmcrypto/crypto/argon2.ts
+index 25051c4422fabf83b9600e24cd087271ac870acc..c0f0e96e6edc0bac4a5e0f5096898cc2dd5073e2 100644
+--- a/src/pmcrypto/crypto/argon2.ts
++++ b/src/pmcrypto/crypto/argon2.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { Argon2S2K, type Config, config as defaultConfig } from "../openpgp.ts";
+ import { ARGON2_PARAMS } from "../constants.ts";
+ 
+diff --git a/src/pmcrypto/key/check.ts b/src/pmcrypto/key/check.ts
+index 78c3575f9d45fa3a4674895f782f245807dff3c1..c7940d61ac52c60fe7bd9e310721df773ceb4779 100644
+--- a/src/pmcrypto/key/check.ts
++++ b/src/pmcrypto/key/check.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { type AlgorithmInfo, type PublicKey, enums } from "../openpgp.ts";
+ 
+ /**
+diff --git a/src/pmcrypto/key/forwarding.ts b/src/pmcrypto/key/forwarding.ts
+index 5f9b55f880c5d68f10915458e6c29dc2f1758018..e360046ba8c14a3036ac0410679b811eb0235349 100644
+--- a/src/pmcrypto/key/forwarding.ts
++++ b/src/pmcrypto/key/forwarding.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import {
+     type PrivateKey,
+     type UserID,
+diff --git a/src/pmcrypto/message/context.ts b/src/pmcrypto/message/context.ts
+index 21535bd77eb96d375e1e3dc9471a9b06d7653e60..d075acb5d9d41c57024ee06c2546d224662a0730 100644
+--- a/src/pmcrypto/message/context.ts
++++ b/src/pmcrypto/message/context.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ /**
+  * The context is an abstraction we use to add domain separation to OpenPGP signatures.
+  * It's implemented by adding notation data to signatures, which may be marked as critical, so that
+diff --git a/src/pmcrypto/message/processMIME.ts b/src/pmcrypto/message/processMIME.ts
+index b46948d216a391a2eb56d1514843d30cddf2ded4..6ab2a596859f6ad6f8fd8e0bf99ba43412f84b72 100644
+--- a/src/pmcrypto/message/processMIME.ts
++++ b/src/pmcrypto/message/processMIME.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { removeTrailingSpaces } from "./utils.ts";
+ import { verifyMessage } from "./verify.js";
+ import { VERIFICATION_STATUS, MAX_ENC_HEADER_LENGTH } from "../constants.ts";
+diff --git a/src/pmcrypto/message/utils.ts b/src/pmcrypto/message/utils.ts
+index 44516552bbcedaa8fdc5711639e05ccaf6989cb1..7bc80f25246f5ce261786163bd5519344ddc5266 100644
+--- a/src/pmcrypto/message/utils.ts
++++ b/src/pmcrypto/message/utils.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { readToEnd } from "@openpgp/web-stream-tools";
+ import {
+     PacketList,
+diff --git a/src/proxy/endpoint/api.models.ts b/src/proxy/endpoint/api.models.ts
+index 108d4327a95bb5e15c149c0255f10d9871318bf0..98ad4b9a3afad8ef5ad5a9ef3ded27dc2f0d5c53 100644
+--- a/src/proxy/endpoint/api.models.ts
++++ b/src/proxy/endpoint/api.models.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import type {
+     AlgorithmInfo,
+     ContextSigningOptions,
+diff --git a/src/proxy/endpoint/api.ts b/src/proxy/endpoint/api.ts
+index 339cf0b471cbea710d413495097515af02ea0b38..4a0adf5cfc0aedd40f09692b607b5312a24db31b 100644
+--- a/src/proxy/endpoint/api.ts
++++ b/src/proxy/endpoint/api.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import {
+     SHA256,
+     SHA512,
+diff --git a/src/proxy/helpers.ts b/src/proxy/helpers.ts
+index d95fff9e5d3786d4289ae57e0aa2ef81e5580266..9ca905c0680da5c382ffe40928777133c87d6d0c 100644
+--- a/src/proxy/helpers.ts
++++ b/src/proxy/helpers.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import type { KeyReference, PrivateKeyReference } from "./endpoint/api.models.ts";
+ import { CryptoProxy } from "./proxy.ts";
+ 
+diff --git a/src/proxy/index.ts b/src/proxy/index.ts
+index 5e53881285e52763ab869de2a55790c75aec13dc..b2f56e11ae2e3fdaecff1d56f1a06d885a5e32cb 100644
+--- a/src/proxy/index.ts
++++ b/src/proxy/index.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ export * from "./proxy.ts";
+ export * from "./helpers.ts";
+ export * from "./endpoint/api.models.ts";
+diff --git a/src/proxy/proxy.ts b/src/proxy/proxy.ts
+index 2fd92c70d1e69b08cd438bffb92f15f0b6176e58..a056eb0574b04f2dcbbd5b107950896d71fac689 100644
+--- a/src/proxy/proxy.ts
++++ b/src/proxy/proxy.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import {
+     DEFAULT_KEY_GENERATION_OFFSET,
+     DEFAULT_SIGNATURE_VERIFICATION_OFFSET,
+diff --git a/src/serverTime.ts b/src/serverTime.ts
+index cd3905ca8b3523f75dd17699e02d6127eaf182b5..dc11d8aa270f3c7d2a8ae98a06a63f792a21925e 100644
+--- a/src/serverTime.ts
++++ b/src/serverTime.ts
+@@ -1 +1,2 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ export * from "./pmcrypto/serverTime.ts";
+diff --git a/src/srp/getAuthVersionWithFallback.ts b/src/srp/getAuthVersionWithFallback.ts
+index 8c59b8df7958945637cd19c27488683ee7c96b1d..6a491b47bcf64d3f349d328ab870a3326326429b 100644
+--- a/src/srp/getAuthVersionWithFallback.ts
++++ b/src/srp/getAuthVersionWithFallback.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { AUTH_FALLBACK_VERSION } from "./constants.ts";
+ import type { AuthVersion } from "./interface.ts";
+ import { cleanUsername } from "./utils/username.ts";
+diff --git a/src/srp/index.ts b/src/srp/index.ts
+index d144bdd116736b7e84a877b8637cbd590329d082..9bdb0b84b307350e14f38355bd4dcaf2a15987f6 100644
+--- a/src/srp/index.ts
++++ b/src/srp/index.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ export { AUTH_VERSION } from "./constants.ts";
+ 
+ export { getSrp, getRandomSrpVerifier } from "./srp.ts";
+diff --git a/src/srp/keys.ts b/src/srp/keys.ts
+index 92b539f1e99d70eef74b602d921f00a0765506c5..2cc82ee9eed5efa22e3ae466bb59478495d072ff 100644
+--- a/src/srp/keys.ts
++++ b/src/srp/keys.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { encodeBase64 as bcryptEncodeBase64, hash as bcryptHash } from "bcryptjs";
+ 
+ import { BCRYPT_PREFIX } from "./constants.ts";
+diff --git a/src/srp/passwords.ts b/src/srp/passwords.ts
+index 702a436a49b9bca4ff387e501c161253e7fe4717..1fa18625fb38c80fe4063ffc7b5fea510203ba73 100644
+--- a/src/srp/passwords.ts
++++ b/src/srp/passwords.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { CryptoProxy } from "../index.ts";
+ import { binaryStringToUint8Array, mergeUint8Arrays, utf8StringToUint8Array } from "../utils.ts";
+ import { encodeBase64 as bcryptEncodeBase64, hash as bcryptHash } from "bcryptjs";
+diff --git a/src/srp/srp.ts b/src/srp/srp.ts
+index a4367928a2b271bcd345e8ecf9169d75ab326697..c7d7b149a5d7b20a89449b1dcbc6e356b3ed838d 100644
+--- a/src/srp/srp.ts
++++ b/src/srp/srp.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import {
+     byteLength as bigIntByteLength,
+     bigIntToUint8Array,
+diff --git a/src/srp/utils/modulus.ts b/src/srp/utils/modulus.ts
+index 7ba879645d2cbbabbf4920dc3884622482a36d65..e511742b1de7963413f9ac049bdd227a681ace9d 100644
+--- a/src/srp/utils/modulus.ts
++++ b/src/srp/utils/modulus.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ import { CryptoProxy, VERIFICATION_STATUS, type PublicKeyReference } from "../../index.ts";
+ 
+ import { SRP_MODULUS_KEY } from "../constants.ts";
+diff --git a/src/utils.ts b/src/utils.ts
+index ced753685080a92272ce12521ea220d58dd347a9..da9a0bb34bab37f628b2d395cc0aef0245da265e 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -1,3 +1,4 @@
++// @ts-nocheck -- Published dependency source; checked upstream with Proton's compiler settings.
+ // This module should be kept free of functions that require 'openpgp'
+ 
+ const isString = (data: unknown): data is string => {

@@ -349,7 +349,15 @@ body {
    band below the composer. 100dvh tracks the dynamic viewport directly, so the
    app always fills exactly what is visible. Standalone/PWA and desktop have no
    dynamic browser UI, where 100dvh === 100% (no behavior change). An explicit
-   db.heightMode still overrides this via updateHeightMode(). */
+   db.heightMode still overrides this via updateHeightMode().
+   Do not feed visualViewport.height in here while the URL bar animates. With
+   the in-between heights written per frame, the URL bar stopped and sprang back
+   on every downward scroll (Brave report, reproduced on Chrome 133). Blink only
+   promotes a viewport-filling scroller (the chat) to implicit root scroller,
+   which is what lets it hide the URL bar, while it is exactly the ICB or
+   URL-bar-hidden size (root_scroller_controller.cc), so those heights fit the
+   chat losing that status mid-scroll. Chrome was measured updating dvh only
+   once the animation ends, at one of those two sizes. */
 @supports (height: 100dvh) {
   :root {
     --risu-height-size: 100dvh;

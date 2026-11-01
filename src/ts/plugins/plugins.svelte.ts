@@ -469,7 +469,8 @@ export async function importPlugin(code:string|null = null, argu:{
         else{
             loadPlugins()
         }
-        
+        return true
+
     } catch (error) {
         console.error(error)
         alertError(language.errors.noData)
@@ -1040,7 +1041,9 @@ export async function handlePluginInstallViaPlugin(plugins: RisuPlugin[]){
                 console.warn(`Plugin "${plugin.name}" has version "${plugin.version}", which is not supported for installation via plugin. Only API version 3.0 plugins can be installed via plugin. Skipping installation of this plugin.`)
                 continue
             }
-            const confirmation = await alertConfirm(language.confirmInstallPluginViaPlugin.replace('{plugin}', plugin.name))
+            const replacing = DBState.db.plugins.some((p: RisuPlugin) => p.name === plugin.name)
+            const message = replacing ? language.confirmReplacePluginViaPlugin : language.confirmInstallPluginViaPlugin
+            const confirmation = await alertConfirm(message.replace('{plugin}', plugin.name))
             if(confirmation){
                 trimmedPlugins.push(plugin)
             }
