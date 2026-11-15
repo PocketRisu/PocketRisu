@@ -705,7 +705,7 @@ export class NodeStorage{
             }, (res) => res.json())
 
             if(data.status === 'unset'){
-                const input = await digestPassword(await alertInput(language.setNodePassword))
+                const input = await digestPassword(await alertInput(language.setNodePassword, undefined, undefined, { hideText: true }))
                 const status = await authRequest('/api/set_password',{
                     method: "POST",
                     body:JSON.stringify({
@@ -725,7 +725,7 @@ export class NodeStorage{
                 return
             }
             else if(data.status === 'incorrect'){
-                const input = await digestPassword(await alertInput(language.inputNodePassword))
+                const input = await digestPassword(await alertInput(language.inputNodePassword, undefined, undefined, { hideText: true }))
                 await this.loginWithPassword(input)
                 await this.initSession()
                 return
