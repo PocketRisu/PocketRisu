@@ -888,8 +888,9 @@
         <TextInput
             bind:value={input}
             id="alert-input"
+            hideText={$alertStore.hideText ?? false}
             autocomplete="off"
-            list="alert-input-list"
+            list={$alertStore.hideText ? undefined : 'alert-input-list'}
             fullwidth
             onkeydown={(e) => {
                 if (e.key === 'Enter' && !e.isComposing) {
@@ -902,7 +903,7 @@
                 }
             }}
         />
-        {#if $alertStore.datalist}
+        {#if !$alertStore.hideText && $alertStore.datalist}
             <datalist id="alert-input-list">
                 {#each $alertStore.datalist as item}
                     <option

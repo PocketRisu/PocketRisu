@@ -282,7 +282,7 @@ export async function importCharacterProcess<T extends boolean = false>(f:{
             }
             const metaData:RccCardMetaData = JSON.parse(Buffer.from(parts[4], 'base64').toString('utf-8'))
             if(metaData.usePassword){
-                const password = await alertInput(language.inputCardPassword)
+                const password = await alertInput(language.inputCardPassword, undefined, undefined, { hideText: true })
                 if(!password){
                     return
                 }
