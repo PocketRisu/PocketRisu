@@ -22,6 +22,7 @@ import { getGenerationModelString } from "./models/modelString";
 import { runInlayScreen } from "./inlayScreen";
 import { runImageEmbedding } from "./transformers";
 import { runLuaEditTrigger } from "./scriptings";
+import { removeEmptyChatMessages } from "./emptyMessages";
 import { getModelInfo, LLMFlags } from "../model/modellist";
 import { resolveChatModelBinding, resolveClassicModelId, resolvePresetMaxOutputTokens, presetSupportsVision } from "./request/modelPresetBinding";
 import { hypaMemoryV3 } from "./memory/hypav3";
@@ -1506,6 +1507,7 @@ export async function sendChat(chatProcessIndex = -1,arg:{
     }
 
     formated = await runLuaEditTrigger(currentChar, 'editRequest', formated)
+    formated = removeEmptyChatMessages(formated)
 
     if(DBState.db.promptInfoInsideChat && DBState.db.promptTextInfoInsideChat){
         promptBodyformatedForChatStore = await runLuaEditTrigger(currentChar, 'editRequest', promptBodyformatedForChatStore)
