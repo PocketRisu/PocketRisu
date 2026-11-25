@@ -911,7 +911,7 @@ export function newChatModelDefaults(): Partial<Pick<Chat, 'useModelPreset' | 'm
 
 // ── Prompt Option State (per-chat toggle sync) ──────────────────────
 
-function parseToggleKeysFromTemplate(template:string){
+export function parseToggleKeysFromTemplate(template:string){
     const keys = new Set<string>()
     for(const rawLine of template.split('\n')){
         const line = rawLine.trim()
