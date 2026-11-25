@@ -171,12 +171,16 @@ async function processCommand(command:string, pipe:string):Promise<false | strin
                     role: 'user',
                     data: e
                 })
-                await sendChat(-1)
-                // sendChat leaves its generation entry for the caller to release
-                // (DefaultChatScreen does the same after its own send). Without
-                // this the per-chat guard stays held and every later iteration
-                // returns immediately without sending.
-                endGeneration(chatGenKey(currentChat.id))
+                try {
+                    await sendChat(-1)
+                } finally {
+                    // sendChat leaves its generation entry for the caller to release
+                    // (DefaultChatScreen does the same after its own send). Without
+                    // this the per-chat guard stays held and every later iteration
+                    // returns immediately without sending; a send that throws must
+                    // release it too, or later sends stay blocked until Stop.
+                    endGeneration(chatGenKey(currentChat.id))
+                }
             }
             return ''
         }
