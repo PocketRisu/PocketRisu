@@ -1735,6 +1735,8 @@ export const languageEnglish = {
     replacerPermissionConsent: "Plugin {} is requesting permission to replace content in the chat, which may be used to manipulate the conversation. Do you want to allow this?",
     providerPermissionConsent: "Plugin {} is requesting permission to access the provider, which may allow it to make unauthorized API calls. Do you want to allow this?",
     inlayPermissionConsent: "Plugin {} is requesting permission to access the inlay, which may allow it to read, write or edit the inlay content. Do you want to allow this?",
+    dbWriteConsent: "Plugin {} is requesting permission to modify your database, including characters, chats, modules and settings. Do you want to allow this?",
+    dbWriteAllowedNextWrite: "Plugin \"{}\" may now modify your data. The data may have changed while you were asked, so the change it just requested was not applied; its next change will be.",
     sendChatConsent: "Plugin {} is requesting permission to send chat messages on your behalf, which will trigger AI responses. Do you want to allow this?",
     pluginPermissionDenyGuide: "Permission request from plugin \"{}\" was denied. Denied permissions will not be asked again.\n\nIf this was a mistake, you can undo it with \"Reset permission responses\" for this plugin in [Settings] > [Plugins].",
     pluginFullStorageAccess: "Provide all plugin data (RisuAI compatible)",
