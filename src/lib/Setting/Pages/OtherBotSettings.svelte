@@ -255,6 +255,7 @@
     {#snippet control()}
     <SelectInput className="w-48" size="sm" bind:value={DBState.db.NAIImgModel}>
                 <OptionInput value="nai-diffusion-5-full" >nai-diffusion-5-full</OptionInput>
+                <OptionInput value="nai-diffusion-5-full-medium" >nai-diffusion-5-full-medium</OptionInput>
                 <OptionInput value="nai-diffusion-5-curated" >nai-diffusion-5-curated</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-full" >nai-diffusion-4-5-full</OptionInput>
                 <OptionInput value="nai-diffusion-4-5-curated" >nai-diffusion-4-5-curated</OptionInput>
@@ -262,8 +263,6 @@
                 <OptionInput value="nai-diffusion-4-curated-preview" >nai-diffusion-4-curated-preview</OptionInput>
                 <OptionInput value="nai-diffusion-3" >nai-diffusion-3</OptionInput>
                 <OptionInput value="nai-diffusion-furry-3" >nai-diffusion-furry-3</OptionInput>
-                <OptionInput value="nai-diffusion-2" >nai-diffusion-2</OptionInput>
-
             </SelectInput>
     {/snippet}
 </SettingRowLayout>
@@ -281,8 +280,7 @@
             || DBState.db.NAIImgModel === 'nai-diffusion-4-curated-preview'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-5-full'
             || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'
-            || DBState.db.NAIImgModel === 'nai-diffusion-5-full'
-            || DBState.db.NAIImgModel === 'nai-diffusion-5-curated'}
+            || DBState.db.NAIImgModel?.startsWith('nai-diffusion-5')}
                 <SelectInput className="w-48" size="sm" bind:value={DBState.db.NAIImgConfig.sampler}>
                     <OptionInput value="k_euler_ancestral" >Euler Ancestral</OptionInput>
                     <OptionInput value="k_dpmpp_2s_ancestral" >DPM++ 2S Ancestral</OptionInput>
@@ -330,7 +328,7 @@
     {#snippet control()}
     <SelectInput className="w-48" size="sm" bind:value={DBState.db.NAIImgConfig.reference_mode}>
                 <OptionInput value="" >None</OptionInput>
-                {#if DBState.db.NAIImgModel !== 'nai-diffusion-5-full' && DBState.db.NAIImgModel !== 'nai-diffusion-5-curated'}
+                {#if !DBState.db.NAIImgModel?.startsWith('nai-diffusion-5')}
                     <OptionInput value="vibe" >Vibe Trasfer</OptionInput>
                 {/if}
                 {#if DBState.db.NAIImgModel === 'nai-diffusion-4-5-full' || DBState.db.NAIImgModel === 'nai-diffusion-4-5-curated'}
@@ -341,7 +339,7 @@
 </SettingRowLayout>
 
             {#if DBState.db.NAIImgConfig.reference_mode === 'vibe'
-                && DBState.db.NAIImgModel !== 'nai-diffusion-5-full' && DBState.db.NAIImgModel !== 'nai-diffusion-5-curated'}
+                && !DBState.db.NAIImgModel?.startsWith('nai-diffusion-5')}
                 <div class="relative py-3">
                 <button class="mb-4" onclick={async () => {
                     const file = await selectSingleFile(['naiv4vibe'])
