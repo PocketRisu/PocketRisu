@@ -2266,7 +2266,7 @@ function normalizeFilePathHeader(value) {
 }
 
 function isHex(str) {
-    return hexRegex.test(str.toUpperCase().trim()) || str === '__password';
+    return hexRegex.test(str.toUpperCase().trim());
 }
 
 async function hashJSON(json){
