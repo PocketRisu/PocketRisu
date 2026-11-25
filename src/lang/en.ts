@@ -2611,6 +2611,8 @@ export const languageEnglish = {
     protonImportPluginConfirm: (name: string) => `${name} is a plugin. Plugins run code inside the app, so install it only if you trust where it came from.`,
     protonImportInstall: "Install",
     protonImportNotice: "Files are decrypted in your browser. PocketRisu is not an official Proton app.",
+    comfyWorkflow: "Workflow (API)",
+    comfyWorkflowInvalidJson: "Invalid workflow file. It must be a valid JSON.",
 } satisfies I18nTranslation;
 
 type I18nTranslationFunction = (...args: any[]) => string;

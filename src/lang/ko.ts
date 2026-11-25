@@ -2857,4 +2857,6 @@ export const languageKorean = {
   protonImportPluginConfirm: (name: string) => `${name}은(는) 플러그인입니다. 플러그인은 앱 안에서 코드를 실행하므로 믿을 수 있는 출처일 때만 설치하세요.`,
   protonImportInstall: "설치",
   protonImportNotice: "파일은 브라우저에서 복호화됩니다. PocketRisu는 Proton 공식 앱이 아닙니다.",
+  comfyWorkflow: "워크플로 (API)",
+  comfyWorkflowInvalidJson: "올바르지 않은 워크플로 파일입니다. 유효한 JSON이어야 합니다.",
 } satisfies DeepPartial<typeof import("./en").languageEnglish>;

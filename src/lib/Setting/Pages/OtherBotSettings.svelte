@@ -9,12 +9,13 @@
     import ShAlert from "src/lib/UI/GUI/ShAlert.svelte";
     import SettingRowLayout from "src/lib/Setting/Wrappers/SettingRowLayout.svelte";
     import type { SettingItem } from "src/ts/setting/types";
-    import { TriangleAlertIcon } from "@lucide/svelte";
+    import { HardDriveUploadIcon, TriangleAlertIcon } from "@lucide/svelte";
     import { selectSingleFile } from "src/ts/util";
     import { DBState, OtherBotsSubmenuIndex } from 'src/ts/stores.svelte';
     import { saveAsset, globalFetch } from "src/ts/globalApi.svelte";
     import NumberInput from "src/lib/UI/GUI/NumberInput.svelte";
     import TextInput from "src/lib/UI/GUI/TextInput.svelte";
+    import TextAreaInput from "src/lib/UI/GUI/TextAreaInput.svelte";
     import SelectInput from "src/lib/UI/GUI/SelectInput.svelte";
     import OptionInput from "src/lib/UI/GUI/OptionInput.svelte";
     import { getCharImage } from "src/ts/characters";
@@ -165,6 +166,21 @@
         }
     });
     // End wavespeed
+
+    async function importComfyWorkflow() {
+        const file = await selectSingleFile(['json'])
+        if (!file) {
+            return
+        }
+        const text = new TextDecoder().decode(file.data)
+        try {
+            JSON.parse(text)
+        } catch {
+            alertError(language.comfyWorkflowInvalidJson)
+            return
+        }
+        DBState.db.comfyConfig.workflow = text
+    }
 
     // Row-layout field descriptor for SettingRowLayout (label + inline help).
     function f(id: string, label: string, helpKey?: string): SettingItem {
@@ -687,9 +703,15 @@
     {#snippet control()}<TextInput className="sm:w-64 h-8" size="sm" padding fullwidth placeholder="http://127.0.0.1:8188" bind:value={DBState.db.comfyUiUrl}/>{/snippet}
 </SettingRowLayout>
 
-            <SettingRowLayout item={f('ob24', `Workflow`, 'comfyWorkflow')} wideControl>
-    {#snippet control()}<TextInput className="sm:w-64 h-8" size="sm" padding fullwidth bind:value={DBState.db.comfyConfig.workflow}/>{/snippet}
-</SettingRowLayout>
+            <div class="py-3 border-t border-darkborderc flex flex-col">
+                <SettingFieldLabel label={language.comfyWorkflow} helpKey="comfyWorkflow" />
+                <TextAreaInput className="mt-2" bind:value={DBState.db.comfyConfig.workflow}/>
+                <div class="mt-2 flex">
+                    <ShButton variant="outline" size="sm" onclick={importComfyWorkflow}>
+                        <HardDriveUploadIcon />{language.settingActionImport}
+                    </ShButton>
+                </div>
+            </div>
 
             <SettingRowLayout item={f('ob12', `Timeout (sec)`, 'comfyTimeout')}>
     {#snippet control()}<NumberInput className="w-24" size="sm" padding bind:value={DBState.db.comfyConfig.timeout} min={1} max={120}/>{/snippet}
