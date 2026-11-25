@@ -215,6 +215,11 @@ function getSnapshotLimits() {
 // first, and that flush can take a new snapshot and trim the oldest one —
 // which may be the very snapshot being restored.
 let restoringSnapshotKey = null;
+// Snapshot taken right before a backup import replaces the database, kept
+// until the import is done: the plugin-storage split near its end forces
+// another snapshot, and with a small count or byte limit that trim dropped
+// the only copy from before the import.
+let preImportSnapshotKey = null;
 
 function trimSnapshotsToLimits() {
     const { maxCount, maxBytes } = getSnapshotLimits();
@@ -238,7 +243,7 @@ function trimSnapshotsToLimits() {
         const isFirst = i === 0;
         const fitsByCount = i < maxCount;
         const fitsByBytes = runningBytes + e.size <= maxBytes;
-        if (e.key === restoringSnapshotKey) continue;
+        if (e.key === restoringSnapshotKey || e.key === preImportSnapshotKey) continue;
         if (isFirst || (fitsByCount && fitsByBytes)) {
             runningBytes += e.size;
         } else {
@@ -306,6 +311,9 @@ function snapshotUsage() {
     return { count: keys.length, bytes, logicalBytes };
 }
 
+// Last snapshot number handed out by this process (see the stamp below).
+let lastSnapshotStamp = 0;
+
 // `force` skips the cooldown — used before one-way migrations, where a
 // snapshot of the pre-migration blob is the only rollback path.
 function createBackupAndRotate({ force = false } = {}) {
@@ -323,16 +331,36 @@ function createBackupAndRotate({ force = false } = {}) {
         return;
     }
 
-    const backupKey = `${DB_BACKUP_PREFIX}${(now / 100).toFixed()}.bin`;
+    // Keys have 100 ms resolution, and a new snapshot must sort newest (trim
+    // keeps the newest). Two snapshots inside one step (the forced one before
+    // a backup import, then the one the plugin-storage split forces right after
+    // it) shared a key, so the second overwrote the only pre-import copy; and a
+    // number below one already handed out would be trimmed at once. Count up
+    // from the last one, skipping keys left from before a restart. The key
+    // stays digits. The first time, start above the existing snapshots: a
+    // clock set back (a board without a clock booting before time sync) would
+    // otherwise give the new one the oldest number.
+    if (lastSnapshotStamp === 0) {
+        for (const key of listSnapshotKeys()) {
+            const existing = Number(key.slice(DB_BACKUP_PREFIX.length, -4));
+            if (Number.isFinite(existing) && existing > lastSnapshotStamp) lastSnapshotStamp = existing;
+        }
+    }
+    let stamp = Math.max(Number((now / 100).toFixed()), lastSnapshotStamp + 1);
+    let backupKey = '';
     // Blob + plugin rows land atomically so a snapshot never exists half-made.
     sqliteDb.transaction(() => {
+        while (kvSize(`${DB_BACKUP_PREFIX}${stamp}.bin`) !== null) stamp++;
+        backupKey = `${DB_BACKUP_PREFIX}${stamp}.bin`;
         kvCopyValue('database/database.bin', backupKey);
         pluginStorage.snapshotTo(snapshotPluginId(backupKey));
     })();
+    lastSnapshotStamp = stamp;
     // Advance the cooldown only once the snapshot is committed: a throw above
     // must not suppress the next attempt for the whole interval.
     lastBackupTime = now;
     trimSnapshotsToLimits();
+    return backupKey;
 }
 
 // The flush that took the persist timer, while it is still writing.
@@ -3009,7 +3037,16 @@ async function assertBackupDatabaseDecodable(raw) {
 
 // ─── Shared backup import logic ─────────────────────────────────────────────
 // Accepts any async iterable of Buffer chunks (HTTP request body, file stream, etc.)
-async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0, onProgress = null } = {}) {
+async function importBackupFromSource(dataSource, options) {
+    try {
+        return await importBackupFromSourceUnguarded(dataSource, options);
+    } finally {
+        // However the import ended, the pre-import snapshot rotates normally again.
+        preImportSnapshotKey = null;
+    }
+}
+
+async function importBackupFromSourceUnguarded(dataSource, { maxBytes = 0, totalBytes = 0, onProgress = null } = {}) {
     const BATCH_SIZE = 5000;
     // Defer Buffer.concat until enough bytes for the next entry are buffered.
     // Concatenating on every chunk arrival is O(n²) when a single entry (e.g.
@@ -3096,7 +3133,7 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     // Always snapshot the live database right before it is replaced. The
     // default cooldown could skip this when an autosave snapshot landed
     // within the last few minutes, leaving no pre-import copy to restore.
-    createBackupAndRotate({ force: true });
+    preImportSnapshotKey = createBackupAndRotate({ force: true }) ?? null;
 
     sqliteDb.pragma('synchronous = OFF');
 
@@ -9523,8 +9560,10 @@ async function startServer() {
     }
 }
 
-// Graceful shutdown: flush pending patches and checkpoint WAL before exit
-for (const sig of ['SIGTERM', 'SIGINT']) {
+// Graceful shutdown: flush pending patches and checkpoint WAL before exit.
+// SIGHUP comes when the window or terminal closes (Windows console, Termux
+// session); without a listener Node dies on it at once, even under nohup.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
     process.on(sig, async () => {
         console.log(`[Server] Received ${sig}, flushing pending data...`);
         stopTunnel();

@@ -280,6 +280,16 @@ async function main() {
         log('Bundled Node unchanged; skipping bin/ replacement.');
     }
 
+    // The certificate folder is not in the package: carry it into the new
+    // server/ before Phase 1 moves the old one out (the in-app updater does the same).
+    const sslSrc = path.join(ROOT, 'server', 'node', 'ssl', 'certificate');
+    if (fs.existsSync(sslSrc)) {
+        const sslDst = path.join(extractedRoot, 'server', 'node', 'ssl', 'certificate');
+        fs.mkdirSync(path.dirname(sslDst), { recursive: true });
+        fs.cpSync(sslSrc, sslDst, { recursive: true });
+        log('Keeping SSL certificates.');
+    }
+
     // Phase 1: move old files to backup (safer than immediate delete)
     log('Replacing files...');
     const keep = new Set(['save', 'backups', '.installed-version', MANIFEST_NAME, '.update-tmp', 'scripts', '.env', '.npmrc', '.portable']);
