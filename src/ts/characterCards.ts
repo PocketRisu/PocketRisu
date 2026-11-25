@@ -24,6 +24,13 @@ const EXTERNAL_HUB_URL = 'https://sv.risuai.xyz';
 const NIGHTLY_HUB_URL = 'https://nightly.sv.risuai.xyz'
 export const hubURL = '/hub-proxy';
 
+export function isTrustedHubOrigin(origin: string) {
+    if (origin === EXTERNAL_HUB_URL || origin === NIGHTLY_HUB_URL || origin === window.location.origin) {
+        return true;
+    }
+    return import.meta.env.DEV && (origin === 'http://127.0.0.1' || origin.startsWith('http://127.0.0.1:'));
+}
+
 export async function importCharacter() {
     try {
         const files = await selectFileByDom(["*"], 'multiple')
