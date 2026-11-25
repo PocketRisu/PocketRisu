@@ -13,11 +13,12 @@ import { alertClear, alertConfirm, alertConfirmMulti, alertError, alertMd, alert
 import { hasher } from "./parser/parser.svelte";
 import { characterURLImport, hubURL } from "./characterCards";
 import { defaultJailbreak, defaultMainPrompt, oldJailbreak, oldMainPrompt } from "./storage/defaultPrompts";
-import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, normalizeJSON, RisuSaveEncoder, RisuSavePatcher, type toSaveType } from "./storage/risuSave";
+import { decodeRisuSave, encodeRisuSaveLegacy, findDangerousChatOps, normalizeJSON, RisuSaveEncoder, RisuSavePatcher, type RisuSavePatcherSnapshot, type toSaveType } from "./storage/risuSave";
 import { isHydrating, saveChatToServer, ensureChatHydrated, chatToStub, classifyChat, convertStubsToPlaceholders } from "./storage/chatStorage";
 import { AutoStorage } from "./storage/autoStorage";
 import {
     ConflictError,
+    isRequestTimeout,
     type PersistWarning,
     type AssetManifestDescriptor,
     type AssetManifestOperation,
@@ -791,6 +792,16 @@ export async function saveDb() {
     }
 
     let patcher = new RisuSavePatcher()
+    // The patcher's state from before this attempt's set(), until the server
+    // has taken the attempt (patch or full write answered, or a rebase put
+    // the server's data in place). set() moves the baseline to the local
+    // state before the request is sent; when the attempt fails, triggerSave
+    // restores this so the retry sends the failed edits again and a rebase
+    // compares against what the server actually had (#114).
+    let unconfirmedAttempt: { patcher: RisuSavePatcher, snapshot: RisuSavePatcherSnapshot } | null = null
+    // The last attempt ended because a request got no answer in time; the
+    // link is then probably down (see flushSavesImpl).
+    let lastAttemptTimedOut = false
     if (supportsPatchSync) {
         await patcher.init(patchSyncBaseline ?? getDatabase())
         activeSavePatcher = patcher
@@ -1119,7 +1130,7 @@ export async function saveDb() {
             return
         }
         try {
-            const serverBytes = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
+            const serverBytes = await forageStorage.getItem('database/database.bin', { saveDeadline: true }) as unknown as Uint8Array
             const readEtag = forageStorage.getDbEtag()
             if (!serverBytes || serverBytes.length === 0 || readEtag !== writtenEtag) {
                 // Someone else wrote meanwhile (or the read did not match the
@@ -1177,28 +1188,41 @@ export async function saveDb() {
     ) {
         const etagBeforeRebase = forageStorage.getDbEtag()
         forageStorage.setDbEtag(conflictEtag ?? null)
-        const latestData = await forageStorage.getItem('database/database.bin') as unknown as Uint8Array
-        if (latestData && latestData.length > 0) {
-            const latestDb = await decodeRisuSave(latestData) as Database
-            const localNames = new Map<string, string>(
-                (Array.isArray(db.characters) ? db.characters : [])
-                    .filter((char) => char?.chaId)
-                    .map((char) => [char.chaId, char.name || char.chaId] as [string, string]),
+        const localNames = new Map<string, string>(
+            (Array.isArray(db.characters) ? db.characters : [])
+                .filter((char) => char?.chaId)
+                .map((char) => [char.chaId, char.name || char.chaId] as [string, string]),
+        )
+        let latestDb: Database
+        // Merges the live DB and tracker as they are at the call. Changes
+        // still waiting in the tracker (queued after this save took its
+        // batch) are kept too: queued characters whole, queued chats on
+        // their own.
+        const mergeLatest = () => {
+            const generating = generatingCharacters(db)
+            toSave = withTrackedCharacters(toSave, [...generating.keys(), ...changeTracker.character])
+            const merged = mergeServerDbWithTrackedLocalChanges(
+                latestDb, db, toSave, safeStructuredClone, convertStubsToPlaceholders, syncedArchivedIds, syncedBaselineDb, normalizeJSON,
+                changeTracker.chat,
             )
-            // Merges the live DB and tracker as they are at the call. Changes
-            // still waiting in the tracker (queued after this save took its
-            // batch) are kept too: queued characters whole, queued chats on
-            // their own.
-            const mergeLatest = () => {
-                const generating = generatingCharacters(db)
-                toSave = withTrackedCharacters(toSave, [...generating.keys(), ...changeTracker.character])
-                const merged = mergeServerDbWithTrackedLocalChanges(
-                    latestDb, db, toSave, safeStructuredClone, convertStubsToPlaceholders, syncedArchivedIds, syncedBaselineDb, normalizeJSON,
-                    changeTracker.chat,
-                )
-                return { ...merged, generatingSkippedKeys: merged.skippedArchivedCharIds.flatMap((chaId) => generating.get(chaId) ?? []) }
+            return { ...merged, generatingSkippedKeys: merged.skippedArchivedCharIds.flatMap((chaId) => generating.get(chaId) ?? []) }
+        }
+        let merged: ReturnType<typeof mergeLatest>
+        // Until the swap below, a failure (the read, the decode, a deferred
+        // generation) leaves the revision this client held: the retry's patch
+        // then 409s with the server's etag and rebases again. Keeping the
+        // conflict etag would make that look like this client's own revision,
+        // and the full-write fallback would pass x-if-match over the other
+        // device's data (#114). triggerSave restores the patcher.
+        try {
+            const latestData = await forageStorage.getItem('database/database.bin', { saveDeadline: true }) as unknown as Uint8Array
+            // Nothing to merge onto: going on would leave the conflict etag
+            // adopted without the server's data, as above.
+            if (!latestData || latestData.length === 0) {
+                throw new Error('Rebase failed: the server returned no database')
             }
-            let merged = mergeLatest()
+            latestDb = await decodeRisuSave(latestData) as Database
+            merged = mergeLatest()
             // A character deactivated elsewhere while a generation streams into
             // it has no slot in the merged DB. The send pipeline addresses its
             // target by index into DBState.db, so end those generations first
@@ -1211,23 +1235,8 @@ export async function saveDb() {
                     // through its stale indices into the new database. Give
                     // up on this attempt instead: the changes are requeued by
                     // triggerSave's error path and the next attempt rebases
-                    // again once the generation has ended. The patcher's
-                    // baseline already advanced to this attempt's local state,
-                    // so restore the pre-rebase etag: the retry's patch then
-                    // 409s with the server's (foreign) etag and takes this
-                    // rebase path again, rather than the full-write fallback
-                    // an equal etag would select.
-                    forageStorage.setDbEtag(etagBeforeRebase)
-                    // And the patcher itself: its baseline advanced to this
-                    // attempt's local state in set(), which would make the
-                    // retry's rebase read every local root edit as
-                    // "unchanged since sync" and drop it. Re-seed from the
-                    // pre-attempt baseline so the retry repeats this attempt.
-                    if (supportsPatchSync && syncedBaselineDb) {
-                        patcher = new RisuSavePatcher()
-                        await patcher.init(syncedBaselineDb)
-                        activeSavePatcher = patcher
-                    }
+                    // again once the generation has ended (the etag and the
+                    // patcher are restored as for any failure here).
                     requeueTrackedChanges(toSave)
                     throw new Error('Rebase deferred: a generation for a character deactivated elsewhere has not ended yet')
                 }
@@ -1236,48 +1245,54 @@ export async function saveDb() {
                 // again; nothing awaits between the last merge and the swap.
                 merged = mergeLatest()
             }
-            const { mergedDb, skippedArchivedCharIds } = merged
-            const selectedChaId = getCurrentCharacter()?.chaId
-            setDatabase(mergedDb)
-            // selectedCharID is an index into db.characters; the merged array
-            // follows the server's order and may have gained or lost entries,
-            // so re-point it at the same character (or clear it if gone).
-            if (selectedChaId && !skippedArchivedCharIds.includes(selectedChaId)) {
-                const idx = (mergedDb.characters ?? []).findIndex((char) => char?.chaId === selectedChaId)
-                if (idx === -1) {
-                    deselectCharacter()
-                } else if (idx !== get(selectedCharID)) {
-                    selectedCharID.set(idx)
-                }
+        } catch (error) {
+            forageStorage.setDbEtag(etagBeforeRebase)
+            throw error
+        }
+        const { mergedDb, skippedArchivedCharIds } = merged
+        const selectedChaId = getCurrentCharacter()?.chaId
+        setDatabase(mergedDb)
+        // The server's data is in place: the attempt is settled, and the
+        // patcher is re-seeded from it below.
+        unconfirmedAttempt = null
+        // selectedCharID is an index into db.characters; the merged array
+        // follows the server's order and may have gained or lost entries,
+        // so re-point it at the same character (or clear it if gone).
+        if (selectedChaId && !skippedArchivedCharIds.includes(selectedChaId)) {
+            const idx = (mergedDb.characters ?? []).findIndex((char) => char?.chaId === selectedChaId)
+            if (idx === -1) {
+                deselectCharacter()
+            } else if (idx !== get(selectedCharID)) {
+                selectedCharID.set(idx)
             }
-            // A send streaming into the old database object addresses it by
-            // captured indices; let it re-resolve them against the new one.
-            notifyDatabaseRebased()
-            if (skippedArchivedCharIds.length > 0) {
-                // Deactivated on another device while this one still held
-                // edits for them; the edits were dropped (see rebaseMerge).
-                const names = skippedArchivedCharIds.map((chaId) => localNames.get(chaId) ?? chaId).join(', ')
-                console.warn('[Save] Dropped local edits to characters deactivated elsewhere:', skippedArchivedCharIds)
-                addLog({
-                    level: 'warning',
-                    source: 'save',
-                    message: '[Save] Dropped local edits to characters deactivated on another device',
-                    description: skippedArchivedCharIds.join(', '),
-                })
-                notifyError(language.rebaseSkippedArchived(names))
-                if (selectedChaId && skippedArchivedCharIds.includes(selectedChaId)) {
-                    deselectCharacter()
-                }
+        }
+        // A send streaming into the old database object addresses it by
+        // captured indices; let it re-resolve them against the new one.
+        notifyDatabaseRebased()
+        if (skippedArchivedCharIds.length > 0) {
+            // Deactivated on another device while this one still held
+            // edits for them; the edits were dropped (see rebaseMerge).
+            const names = skippedArchivedCharIds.map((chaId) => localNames.get(chaId) ?? chaId).join(', ')
+            console.warn('[Save] Dropped local edits to characters deactivated elsewhere:', skippedArchivedCharIds)
+            addLog({
+                level: 'warning',
+                source: 'save',
+                message: '[Save] Dropped local edits to characters deactivated on another device',
+                description: skippedArchivedCharIds.join(', '),
+            })
+            notifyError(language.rebaseSkippedArchived(names))
+            if (selectedChaId && skippedArchivedCharIds.includes(selectedChaId)) {
+                deselectCharacter()
             }
+        }
 
-            if (supportsPatchSync) {
-                // Seed from the server's view, not the merged result: the
-                // retry then sends the overlaid local changes as a patch
-                // instead of an empty patch that 409s into a full write.
-                patcher = new RisuSavePatcher()
-                await patcher.init(latestDb)
-                activeSavePatcher = patcher
-            }
+        if (supportsPatchSync) {
+            // Seed from the server's view, not the merged result: the
+            // retry then sends the overlaid local changes as a patch
+            // instead of an empty patch that 409s into a full write.
+            patcher = new RisuSavePatcher()
+            await patcher.init(latestDb)
+            activeSavePatcher = patcher
         }
         requeueTrackedChanges(toSave)
         changed = true
@@ -1327,6 +1342,10 @@ export async function saveDb() {
                 await saveChatToServer(chaId, chatIndex, chatId, chat)
             } catch (e) {
                 console.error(`[Save] Failed to save chat ${chaId}/${chatId}:`, e)
+                // No answer: the link is probably down, and every other chat
+                // would wait out its own deadline. They stay queued with the
+                // rest of this attempt.
+                if (isRequestTimeout(e)) throw e
                 failedChats.push({ chaId, chatId, message: errorMessage(e) })
             }
         }
@@ -1356,7 +1375,11 @@ export async function saveDb() {
 
         if (supportsPatchSync && !options?.forceFullWrite) {
             syncedArchivedIds = patcher.baselineArchivedCharacterIds()
-            syncedBaselineDb = patcher.baselineDb()
+            // Taken before set() moves the baseline; restored if this attempt
+            // fails (see unconfirmedAttempt).
+            const snapshot = patcher.snapshot()
+            unconfirmedAttempt = { patcher, snapshot }
+            syncedBaselineDb = snapshot.baselineDb
             lap()
             const patchData = await patcher.set(db, safeStructuredClone(toSave))
             timing.patchSetMs = lap()
@@ -1530,6 +1553,7 @@ export async function saveDb() {
                 // device's write.
                 const syncedEtag = forageStorage.getDbEtag()
                 const patchResult = await forageStorage.patchItem('database/database.bin', patchData)
+                if (patchResult.success) unconfirmedAttempt = null
                 timing.patchRequestMs = lap()
                 timing.server = patchResult.serverTimings
                 saved = patchResult.success
@@ -1633,7 +1657,8 @@ export async function saveDb() {
             timing.fullEncodeMs = lap()
             const currentEtag = forageStorage.getDbEtag()
             try {
-                await forageStorage.setItem('database/database.bin', dbData, currentEtag ?? undefined)
+                await forageStorage.setItem('database/database.bin', dbData, currentEtag ?? undefined, { saveDeadline: true })
+                unconfirmedAttempt = null
             } catch (conflictErr) {
                 if (conflictErr instanceof ConflictError) {
                     if (conflictErr.code === 'ARCHIVE_GUARD_REJECTED' && currentEtag && conflictErr.currentEtag === currentEtag) {
@@ -1701,8 +1726,10 @@ export async function saveDb() {
             const recordSample = (outcome: SaveOutcome) => recordSaveSample({
                 ...timing, at: Date.now(), outcome, totalMs: Math.round(performance.now() - startedAt),
             })
+            unconfirmedAttempt = null
             try {
                 const result = await persistTrackedChanges(toSave, timing, options)
+                lastAttemptTimedOut = false
                 if (result === 'saved') recordSample(timing.fullWriteReason ? 'full' : 'patch')
                 else if (result === 'retry') recordSample('retry')
                 if (result === 'saved') {
@@ -1732,6 +1759,11 @@ export async function saveDb() {
                 }
             } catch (error) {
                 recordSample('error')
+                if (unconfirmedAttempt) {
+                    unconfirmedAttempt.patcher.restore(unconfirmedAttempt.snapshot)
+                    unconfirmedAttempt = null
+                }
+                lastAttemptTimedOut = isRequestTimeout(error)
                 requeueTrackedChanges(toSave)
                 if (error instanceof SaveRejectedError) {
                     // Deterministic rejection: the generic backoff below would
@@ -1776,11 +1808,16 @@ export async function saveDb() {
     // A save attempt started after the caller's changes, and it succeeded.
     // triggerSave alone cannot promise that: it hands back a save already in
     // flight (which may predate the changes) and swallows failures.
+    // An attempt that got no answer in time ends the wait at once: the link
+    // is probably down, and every further attempt would wait out its own
+    // deadlines (minutes for a full write). The changes stay queued, and the
+    // callers report the save as failed.
     flushSavesImpl = async () => {
         await tick()
         for (let attempt = 0; attempt < 6; attempt++) {
             if (saveInFlight) {
                 await saveInFlight
+                if (lastAttemptTimedOut) return false
                 continue
             }
             if (gotChannel) return false // this tab no longer saves
@@ -1788,6 +1825,7 @@ export async function saveDb() {
             await triggerSave()
             if (saveSeq === before) return true // nothing was tracked
             if (lastSavedSeq === saveSeq) return true
+            if (lastAttemptTimedOut) return false
         }
         return false
     }
