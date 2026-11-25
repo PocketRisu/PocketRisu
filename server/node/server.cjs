@@ -9560,8 +9560,10 @@ async function startServer() {
     }
 }
 
-// Graceful shutdown: flush pending patches and checkpoint WAL before exit
-for (const sig of ['SIGTERM', 'SIGINT']) {
+// Graceful shutdown: flush pending patches and checkpoint WAL before exit.
+// SIGHUP comes when the window or terminal closes (Windows console, Termux
+// session); without a listener Node dies on it at once, even under nohup.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
     process.on(sig, async () => {
         console.log(`[Server] Received ${sig}, flushing pending data...`);
         stopTunnel();
