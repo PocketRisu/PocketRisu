@@ -8,7 +8,7 @@
     import { alertError, notifySuccess } from "src/ts/alert";
     import { DBState } from 'src/ts/stores.svelte';
     import { CharConfigSubMenu, MobileGUI, selectedCharID, hypaV3ModalOpen } from "../../ts/stores.svelte";
-    import { PlusIcon, SmileIcon, TrashIcon, UserIcon, ActivityIcon, BookIcon, Braces, Volume2Icon, DownloadIcon, HardDriveUploadIcon, Share2Icon, ImageIcon, ImageOffIcon, ArrowUp, ArrowDown, TriangleAlertIcon } from '@lucide/svelte'
+    import { PlusIcon, SmileIcon, TrashIcon, Trash2Icon, UserIcon, ActivityIcon, BookIcon, Braces, Volume2Icon, DownloadIcon, HardDriveUploadIcon, Share2Icon, ImageIcon, ImageOffIcon, ArrowUp, ArrowDown, TriangleAlertIcon } from '@lucide/svelte'
     import Check from "../UI/GUI/CheckInput.svelte";
     import { addCharEmotion, addingEmotion, getCharImage, rmCharEmotion, selectCharImg, removeChar, changeCharImage } from "../../ts/characters";
     import { archiveCharacter } from "../../ts/characterArchive";
@@ -35,7 +35,7 @@ import ShButton from "../UI/GUI/ShButton.svelte";
     import MultiLangInput from "../UI/GUI/MultiLangInput.svelte";
     import { applyModule } from "src/ts/process/modules";
     import { exportCharacterPackage, importPackageToCharacter } from "src/ts/characterPackage";
-    import { exportRegex, importRegex } from "src/ts/process/scripts";
+    import { confirmDeleteAllRegex, exportRegex, importRegex } from "src/ts/process/scripts";
     import SliderInput from "../UI/GUI/SliderInput.svelte";
 
     let iconRemoveMode = $state(false)
@@ -816,6 +816,11 @@ import ShButton from "../UI/GUI/ShButton.svelte";
             <button class="font-medium cursor-pointer hover:text-primary" onclick={async () => {
                 DBState.db.characters[$selectedCharID].customscript = await importRegex(DBState.db.characters[$selectedCharID].customscript)
             }}><HardDriveUploadIcon /></button>
+            <button class="font-medium cursor-pointer hover:text-primary disabled:opacity-40 disabled:cursor-default disabled:hover:text-textcolor2" title={language.regexDeleteAll} aria-label={language.regexDeleteAll} disabled={!DBState.db.characters[$selectedCharID].customscript?.length} onclick={async () => {
+                if(await confirmDeleteAllRegex(DBState.db.characters[$selectedCharID].customscript)){
+                    DBState.db.characters[$selectedCharID].customscript = []
+                }
+            }}><Trash2Icon /></button>
         </div>
 
         <span class="text-textcolor mt-4">{language.triggerScript} <Help key="triggerScript"/></span>

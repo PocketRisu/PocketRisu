@@ -2,7 +2,7 @@ import { get } from "svelte/store";
 import { CharEmotion, selectedCharID } from "../stores.svelte";
 import { type character, type customscript, getDatabase, getCurrentCharacter, getCurrentChat } from "../storage/database.svelte";
 import { downloadFile, loadAssetManifestItems } from "../globalApi.svelte";
-import { alertError, notifySuccess } from "../alert";
+import { alertConfirm, alertError, notifySuccess } from "../alert";
 import { language } from "src/lang";
 import { selectSingleFile } from "../util";
 import { assetRegex, type CbsConditions, risuChatParser as risuChatParserOrg, type simpleCharacterArgument } from "../parser/parser.svelte";
@@ -37,6 +37,15 @@ export function exportRegex(s?:customscript[]){
     }), 'utf-8')
     downloadFile(`regexscript_export.json`,data)
     notifySuccess(language.successExport)
+}
+
+// Asks once before a whole regex list is cleared; false for an empty list.
+export async function confirmDeleteAllRegex(scripts?:customscript[]):Promise<boolean>{
+    const count = scripts?.length ?? 0
+    if(count === 0){
+        return false
+    }
+    return alertConfirm(language.regexDeleteAllConfirm(count))
 }
 
 export async function importRegex(o?:customscript[]):Promise<customscript[]>{

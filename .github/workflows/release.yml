@@ -315,13 +315,15 @@ jobs:
             exit 1
           fi
           echo "Server booted and served / successfully."
-          # Remove boot side effects so they don't ship in the archive.
+          # Remove boot side effects so they don't ship in the archive. The
+          # server creates backups/ at boot; shipped, older updaters replaced
+          # the user's backups/ with it.
           # Retried: on Windows, file locks can outlive the process briefly.
           for i in 1 2 3; do
-            rm -rf save smoke.log 2>/dev/null && break
+            rm -rf save backups smoke.log 2>/dev/null && break
             sleep 2
           done
-          if [ -e save ] || [ -e smoke.log ]; then
+          if [ -e save ] || [ -e backups ] || [ -e smoke.log ]; then
             echo "Failed to remove smoke test artifacts."
             exit 1
           fi

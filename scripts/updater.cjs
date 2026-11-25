@@ -342,6 +342,10 @@ async function main() {
             if (skipMove.has(entry)) continue;
             const src = path.join(extractedRoot, entry);
             const dest = path.join(ROOT, entry);
+            // Phase 1 left the keep entries in place, so the rm below would
+            // delete them: an older release shipped an empty backups/ (left by
+            // the build's boot test) and replaced the user's server backups.
+            if (keep.has(entry) && fs.existsSync(dest)) continue;
             if (fs.existsSync(dest)) {
                 fs.rmSync(dest, { recursive: true, force: true });
             }

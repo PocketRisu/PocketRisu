@@ -263,16 +263,18 @@ function createModelJobs(opts = {}) {
     // returns the eviction set — aux jobs, claimed jobs and the oldest go
     // first. (An unclaimed aux job — client died mid-request — is worthless:
     // nothing ever recovers it, so it must not crowd out unrecovered mains.)
+    // An aborted job is never recovered either (the client recovers 'done'
+    // and reports 'failed'; the user stopped it), so it gets no priority.
     const stmtTerminalOverflow = db.prepare(`
         SELECT id FROM model_jobs WHERE status IN ('done', 'failed', 'aborted')
-        ORDER BY (CASE WHEN claimed = 0 AND kind = 'main' THEN 0 ELSE 1 END) ASC, ended_at DESC
+        ORDER BY (CASE WHEN claimed = 0 AND kind = 'main' AND status != 'aborted' THEN 0 ELSE 1 END) ASC, ended_at DESC
         LIMIT -1 OFFSET ?
     `);
     // Age expiry only spares unclaimed MAIN rows — a response no client has
     // recovered yet (e.g. offline for a week) is kept until the overflow cap
-    // evicts it. Claimed rows and aux jobs expire by age.
+    // evicts it. Claimed rows, aux jobs and aborted jobs expire by age.
     const stmtTerminalExpired = db.prepare(`
-        SELECT id FROM model_jobs WHERE status IN ('done', 'failed', 'aborted') AND (claimed = 1 OR kind = 'aux') AND ended_at < ?
+        SELECT id FROM model_jobs WHERE status IN ('done', 'failed', 'aborted') AND (claimed = 1 OR kind = 'aux' OR status = 'aborted') AND ended_at < ?
     `);
     const stmtPendingUpsert = db.prepare(`
         INSERT INTO pending_sends (chat_id, generation_id, created_at) VALUES (?, ?, ?)

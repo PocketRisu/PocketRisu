@@ -37,6 +37,7 @@ import { resolveWireModelId } from "src/ts/preset/adapter/wireInvariants";
 import { pumpPresetStream } from "./presetStreamPump";
 import { makeJobFetch, ModelJobBusyError, ModelJobConnectionLostError } from "./jobFetch";
 import { toLogSource, toRequestKind } from "./logSource";
+import { removeEmptyChatMessages } from "../emptyMessages";
 import { resolveChatModelBinding, classicModelIdFor, buildModelPresetCredential, applyPromptPresetParams, presetSupportsVision } from "./modelPresetBinding";
 import { expandAdapterMessages, toAdapterMessage, toolResponseText } from "./modelPresetMessages";
 import { isLocalNetworkUrl } from "src/ts/network/localNetwork";
@@ -201,10 +202,14 @@ export async function requestChatData(arg:requestDataArgument, model:ModelModeEx
             catch(e){
                 console.error(e)
             }
-            
     
             da = await requestChatDataMain({
                 ...arg,
+                // Plugins and the request trigger can leave a message empty; a
+                // whitespace-only message fails the whole request on Anthropic.
+                // Only this attempt's copy is filtered: a retry runs the plugins
+                // again on arg.formated, which must stay as they left it.
+                formated: removeEmptyChatMessages(arg.formated),
                 staticModel: fallBackModels[fallbackIndex],
                 tools: tools,
             }, model, abortSignal)
@@ -1870,8 +1875,9 @@ async function requestCohere(arg:RequestDataArgumentExtended):Promise<requestDat
         }
     }
 
+    // Empty when the prompt was only the user message just taken above.
     const firstChat = formated[0]
-    if(firstChat.role === 'system'){
+    if(firstChat?.role === 'system'){
         preamble = firstChat.content
         formated.shift()
     }
