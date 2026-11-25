@@ -256,7 +256,9 @@ async function tikJS(text:string, model='cl100k_base') {
         tikParsers.set(model, pending)
         pending.catch(() => tikParsers.delete(model))
     }
-    return (await pending).encode(text)
+    // Count special token strings such as <|endoftext|> as plain text: by default
+    // tiktoken throws on them, which stopped generation when a chat contained one (#110).
+    return (await pending).encode(text, [], [])
 }
 
 async function geminiTokenizer(text:string) {
