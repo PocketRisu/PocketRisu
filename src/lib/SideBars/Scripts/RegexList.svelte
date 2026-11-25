@@ -4,8 +4,9 @@
     import Sortable from "sortablejs";
     import { sleep, sortableOptions } from "src/ts/util";
     import { onDestroy, onMount } from "svelte";
-  import { DownloadIcon, HardDriveUploadIcon, PlusIcon } from "@lucide/svelte";
-  import { exportRegex, importRegex } from "src/ts/process/scripts";
+  import { DownloadIcon, HardDriveUploadIcon, PlusIcon, Trash2Icon } from "@lucide/svelte";
+  import { confirmDeleteAllRegex, exportRegex, importRegex } from "src/ts/process/scripts";
+  import { language } from "src/lang";
     interface Props {
         value?: customscript[];
         buttons?: boolean
@@ -106,5 +107,10 @@
         <button class="rounded-md text-textcolor2 hover:text-textcolor focus-within:text-textcolor" onclick={async () => {
             value = await importRegex(value)
         }}><HardDriveUploadIcon /></button>
+        <button class="rounded-md text-textcolor2 hover:text-textcolor focus-within:text-textcolor disabled:opacity-40 disabled:cursor-default disabled:hover:text-textcolor2" title={language.regexDeleteAll} aria-label={language.regexDeleteAll} disabled={!value.length} onclick={async () => {
+            if(await confirmDeleteAllRegex(value)){
+                value = []
+            }
+        }}><Trash2Icon /></button>
     </div>
 {/if}

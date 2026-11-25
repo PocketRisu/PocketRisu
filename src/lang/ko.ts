@@ -607,6 +607,8 @@ export const languageKorean = {
   localLoreInfo: "챗 로어북은 이 채팅에만 적용됩니다.",
   removeConfirm: "정말로 삭제하시겠습니까: ",
   removeConfirm2: "정말로, 정말로 삭제하시겠습니까: ",
+  regexDeleteAll: "정규식 전체 삭제",
+  regexDeleteAllConfirm: (count: number) => `정규식 ${count}개를 모두 삭제할까요? 되돌릴 수 없습니다.`,
   exportConfirm: "엑스포트하시겠습니까?",
   insertOrder: "배치 순서",
   activationKeys: "활성화 키",

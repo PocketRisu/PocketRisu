@@ -533,6 +533,8 @@ export const languageEnglish = {
     localLoreInfo: "Chat Lorebook only applies to the current chat.",
     removeConfirm: "Do you really want to remove: ",
     removeConfirm2: "Do you REALLY want to remove: ",
+    regexDeleteAll: "Delete all regex scripts",
+    regexDeleteAllConfirm: (count: number) => `Delete all ${count} regex scripts? This cannot be undone.`,
     exportConfirm: "Do you want to export this?",
     insertOrder: "Insertion Order",
     activationKeys: "Activation keys",
