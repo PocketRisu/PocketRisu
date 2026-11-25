@@ -1429,6 +1429,7 @@ import { isMobile } from 'src/ts/platform'
                     role='char'
                     img={getCharImage(DBState.db.characters[$selectedCharID].image, 'css')}
                     idx={-1}
+                    totalLength={currentChat.length}
                     altGreeting={DBState.db.characters[$selectedCharID].alternateGreetings.length > 0}
                     disabled={DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].firstMessageDisabled === true}
                     largePortrait={DBState.db.characters[$selectedCharID].largePortrait}
