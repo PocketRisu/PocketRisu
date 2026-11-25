@@ -52,17 +52,22 @@ function writeLocalMeta(map: Record<string, PluginOwnerRecord>): void {
 }
 
 // ── write side (called from V3 storage wrappers) ────────────────────────────
+// Only an owner change is written. updatedAt is never read, and rewriting it
+// on every plugin write changed the root key pluginStorageMeta each time, so
+// every save carried it (and the whole local map was rewritten).
 export function recordOwner(backend: PluginStorageBackend, key: string, plugin: string): void | Promise<void> {
     if (!plugin) return;
     const record: PluginOwnerRecord = { plugin, updatedAt: Date.now() };
     if (backend === "save") {
         const db = getDatabase();
+        if (db.pluginStorageMeta?.[key]?.plugin === plugin) return;
         db.pluginStorageMeta ??= {};
         db.pluginStorageMeta[key] = record;
         return;
     }
     if (backend === "local") {
         const map = readLocalMeta();
+        if (map[key]?.plugin === plugin) return;
         map[key] = record;
         writeLocalMeta(map);
         return;
