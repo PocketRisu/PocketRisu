@@ -33,6 +33,7 @@ import { forageStorage, readImage, resolvePrioritizedAssetManifestNames } from "
 import { pluginV2 } from "../plugins/plugins.svelte";
 import { abortGeneration, chatGenKey, chatProcessStage, endGeneration, isChatGenerating, onDatabaseRebased, registerAbort, setGenerationStage, startGeneration } from "./generationState";
 import { clearPendingSend, registerPendingSend } from "./request/pendingSends";
+import { writeContinuedMessage } from "./continueMessage";
 
 export interface OpenAIChat{
     role: 'system'|'user'|'assistant'|'function'
@@ -1864,17 +1865,15 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             result = inlayResult.text
             emoChanged = result2.emoChanged
             if(i === 0 && arg.continue){
-                DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex] = {
+                // In place, keeping the original chatId — see the continue restamp note.
+                writeContinuedMessage(DBState.db.characters[selectedChar].chats[selectedChat].message, msgIndex, {
                     role: 'char',
                     data: result,
                     saying: currentChar.chaId,
                     time: Date.now(),
                     generationInfo,
                     promptInfo,
-                    // Keep the original message identity: older jobs match on it
-                    // (jobRecovery secondary match) — see the continue restamp note.
-                    chatId: DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex]?.chatId ?? generationId,
-                }       
+                }, generationId)
                 if(inlayResult.promise){
                     const p = await inlayResult.promise
                     DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = p
