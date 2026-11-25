@@ -908,6 +908,39 @@ class JsonSizeMap extends Map<string, string> {
         this.totalBytes = 0
         super.clear()
     }
+
+    /** A copy that shares the strings (no byte counting again). */
+    copy(): JsonSizeMap {
+        const out = new JsonSizeMap()
+        for (const [key, value] of this) super.set.call(out, key, value)
+        out.sizes = new Map(this.sizes)
+        out.totalBytes = this.totalBytes
+        return out
+    }
+}
+
+/** A baseline copy that set() cannot change: its arrays are copied, the
+ *  entries shared. Keys stay as they are (an absent key would otherwise
+ *  appear as undefined and change hash()). */
+function copyBaseline(db: any): any {
+    if (!db) return db
+    const out = { ...db }
+    if (Array.isArray(db.characters)) out.characters = db.characters.slice()
+    if (Array.isArray(db.modules)) out.modules = db.modules.slice()
+    return out
+}
+
+/** RisuSavePatcher state from before a set(), for undoing it (see snapshot()). */
+export interface RisuSavePatcherSnapshot {
+    /** The baseline as it was: what the server held at the last sync. */
+    readonly baselineDb: any
+    readonly hashBlocks: { [key: string]: number }
+    readonly lastRootKeyJsons: JsonSizeMap
+    readonly lastCharJsons: JsonSizeMap
+    readonly lastModuleJsons: JsonSizeMap
+    readonly presetBytes: number
+    readonly moduleItemHashes: Map<string, number>
+    readonly lastChangedCharacterIds: string[]
 }
 
 export class RisuSavePatcher {
@@ -965,9 +998,48 @@ export class RisuSavePatcher {
 
     /** The baseline itself (what this client last synced against). Read-only
      *  by contract: set() replaces it with a fresh object rather than mutating
-     *  it, so a reference taken before set() stays the pre-attempt view. */
+     *  it, so a reference taken before set() stays the pre-attempt view of the
+     *  ROOT keys. set() does replace entries of its characters, modules and
+     *  botPresets in place; snapshot() keeps those too. */
     baselineDb(): any {
         return this.lastSyncedDb ?? null
+    }
+
+    /**
+     * The state as it is, for restore() when the save of the next set() fails:
+     * set() moves the baseline to the local state before the server has it,
+     * and a retry diffed from there would leave out the failed edits. Cheap:
+     * set() replaces baseline entries and cache values rather than mutating
+     * them, so shallow copies hold the old ones.
+     */
+    snapshot(): RisuSavePatcherSnapshot {
+        return {
+            baselineDb: copyBaseline(this.lastSyncedDb),
+            hashBlocks: { ...this.hashBlocks },
+            lastRootKeyJsons: this.lastRootKeyJsons.copy(),
+            lastCharJsons: this.lastCharJsons.copy(),
+            lastModuleJsons: this.lastModuleJsons.copy(),
+            presetBytes: this.presetBytes,
+            moduleItemHashes: new Map(this.moduleItemHashes),
+            lastChangedCharacterIds: this.lastChangedCharacterIds.slice(),
+        }
+    }
+
+    /**
+     * Back to a snapshot() of this patcher. An asset manifest baseline update
+     * (updateAssetManifestBaseline) made after the snapshot is undone too; the
+     * next patch then conflicts and the save falls back to a rebase or a full
+     * write, which carry the descriptor from the live database.
+     */
+    restore(snapshot: RisuSavePatcherSnapshot) {
+        this.lastSyncedDb = copyBaseline(snapshot.baselineDb)
+        this.hashBlocks = { ...snapshot.hashBlocks }
+        this.lastRootKeyJsons = snapshot.lastRootKeyJsons.copy()
+        this.lastCharJsons = snapshot.lastCharJsons.copy()
+        this.lastModuleJsons = snapshot.lastModuleJsons.copy()
+        this.presetBytes = snapshot.presetBytes
+        this.moduleItemHashes = new Map(snapshot.moduleItemHashes)
+        this.lastChangedCharacterIds = snapshot.lastChangedCharacterIds.slice()
     }
 
     /** chaIds whose body changed against the baseline in the last set(). */

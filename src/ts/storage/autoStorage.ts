@@ -11,12 +11,12 @@ export class AutoStorage{
 
     realStorage:NodeStorage
 
-    async setItem(key:string, value:Uint8Array, etag?:string):Promise<string|null> {
-        await this.realStorage.setItem(key, value, etag)
+    async setItem(key:string, value:Uint8Array, etag?:string, options?: { saveDeadline?: boolean }):Promise<string|null> {
+        await this.realStorage.setItem(key, value, etag, options)
         return null
     }
-    async getItem(key:string):Promise<Buffer> {
-        return await this.realStorage.getItem(key)
+    async getItem(key:string, options?: { saveDeadline?: boolean }):Promise<Buffer> {
+        return await this.realStorage.getItem(key, options)
     }
     async keys(prefix: string = ''):Promise<string[]>{
         await this.Init()
