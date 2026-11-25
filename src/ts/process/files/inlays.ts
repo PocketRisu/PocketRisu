@@ -441,28 +441,39 @@ export async function writeInlayImage(imgObj: HTMLImageElement, arg: { name?: st
     let drawWidth = 0
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
-    await new Promise((resolve) => {
+    if (!ctx) {
+        throw new Error('Canvas 2D context is unavailable')
+    }
+    await new Promise((resolve, reject) => {
         imgObj.onload = () => {
-            drawHeight = imgObj.height
-            drawWidth = imgObj.width
-            const maxPixels = 1024 * 1024
-            const currentPixels = drawHeight * drawWidth
-            if (currentPixels > maxPixels) {
-                const scaleFactor = Math.sqrt(maxPixels / currentPixels)
-                drawWidth = Math.floor(drawWidth * scaleFactor)
-                drawHeight = Math.floor(drawHeight * scaleFactor)
+            // A throw inside this callback would otherwise leave the promise pending forever.
+            try {
+                drawHeight = imgObj.height
+                drawWidth = imgObj.width
+                const maxPixels = 1024 * 1024
+                const currentPixels = drawHeight * drawWidth
+                if (currentPixels > maxPixels) {
+                    const scaleFactor = Math.sqrt(maxPixels / currentPixels)
+                    drawWidth = Math.floor(drawWidth * scaleFactor)
+                    drawHeight = Math.floor(drawHeight * scaleFactor)
+                }
+                canvas.width = drawWidth
+                canvas.height = drawHeight
+                ctx.drawImage(imgObj, 0, 0, drawWidth, drawHeight)
+                resolve(null)
+            } catch (error) {
+                reject(error)
             }
-            canvas.width = drawWidth
-            canvas.height = drawHeight
-            ctx.drawImage(imgObj, 0, 0, drawWidth, drawHeight)
-            resolve(null)
         }
     })
     const db = getDatabase()
     const [mimeType, ext, quality]: [string, string, number?] = db.inlayImageLossless
         ? ['image/png', 'png', undefined]
         : ['image/webp', 'webp', 0.85]
-    const imageBlob = await new Promise<Blob>(resolve => canvas.toBlob(resolve, mimeType, quality))
+    const imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType, quality))
+    if (!imageBlob) {
+        throw new Error('Failed to encode inlay image')
+    }
     const imgid = arg.id ?? v4()
     await setInlayAsset(imgid, { name: arg.name ?? imgid, data: imageBlob, ext, height: drawHeight, width: drawWidth, type: 'image' })
     return `${imgid}`

@@ -2057,9 +2057,10 @@ interface RisuaiPluginAPI {
      * Creates an inlay from image data, embeddable in chat messages via the
      * `{{inlay::id}}` syntax. Unlike `saveAsset`, inlays live in inlay storage
      * rather than the character card, so generating many images does not grow
-     * the card. The image is re-encoded as PNG (animated GIF/WEBP keep only the
-     * first frame) and downscaled to fit 1024x1024 total pixels, matching the
-     * built-in image generation inlays.
+     * the card. The image is re-encoded (animated GIF/WEBP keep only the first
+     * frame) and downscaled to fit 1024x1024 total pixels, matching the built-in
+     * image generation inlays. In PocketRisu it is stored as WebP, or as PNG when
+     * the user turns on "Save Inlay Images as Lossless".
      *
      * @param data - Image bytes (JPEG, PNG, GIF, WEBP, ...) as a Uint8Array, or
      * an image data URI string. Remote URLs are rejected — fetch them with

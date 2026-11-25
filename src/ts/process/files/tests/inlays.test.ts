@@ -692,6 +692,33 @@ describe('createInlayFromData', () => {
         )
         expect(nodeStorageMap.size).toBe(0)
     })
+
+    test('rejects and revokes the object URL when drawing the image throws', async () => {
+        fakeCtx.drawImage.mockImplementationOnce(() => {
+            throw new Error('draw failed')
+        })
+
+        await expect(createInlayFromData(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).rejects.toThrow(
+            /draw failed/,
+        )
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake-url')
+        expect(nodeStorageMap.size).toBe(0)
+    })
+
+    test('rejects when the canvas has no 2D context', async () => {
+        vi.mocked(document.createElement).mockImplementationOnce((tag: string, options?: any) => {
+            const el = origCreateElement(tag, options)
+            if (tag === 'canvas') {
+                ;(el as HTMLCanvasElement).getContext = (() => null) as any
+            }
+            return el
+        })
+
+        await expect(createInlayFromData('data:image/png;base64,aGVsbG8=')).rejects.toThrow(
+            /2D context/,
+        )
+        expect(nodeStorageMap.size).toBe(0)
+    })
 })
 
 // These properties run 100 samples with two asynchronous FileReader conversions
