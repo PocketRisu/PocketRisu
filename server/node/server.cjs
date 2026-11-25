@@ -9141,6 +9141,10 @@ app.post('/api/self-update', async (req, res) => {
             for (const e of newEntries) {
                 if (skipMove.has(e)) continue;
                 const dest = path.join(appDir, e);
+                // Phase 1 left the keep entries in place, so the rm below would
+                // delete them: an older release shipped an empty backups/ (left by
+                // the build's boot test) and replaced the user's server backups.
+                if (keep.has(e) && existsSync(dest)) continue;
                 await fs.rm(dest, { recursive: true, force: true }).catch(() => {});
                 await moveAcrossVolumes(path.join(sourceDir, e), dest);
                 moved.push(e);
