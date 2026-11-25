@@ -707,10 +707,11 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
         return pluginPermissionGate.request(plugin.name, await getPluginScriptHash(), permissionDesc, reconfirm)
     }
     // Database writes need the dbWrite permission (upstream 43e5576df). A write
-    // whose permission had to be asked is not applied: the plugin built its data
-    // before the dialog, and a reply may have streamed in while the dialog was
-    // open, so applying it could put back an older copy over newer messages.
-    // The answer is kept, so the plugin's next write goes through.
+    // whose permission had to be asked is rejected instead of applied: the plugin
+    // built its data before the dialog, and a reply may have streamed in while the
+    // dialog was open, so applying it could put back an older copy over newer
+    // messages. Rejecting (not returning) lets the plugin see that nothing was
+    // written. The answer is kept, so the plugin's next write goes through.
     const withDbWrite = <A extends any[]>(write: (...args: A) => unknown) => {
         return async (...args: A): Promise<void> => {
             const { granted, waited } = await pluginPermissionGate.requestDecision(plugin.name, await getPluginScriptHash(), 'dbWrite', 'periodically')
@@ -719,7 +720,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
             if(waited){
                 notifyInfo(language.dbWriteAllowedNextWrite.replace("{}", plugin.name))
-                return
+                throw new Error('dbWrite permission was just granted, so this write was not applied: the data may have changed while the user was asked. Read the data again and retry, or call requestPluginPermission("dbWrite") before writing.')
             }
             await write(...args)
         }

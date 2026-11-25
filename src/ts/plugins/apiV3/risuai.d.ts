@@ -1521,9 +1521,10 @@ interface RisuaiPluginAPI {
      * Sets the database (lightweight save)
      * The `plugins` property is ignored.
      * Requires the `dbWrite` permission; the write is skipped if the user declines.
-     * In PocketRisu the write that first asks for the permission is also skipped, because the
-     * data may have changed while the dialog was open; call `requestPluginPermission('dbWrite')`
-     * beforehand to avoid that.
+     * In PocketRisu the write that first asks for the permission is not applied either, because
+     * the data may have changed while the dialog was open: once the user allows it, the call
+     * rejects so the plugin can read the data again and retry. Call
+     * `requestPluginPermission('dbWrite')` beforehand to avoid that.
      * @param db - DatabaseSubset object to save, excluding `plugins`
      */
     setDatabaseLite(db: Omit<DatabaseSubset, 'plugins'>): Promise<void>;
@@ -1533,9 +1534,10 @@ interface RisuaiPluginAPI {
      * In `plugins`, only API 3.0 plugins that are new or whose script changed are applied,
      * each after the user confirms. Removing, reordering, enabling or disabling plugins is ignored.
      * Requires the `dbWrite` permission; the write is skipped if the user declines.
-     * In PocketRisu the write that first asks for the permission is also skipped, because the
-     * data may have changed while the dialog was open; call `requestPluginPermission('dbWrite')`
-     * beforehand to avoid that.
+     * In PocketRisu the write that first asks for the permission is not applied either, because
+     * the data may have changed while the dialog was open: once the user allows it, the call
+     * rejects so the plugin can read the data again and retry. Call
+     * `requestPluginPermission('dbWrite')` beforehand to avoid that.
      * @param db - DatabaseSubset object to save
      */
     setDatabase(db: DatabaseSubset): Promise<void>;

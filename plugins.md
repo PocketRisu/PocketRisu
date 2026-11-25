@@ -1184,7 +1184,7 @@ if (granted) {
 
 **Available permissions:** `'fetchLogs'`, `'db'`, `'dbWrite'`, `'mainDom'`, `'replacer'`, `'inlay'`
 
-`'dbWrite'` is requested automatically by `setDatabase`, `setDatabaseLite`, `setCharacter`, `setCharacterToIndex` and `setChatToIndex`. If the user declines, the write is skipped. In PocketRisu the write that triggers the permission dialog is skipped as well, because the data may have changed while the dialog was open; request `'dbWrite'` up front with `requestPluginPermission` to avoid that.
+`'dbWrite'` is requested automatically by `setDatabase`, `setDatabaseLite`, `setCharacter`, `setCharacterToIndex` and `setChatToIndex`. If the user declines, the write is skipped. In PocketRisu the write that triggers the permission dialog is not applied either, because the data may have changed while the dialog was open: once the user allows it, that call rejects with an error so the plugin can read the data again and retry. Request `'dbWrite'` up front with `requestPluginPermission` to avoid that.
 
 ### Fetch Logs
 
