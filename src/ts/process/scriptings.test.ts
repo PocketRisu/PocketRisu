@@ -264,3 +264,192 @@ test.each(['button', 'form'] as const)('keeps a %s script on the chat it started
   expect(opened).toEqual({ message: [], scriptstate: {} })
   expect(result.chat).toBe(started)
 })
+
+test('setFullChat preserves message metadata on an identity round-trip', async () => {
+  const message = [
+    {
+      role: 'user',
+      data: 'hello',
+      chatId: 'id-user',
+      time: 100,
+      name: 'alice',
+      otherUser: true,
+    },
+    {
+      role: 'char',
+      data: 'hi',
+      chatId: 'id-char',
+      time: 200,
+      saying: 'char-a',
+      generationInfo: { generationId: 'gen-1', model: 'model-x' },
+      promptInfo: { promptText: [] },
+    },
+  ]
+
+  const result = await runScripted(
+    `
+      function onStart(id)
+        setFullChat(id, getFullChat(id))
+      end
+    `,
+    {
+      char: {} as never,
+      chat: { message: structuredClone(message) } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual(message)
+})
+
+test('setFullChat matches messages by chatId and only overwrites role and data', async () => {
+  const result = await runScripted(
+    `
+      function onStart(id)
+        local chat = getFullChat(id)
+        chat[1].data = "edited"
+        chat[2].role = "user"
+        chat[2].time = 999
+        table.insert(chat, 1, { role = "char", data = "prepended" })
+        setFullChat(id, chat)
+      end
+    `,
+    {
+      char: {} as never,
+      chat: {
+        message: [
+          { role: 'user', data: 'first', chatId: 'id-1', time: 1 },
+          { role: 'char', data: 'second', chatId: 'id-2', time: 2, generationInfo: { generationId: 'gen-2' } },
+        ],
+      } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual([
+    { role: 'char', data: 'prepended' },
+    { role: 'user', data: 'edited', chatId: 'id-1', time: 1 },
+    { role: 'user', data: 'second', chatId: 'id-2', time: 2, generationInfo: { generationId: 'gen-2' } },
+  ])
+})
+
+test('setFullChat drops messages that are no longer present and does not alias duplicated chatIds', async () => {
+  const result = await runScripted(
+    `
+      function onStart(id)
+        local chat = getFullChat(id)
+        table.remove(chat, 1)
+        table.insert(chat, { role = chat[1].role, data = "copy", chatId = chat[1].chatId })
+        setFullChat(id, chat)
+      end
+    `,
+    {
+      char: {} as never,
+      chat: {
+        message: [
+          { role: 'user', data: 'first', chatId: 'id-1', time: 1 },
+          { role: 'char', data: 'second', chatId: 'id-2', time: 2 },
+        ],
+      } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual([
+    { role: 'char', data: 'second', chatId: 'id-2', time: 2 },
+    { role: 'char', data: 'copy' },
+  ])
+  expect(result.chat.message[0]).not.toBe(result.chat.message[1])
+})
+
+// PocketRisu: scripts written before getFullChat exposed chatId rebuild the
+// table as { role, data }. Their metadata is kept by position while the length
+// is unchanged (86f2fe41f); after an insert or a delete it is not guessed.
+test('setFullChat keeps metadata by position for a same-length rebuild without chatId', async () => {
+  const result = await runScripted(
+    `
+      function onStart(id)
+        local chat = getFullChat(id)
+        local rebuilt = {}
+        for i, m in ipairs(chat) do
+          rebuilt[i] = { role = m.role, data = m.data .. "!" }
+        end
+        setFullChat(id, rebuilt)
+      end
+    `,
+    {
+      char: {} as never,
+      chat: {
+        message: [
+          { role: 'user', data: 'first', chatId: 'id-1', time: 1 },
+          { role: 'char', data: 'second', chatId: 'id-2', time: 2, generationInfo: { generationId: 'gen-2' } },
+        ],
+      } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual([
+    { role: 'user', data: 'first!', chatId: 'id-1', time: 1 },
+    { role: 'char', data: 'second!', chatId: 'id-2', time: 2, generationInfo: { generationId: 'gen-2' } },
+  ])
+})
+
+test('setFullChat does not guess metadata by position after an insert without chatId', async () => {
+  const result = await runScripted(
+    `
+      function onStart(id)
+        setFullChat(id, {
+          { role = "char", data = "new" },
+          { role = "user", data = "first" },
+          { role = "char", data = "second" },
+        })
+      end
+    `,
+    {
+      char: {} as never,
+      chat: {
+        message: [
+          { role: 'user', data: 'first', chatId: 'id-1', time: 1 },
+          { role: 'char', data: 'second', chatId: 'id-2', time: 2 },
+        ],
+      } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual([
+    { role: 'char', data: 'new' },
+    { role: 'user', data: 'first' },
+    { role: 'char', data: 'second' },
+  ])
+})
+
+test('setFullChat does not reuse a message already claimed by chatId for a position fallback', async () => {
+  const result = await runScripted(
+    `
+      function onStart(id)
+        local chat = getFullChat(id)
+        setFullChat(id, {
+          { role = "user", data = "a" },
+          { role = chat[1].role, data = "moved", chatId = chat[1].chatId },
+        })
+      end
+    `,
+    {
+      char: {} as never,
+      chat: {
+        message: [
+          { role: 'user', data: 'first', chatId: 'id-1', time: 1 },
+          { role: 'char', data: 'second', chatId: 'id-2', time: 2 },
+        ],
+      } as never,
+      mode: 'start',
+    }
+  )
+
+  expect(result.chat.message).toEqual([
+    { role: 'user', data: 'a' },
+    { role: 'user', data: 'moved', chatId: 'id-1', time: 1 },
+  ])
+})
