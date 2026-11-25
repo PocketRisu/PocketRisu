@@ -30,7 +30,6 @@ vi.mock("./plugins/plugins.svelte", () => ({
 }));
 vi.mock("./process/files/inlays", () => ({ supportsInlayImage: () => false }));
 vi.mock("./parser/parser.svelte", () => ({ risuChatParser: (data: string) => data }));
-vi.mock("./process/models/local", () => ({ tokenizeGGUFModel: async () => [] }));
 vi.mock("./globalApi.svelte", () => ({ globalFetch: async () => ({ ok: false }) }));
 vi.mock("./storage/persistentKv", () => ({
     makeHashedStorageKey: async (prefix: string, key: string) => prefix + key,

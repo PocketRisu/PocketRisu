@@ -343,7 +343,7 @@ Use dedicated methods for standard attributes:
 
 ```javascript
 // For links, use createAnchorElement
-const link = rootDoc.createAnchorElement('https://example.com');
+const link = await rootDoc.createAnchorElement('https://example.com');
 
 // For styles, use style methods
 await element.setStyle('color', 'red');
@@ -908,6 +908,10 @@ const imageData = await Risuai.readImage('asset-id');
 
 // Save assets
 const savedPath = await Risuai.saveAsset(assetData);
+
+// Create an inlay from image data; renders in chat via {{inlay::<id>}}
+// Asks for the 'inlay' permission; returns null if the user declines
+const inlayId = await Risuai.createInlay(imageBytes, { name: 'generated.png' });
 ```
 
 #### Inlay Assets (user-attached images / audio / video)
@@ -1178,7 +1182,9 @@ if (granted) {
 }
 ```
 
-**Available permissions:** `'fetchLogs'`, `'db'`, `'mainDom'`, `'replacer'`
+**Available permissions:** `'fetchLogs'`, `'db'`, `'dbWrite'`, `'mainDom'`, `'replacer'`, `'inlay'`
+
+`'dbWrite'` is requested automatically by `setDatabase`, `setDatabaseLite`, `setCharacter`, `setCharacterToIndex` and `setChatToIndex`. If the user declines, the write is skipped. In PocketRisu the write that triggers the permission dialog is not applied either, because the data may have changed while the dialog was open: once the user allows it, that call rejects with an error so the plugin can read the data again and retry. Request `'dbWrite'` up front with `requestPluginPermission` to avoid that.
 
 ### Fetch Logs
 
@@ -1402,10 +1408,10 @@ Add clear comments and metadata:
     }, async () => {
         const char = await Risuai.getCharacter();
 
-        const rootDoc = Risuai.getRootDocument();
-        const body = rootDoc.querySelector('body');
+        const rootDoc = await Risuai.getRootDocument();
+        const body = await rootDoc.querySelector('body');
 
-        const infoBox = rootDoc.createElement('div');
+        const infoBox = await rootDoc.createElement('div');
         await infoBox.setStyle('position', 'fixed');
         await infoBox.setStyle('top', '50%');
         await infoBox.setStyle('left', '50%');
@@ -1608,7 +1614,7 @@ await element.setInnerHTML('<script>alert("XSS")</script>');
 // Result: empty element (script removed)
 
 // Use event listeners instead
-const button = rootDoc.createElement('button');
+const button = await rootDoc.createElement('button');
 await button.setTextContent('Click Me');
 await button.addEventListener('click', async () => {
   console.log('Button clicked!');
@@ -1621,15 +1627,15 @@ await button.addEventListener('click', async () => {
 
 ```javascript
 // L Wrong - these are separate contexts
-const rootDoc = Risuai.getRootDocument();
-rootDoc.querySelector('#my-iframe-element'); // Won't find it
+const rootDoc = await Risuai.getRootDocument();
+await rootDoc.querySelector('#my-iframe-element'); // Won't find it
 
 //  Correct - access each separately
 // Your iframe's DOM:
 document.getElementById('my-iframe-element');
 
 // Risuai's main DOM:
-const rootDoc = Risuai.getRootDocument();
+const rootDoc = await Risuai.getRootDocument();
 await rootDoc.querySelector('.Risuai-element');
 ```
 

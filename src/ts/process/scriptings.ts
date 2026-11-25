@@ -2,7 +2,7 @@ import { asBuffer } from 'src/ts/util';
 import { getChatVar, getChatVarOf, getGlobalChatVar, setChatVar, setChatVarOf } from "../parser/chatVar.svelte";
 import { hasher, type simpleCharacterArgument, risuChatParser } from "../parser/parser.svelte";
 import { LuaEngine, LuaFactory } from "wasmoon";
-import { getCurrentCharacter, getCurrentChat, getDatabase, setDatabase, type Chat, type character, type triggerscript } from "../storage/database.svelte";
+import { getCurrentCharacter, getCurrentChat, getDatabase, setDatabase, type Chat, type character, type Message, type triggerscript } from "../storage/database.svelte";
 import { get } from "svelte/store";
 import { ReloadChatPointer, ReloadGUIPointer, selectedCharID } from "../stores.svelte";
 import { alertSelect, alertError, alertInput, alertNormal, alertConfirm } from "../alert";
@@ -155,11 +155,11 @@ export async function runScripted(code:string, arg:{
                 }
                 alertNormal(value)
             })
-            declareAPI('alertInput', (id:string, value:string) => {
+            declareAPI('alertInput', (id:string, value:string, defaultValue?:string) => {
                 if(!ScriptingSafeIds.has(id)){
                     return
                 }
-                return alertInput(value)
+                return alertInput(value, undefined, defaultValue)
             })
             declareAPI('alertSelect', (id:string, value:string[]) => {
                 if(!ScriptingSafeIds.has(id)){
@@ -182,7 +182,8 @@ export async function runScripted(code:string, arg:{
                 const data = {
                     role: chat.role,
                     data: chat.data,
-                    time: chat.time ?? 0
+                    time: chat.time ?? 0,
+                    chatId: chat.chatId
                 }
                 return JSON.stringify(data)
             })
@@ -205,6 +206,7 @@ export async function runScripted(code:string, arg:{
                     role: v.role,
                     data: v.data,
                     time: v.time ?? 0,
+                    chatId: v.chatId,
                 })))
             })
 
@@ -269,7 +271,8 @@ export async function runScripted(code:string, arg:{
                     return {
                         role: v.role,
                         data: v.data,
-                        time: v.time ?? 0
+                        time: v.time ?? 0,
+                        chatId: v.chatId
                     }
                 }))
                 return data
@@ -296,13 +299,46 @@ export async function runScripted(code:string, arg:{
                 }
                 const realValue = JSON.parse(value)
                 const previousMessages = ScriptingEngineState.chat.message
+                // Messages are matched by chatId (upstream 61398d48a), so a script
+                // that reorders, inserts or deletes keeps each message's metadata.
+                // Scripts that rebuild the table as {role, data} without chatId
+                // kept their metadata by position before (86f2fe41f); that is kept
+                // only while the length is unchanged, since after an insert or a
+                // delete a position no longer names the same message.
+                const byChatId = new Map<string, Message>()
+                for(const message of previousMessages){
+                    if(message.chatId){
+                        byChatId.set(message.chatId, message)
+                    }
+                }
+                const claimed = new Set<Message>()
+                const matched = realValue.map((v) => {
+                    const original = v?.chatId ? byChatId.get(v.chatId) : undefined
+                    if(!original || claimed.has(original)){
+                        return undefined
+                    }
+                    claimed.add(original)
+                    return original
+                })
+                const sameLength = realValue.length === previousMessages.length
 
                 ScriptingEngineState.chat.message = realValue.map((v, index) => {
-                    return {
-                        ...previousMessages[index],
-                        role: v.role,
-                        data: v.data
+                    const role:'user'|'char' = v.role === 'user' ? 'user' : 'char'
+                    const data = v.data ?? ''
+                    let original = matched[index]
+                    if(!original && sameLength && !v?.chatId){
+                        const candidate = previousMessages[index]
+                        if(candidate && !claimed.has(candidate)){
+                            claimed.add(candidate)
+                            original = candidate
+                        }
                     }
+                    if(!original){
+                        return { role, data }
+                    }
+                    original.role = role
+                    original.data = data
+                    return original
                 })
             })
 
@@ -406,7 +442,7 @@ export async function runScripted(code:string, arg:{
                 }
             })
 
-            declareAPI('generateImage', async (id:string, value:string, negValue:string = '', options?:ImageGenerationOptions) => {
+            declareAPI('generateImage', async (id: string, value: string, negValue: string = '', options?: ImageGenerationOptions & { name?: string }) => {
                 if(!ScriptingLowLevelIds.has(id)){
                     return
                 }
@@ -419,9 +455,12 @@ export async function runScripted(code:string, arg:{
                 if(!gen){
                     return 'Error: Image generation failed'
                 }
+
                 const imgHTML = new Image()
                 imgHTML.src = gen
-                const inlay = await writeInlayImage(imgHTML)
+
+                const name = typeof options?.name === 'string' && options.name ? options.name : undefined
+                const inlay = await writeInlayImage(imgHTML, { name })
                 return `{{inlay::${inlay}}}`
             })
 

@@ -231,7 +231,13 @@
             currentChar.chats[currentChar.chatPage] = currentChat
             db.characters[$selectedCharID] = currentChar
             endAllGenerations()
-            await sendChat(i);
+            try {
+                await sendChat(i);
+            } catch (error) {
+                // A send that throws must not leave the generation guard held
+                endAllGenerations()
+                throw error
+            }
             currentChar = db.characters[$selectedCharID]
             currentChat = currentChar.chats[currentChar.chatPage]
         }

@@ -204,4 +204,46 @@ describe('plugin permission gate', () => {
         await gate.request('Other', 'code-2', 'db')
         expect(h.asks()).toHaveLength(5)
     })
+
+    it('reports whether a decision had to wait for a dialog (dbWrite)', async () => {
+        const h = makeHarness()
+        const gate = h.restart()
+
+        expect(await gate.requestDecision('Plug', 'code-1', 'dbWrite', 'periodically')).toEqual({ granted: true, waited: true })
+        expect(await gate.requestDecision('Plug', 'code-1', 'dbWrite', 'periodically')).toEqual({ granted: true, waited: false })
+        expect(await h.restart().requestDecision('Plug', 'code-1', 'dbWrite', 'periodically')).toEqual({ granted: true, waited: false })
+        expect(h.asks()).toEqual(['ask Plug dbWrite'])
+
+        h.setAnswer(() => false)
+        expect(await gate.requestDecision('Plug', 'code-2', 'dbWrite', 'periodically')).toEqual({ granted: false, waited: true })
+        expect(await gate.requestDecision('Plug', 'code-2', 'dbWrite', 'periodically')).toEqual({ granted: false, waited: false })
+    })
+
+    it('a write queued behind the same dialog also counts as waited', async () => {
+        const h = makeHarness()
+        const gate = h.restart()
+
+        const results = await Promise.all([
+            gate.requestDecision('Plug', 'code-1', 'dbWrite', 'periodically'),
+            gate.requestDecision('Plug', 'code-1', 'dbWrite', 'periodically'),
+        ])
+        expect(results).toEqual([{ granted: true, waited: true }, { granted: true, waited: true }])
+        expect(h.asks()).toEqual(['ask Plug dbWrite'])
+    })
+
+    it('keeps grants saved before dbWrite existed and asks for dbWrite separately', async () => {
+        // A 1.17 state file: decisions for the older permissions only.
+        const h = makeHarness({ cache: [['code-1_db', true], ['code-1_inlay', false]] })
+        const gate = h.restart()
+
+        expect(await gate.request('Plug', 'code-1', 'db', 'periodically')).toBe(true)
+        expect(await gate.request('Plug', 'code-1', 'inlay', 'periodically')).toBe(false)
+        expect(h.asks()).toEqual([])
+
+        expect(await gate.requestDecision('Plug', 'code-1', 'dbWrite', 'periodically')).toEqual({ granted: true, waited: true })
+        expect(h.asks()).toEqual(['ask Plug dbWrite'])
+        expect(new Map(h.stored()!.cache)).toEqual(new Map<string, boolean | number>([
+            ['code-1_db', true], ['code-1_inlay', false], ['code-1_dbWrite', true],
+        ]))
+    })
 })

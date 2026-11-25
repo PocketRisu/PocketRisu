@@ -1520,6 +1520,11 @@ interface RisuaiPluginAPI {
     /**
      * Sets the database (lightweight save)
      * The `plugins` property is ignored.
+     * Requires the `dbWrite` permission; the write is skipped if the user declines.
+     * In PocketRisu the write that first asks for the permission is not applied either, because
+     * the data may have changed while the dialog was open: once the user allows it, the call
+     * rejects so the plugin can read the data again and retry. Call
+     * `requestPluginPermission('dbWrite')` beforehand to avoid that.
      * @param db - DatabaseSubset object to save, excluding `plugins`
      */
     setDatabaseLite(db: Omit<DatabaseSubset, 'plugins'>): Promise<void>;
@@ -1528,6 +1533,11 @@ interface RisuaiPluginAPI {
      * Sets the database (full save with sync)
      * In `plugins`, only API 3.0 plugins that are new or whose script changed are applied,
      * each after the user confirms. Removing, reordering, enabling or disabling plugins is ignored.
+     * Requires the `dbWrite` permission; the write is skipped if the user declines.
+     * In PocketRisu the write that first asks for the permission is not applied either, because
+     * the data may have changed while the dialog was open: once the user allows it, the call
+     * rejects so the plugin can read the data again and retry. Call
+     * `requestPluginPermission('dbWrite')` beforehand to avoid that.
      * @param db - DatabaseSubset object to save
      */
     setDatabase(db: DatabaseSubset): Promise<void>;
@@ -2043,6 +2053,32 @@ interface RisuaiPluginAPI {
      */
     saveAsset(data: any): Promise<string>;
 
+    /**
+     * Creates an inlay from image data, embeddable in chat messages via the
+     * `{{inlay::id}}` syntax. Unlike `saveAsset`, inlays live in inlay storage
+     * rather than the character card, so generating many images does not grow
+     * the card. The image is re-encoded (animated GIF/WEBP keep only the first
+     * frame) and downscaled to fit 1024x1024 total pixels, matching the built-in
+     * image generation inlays. In PocketRisu it is stored as WebP, or as PNG when
+     * the user turns on "Save Inlay Images as Lossless".
+     *
+     * @param data - Image bytes (JPEG, PNG, GIF, WEBP, ...) as a Uint8Array, or
+     * an image data URI string. Remote URLs are rejected — fetch them with
+     * `nativeFetch` and pass the bytes. The Uint8Array's buffer is transferred
+     * to the host and detached after the call; pass a copy if you still need it.
+     * @param options - `name` sets the display name in the inlay explorer; defaults to the id.
+     * @returns The inlay id; insert `{{inlay::<id>}}` into a message to render it.
+     * `null` if the user denies the inlay permission.
+     * @throws Error if the data is not decodable image data, or the string is not a data URI.
+     *
+     * @example
+     * ```typescript
+     * const id = await risuai.createInlay(imageBytes, { name: 'generated.png' });
+     * // then insert `{{inlay::${id}}}` into a chat message
+     * ```
+     */
+    createInlay(data: Uint8Array | string, options?: { name?: string }): Promise<string | null>;
+
     // ========== Plugin Management ==========
 
     /**
@@ -2085,7 +2121,7 @@ interface RisuaiPluginAPI {
 
     /**
      * Requests permission for a specific action
-     * @param permission - Permission string (e.g. 'fetchLogs'|'db'|'mainDom')
+     * @param permission - Permission string (e.g. 'fetchLogs'|'db'|'dbWrite'|'mainDom')
      * @returns True if permission granted, false otherwise
      */
     requestPluginPermission(permission: string): Promise<boolean>;
