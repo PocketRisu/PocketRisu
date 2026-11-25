@@ -13,6 +13,7 @@ import { sleep } from "src/ts/util";
 import { alertConfirm, alertError, alertNormal, alertNormalWait, notifyInfo } from "src/ts/alert";
 import { language } from "src/lang";
 import { checkCharOrder, forageStorage, getFetchLogs } from "src/ts/globalApi.svelte";
+import { fetchLogUrlForPlugin } from "./fetchLogUrl";
 import { changeColorScheme, updateColorScheme, updateTextThemeAndCSS, type ColorScheme } from "src/ts/gui/colorscheme";
 import { get } from "svelte/store";
 import { registerMCPModule, unregisterMCPModule } from "src/ts/process/mcp/pluginmcp";
@@ -1402,10 +1403,8 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             // unchanged from when this came from the in-memory fetch log.
             const unsafeFetchLog = await getFetchLogs()
             return unsafeFetchLog.map(log => {
-
-                const url = new URL(log.url);
                 return {
-                    url: url.origin + url.pathname,
+                    url: fetchLogUrlForPlugin(log.url),
                     body: log.requestBody ?? '',
                     status: log.status,
                     response: log.responseBody,
