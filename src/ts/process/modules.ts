@@ -274,6 +274,29 @@ export async function readModule(buf:Buffer, arg:{
     return module
 }
 
+// A .charx read as a module: the card is parsed without adding a character
+// (returnCharacter only works with v3 charx), then converted.
+export async function importCharxAsModule(name:string, data:Uint8Array):Promise<boolean>{
+    try {
+        const char = await importCharacterProcess({
+            name: name,
+            data: data,
+            returnCharacter: true
+        })
+        if(!char || typeof char === 'number'){
+            alertError(language.errors.noData)
+            return false
+        }
+        getDatabase().modules.push(convertCharacterToModule(char))
+    } catch (error) {
+        console.error(error)
+        alertError(language.errors.noData)
+        return false
+    }
+    notifySuccess(language.successImport)
+    return true
+}
+
 export async function importModule(){
     const f = await selectSingleFile(['json', 'lorebook', 'risum', 'charx'])
     if(!f){
@@ -282,24 +305,7 @@ export async function importModule(){
     let fileData = f.data
     const db = getDatabase()
     if(f.name.endsWith('.charx')){
-        try {
-            const buf = Buffer.from(fileData)
-            const char = await importCharacterProcess({
-                name: f.name,
-                data: buf,
-                returnCharacter: true
-            })
-            if(!char || typeof char === 'number'){
-                alertError(language.errors.noData)
-                return
-            }
-            const module = convertCharacterToModule(char)
-            db.modules.push(module)
-        } catch (error) {
-            console.error(error)
-            alertError(language.errors.noData)
-        }
-        notifySuccess(language.successImport)
+        await importCharxAsModule(f.name, fileData)
         return
     }
     if(f.name.endsWith('.risum')){

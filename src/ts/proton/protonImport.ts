@@ -1,10 +1,12 @@
 import type { ProtonDriveClient } from '@protontech/drive-sdk'
 import { writable } from 'svelte/store'
 import { language } from '../../lang'
-import { alertError, notifySuccess } from '../alert'
+import { alertConfirmMulti, alertError, notifySuccess } from '../alert'
 import { importFileByName } from '../characterCards'
 import { checkCharOrder } from '../globalApi.svelte'
 import { importPlugin } from '../plugins/plugins.svelte'
+import { importCharxAsModule } from '../process/modules'
+import { openSettings, SettingsRoute } from '../routing'
 
 export const protonImportDialogOpen = writable(false)
 
@@ -79,7 +81,23 @@ export async function importProtonFile(name: string, data: Uint8Array): Promise<
         if (ok) notifySuccess(language.successImport)
         return ok
     }
-    const ok = await importFileByName(name.slice(0, name.length - ext.length) + ext, data)
+    const fileName = name.slice(0, name.length - ext.length) + ext
+    if (ext === 'charx') {
+        // A .charx is a character card or a module exported as one, and the
+        // file alone does not say which, so the user picks.
+        const choice = await alertConfirmMulti(
+            language.protonImportCharxPrompt,
+            [language.protonImportAsCharacter, language.protonImportAsModule],
+            fileName.toLowerCase().endsWith('.module.charx') ? language.protonImportCharxModuleHint : undefined,
+        )
+        if (choice === -1) return false
+        if (choice === 1) {
+            const ok = await importCharxAsModule(fileName, data)
+            if (ok) openSettings(SettingsRoute.Module)
+            return ok
+        }
+    }
+    const ok = await importFileByName(fileName, data)
     // Like the other import paths, so a new character shows up in the sidebar.
     checkCharOrder()
     return ok

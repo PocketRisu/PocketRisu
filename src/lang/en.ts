@@ -2611,6 +2611,10 @@ export const languageEnglish = {
     protonImportPluginConfirm: (name: string) => `${name} is a plugin. Plugins run code inside the app, so install it only if you trust where it came from.`,
     protonImportInstall: "Install",
     protonImportNotice: "Files are decrypted in your browser. PocketRisu is not an official Proton app.",
+    protonImportCharxPrompt: "How should this .charx be imported?",
+    protonImportAsCharacter: "Import as character",
+    protonImportAsModule: "Import as module",
+    protonImportCharxModuleHint: "The file name ends in .module.charx, so it is a module exported as a .charx.",
     comfyWorkflow: "Workflow (API)",
     comfyWorkflowInvalidJson: "Invalid workflow file. It must be a valid JSON.",
 } satisfies I18nTranslation;
