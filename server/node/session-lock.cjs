@@ -44,12 +44,26 @@
 // first action takes the lock. A only ever sees a 423 if it writes again
 // afterwards — the one genuinely necessary kick.
 //
-// State is in-memory: a server restart clears it and the first write adopts.
+// The holder survives a restart when the server stores it (onActiveChange,
+// initialActive): otherwise the first page to write after a restart took the
+// free lock, and a page loaded before newer writes on another device saved
+// its older copy over them. Boots are not stored, so after a restart every
+// other page counts as stale until it reloads; with no stored holder (a new
+// install) the first write adopts as before.
 function createSessionLock(opts = {}) {
     const now = opts.now || Date.now;
+    const onActiveChange = typeof opts.onActiveChange === 'function' ? opts.onActiveChange : () => {};
     const MAX_TRACKED_BOOTS = 50;
 
-    let active = null; // { id, lastWriteAt } | null
+    let active = storedHolder(opts.initialActive); // { id, lastWriteAt } | null
+    function setActive(next) {
+        active = next;
+        onActiveChange(active);
+    }
+    function touchActive() {
+        active.lastWriteAt = now();
+        onActiveChange(active);
+    }
     const boots = new Map(); // sessionId -> boot timestamp (insertion-ordered)
     let running = 0;
     const idleWaiters = new Set();
@@ -75,7 +89,7 @@ function createSessionLock(opts = {}) {
             return;
         }
         if (!active) {
-            active = { id, lastWriteAt: now() };
+            setActive({ id, lastWriteAt: now() });
         }
         // A re-register of the CURRENT active id (same-tab reload / OS tab
         // restore, with the client persisting its id) keeps the lock as-is.
@@ -88,17 +102,17 @@ function createSessionLock(opts = {}) {
         if (!active) {
             // A free lock is not for a page whose boot missed writes.
             if (boots.get(id) === 0) return { ok: false };
-            active = { id, lastWriteAt: now() };
+            setActive({ id, lastWriteAt: now() });
             return { ok: true };
         }
         if (active.id === id) {
-            active.lastWriteAt = now();
+            touchActive();
             return { ok: true };
         }
         const boot = boots.get(id);
         const fresh = boot !== undefined && boot > active.lastWriteAt;
         if (fresh && userActive) {
-            active = { id, lastWriteAt: now() };
+            setActive({ id, lastWriteAt: now() });
             return { ok: true, tookOver: true };
         }
         if (fresh) {
@@ -114,7 +128,7 @@ function createSessionLock(opts = {}) {
     // holder included. A page loaded afterwards takes the lock with its first
     // user action.
     function revokeAll() {
-        active = { id: null, lastWriteAt: now() };
+        setActive({ id: null, lastWriteAt: now() });
     }
 
     // Every page loaded before now becomes stale, the previous holder
@@ -129,7 +143,7 @@ function createSessionLock(opts = {}) {
         if (claimedFrom.size > MAX_TRACKED_BOOTS) {
             claimedFrom.delete(claimedFrom.keys().next().value);
         }
-        active = { id, lastWriteAt: now() };
+        setActive({ id, lastWriteAt: now() });
         return true;
     }
 
@@ -143,7 +157,7 @@ function createSessionLock(opts = {}) {
         const replaced = claimedFrom.get(id);
         claimedFrom.delete(id);
         if (active && active.id === id) {
-            active = replaced;
+            setActive(replaced);
             return;
         }
         // A later claim replaced this one: it hands back further.
@@ -215,6 +229,16 @@ function createSessionLock(opts = {}) {
     }
 
     return { register, checkWrite, peek, revokeAll, claim, unclaim, writeStarted, writeEnded, isIdle, whenIdle, activeId };
+}
+
+// A holder read back from storage, or null when there is none or it is not
+// one this module wrote.
+function storedHolder(value) {
+    if (!value || typeof value !== 'object') return null;
+    const { id, lastWriteAt } = value;
+    if (!(id === null || (typeof id === 'string' && id !== ''))) return null;
+    if (typeof lastWriteAt !== 'number' || !Number.isFinite(lastWriteAt)) return null;
+    return { id, lastWriteAt };
 }
 
 module.exports = { createSessionLock };

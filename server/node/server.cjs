@@ -2176,7 +2176,27 @@ async function checkDiskSpace(requiredBytes) {
 // not kick a PC mid-session); ownership moves on the first WRITE from a
 // freshly-booted session, and only stale sessions get 423.
 const { createSessionLock } = require('./session-lock.cjs');
-const sessionLock = createSessionLock();
+// The holder is stored so a restart keeps it (session-lock.cjs). A config/
+// key: backups neither export nor replace it.
+const SESSION_LOCK_KEY = 'config/session-lock';
+function readStoredSessionHolder() {
+    try {
+        const raw = kvGet(SESSION_LOCK_KEY);
+        return raw ? JSON.parse(Buffer.from(raw).toString('utf-8')) : null;
+    } catch {
+        return null;
+    }
+}
+const sessionLock = createSessionLock({
+    initialActive: readStoredSessionHolder(),
+    onActiveChange: (holder) => {
+        try {
+            kvSet(SESSION_LOCK_KEY, Buffer.from(JSON.stringify(holder), 'utf-8'));
+        } catch (error) {
+            console.warn('[Session] Could not store the write lock holder:', error?.message);
+        }
+    },
+});
 const SESSION_WRITE_MAX_MS = process.env.POCKETRISU_SESSION_WRITE_MAX_MS
     ? Number(process.env.POCKETRISU_SESSION_WRITE_MAX_MS)
     : 5 * 60 * 1000;
