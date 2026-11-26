@@ -42,7 +42,8 @@ info "Latest version: $TAG"
 
 TARBALL_URL="https://github.com/$REPO/archive/refs/tags/$TAG.tar.gz"
 TMP_DIR=$(mktemp -d)
-trap 'rm -rf "$TMP_DIR"' EXIT
+KEEP_DIR=""
+trap 'rm -rf "$TMP_DIR"; if [ -n "$KEEP_DIR" ] && [ -d "$KEEP_DIR" ]; then warn "Your save/ and backups/ are kept in $KEEP_DIR"; fi' EXIT
 
 info "Downloading $TAG..."
 if command -v curl >/dev/null 2>&1; then
@@ -64,18 +65,37 @@ EXTRACTED_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d \
 
 # ── Install ────────────────────────────────────────────────────────────────────
 
-if [ -d "$INSTALL_DIR" ]; then
+# User data waits here during a reinstall: next to the install (same disk, so
+# the move is a rename), not in TMP_DIR, which the EXIT trap removes and with
+# it the user's data whenever the script stopped before putting it back.
+KEEP_PATH="$(dirname "$INSTALL_DIR")/.$(basename "$INSTALL_DIR")-reinstall-keep"
+# An empty one holds nothing to restore (stopped before the first move or
+# after the last): remove it so it does not block this run.
+rmdir "$KEEP_PATH" 2>/dev/null || true
+
+if [ -e "$KEEP_PATH" ]; then
+    # Left by an interrupted install: put it into this one.
+    if [ -d "$INSTALL_DIR" ]; then
+        if [ -d "$INSTALL_DIR/save" ] || [ -d "$INSTALL_DIR/backups" ]; then
+            error "$KEEP_PATH is left from an interrupted install, and $INSTALL_DIR has its own save/ or backups/ too. Keep the ones you want somewhere safe, remove $KEEP_PATH, run again, then move them back into $INSTALL_DIR."
+        fi
+        error "$KEEP_PATH holds the save/ and backups/ of an interrupted install. Remove $INSTALL_DIR, which has neither, then run again to restore them."
+    fi
+    KEEP_DIR="$KEEP_PATH"
+    info "Found save/ and backups/ kept by an interrupted install; they will be restored."
+elif [ -d "$INSTALL_DIR" ]; then
     warn "$INSTALL_DIR already exists."
     printf "Overwrite? (existing save/ and backups/ data will be preserved) [y/N]: "
     read -r answer
     [ "$answer" = "y" ] || [ "$answer" = "Y" ] || error "Aborted."
 
-    # Preserve user data
+    KEEP_DIR="$KEEP_PATH"
+    mkdir "$KEEP_DIR"
     if [ -d "$INSTALL_DIR/save" ]; then
-        mv "$INSTALL_DIR/save" "$TMP_DIR/_save_backup"
+        mv "$INSTALL_DIR/save" "$KEEP_DIR/save"
     fi
     if [ -d "$INSTALL_DIR/backups" ]; then
-        mv "$INSTALL_DIR/backups" "$TMP_DIR/_backups_backup"
+        mv "$INSTALL_DIR/backups" "$KEEP_DIR/backups"
     fi
     rm -rf "$INSTALL_DIR"
 fi
@@ -83,13 +103,18 @@ fi
 mv "$EXTRACTED_DIR" "$INSTALL_DIR"
 
 # Restore user data
-if [ -d "$TMP_DIR/_save_backup" ]; then
-    mv "$TMP_DIR/_save_backup" "$INSTALL_DIR/save"
-    info "Restored existing save/ data."
-fi
-if [ -d "$TMP_DIR/_backups_backup" ]; then
-    mv "$TMP_DIR/_backups_backup" "$INSTALL_DIR/backups"
-    info "Restored existing backups/ data."
+if [ -n "$KEEP_DIR" ]; then
+    if [ -d "$KEEP_DIR/save" ]; then
+        mv "$KEEP_DIR/save" "$INSTALL_DIR/save"
+        info "Restored existing save/ data."
+    fi
+    if [ -d "$KEEP_DIR/backups" ]; then
+        mv "$KEEP_DIR/backups" "$INSTALL_DIR/backups"
+        info "Restored existing backups/ data."
+    fi
+    # Everything is back; a stray file left in it must not stop the install.
+    rmdir "$KEEP_DIR" 2>/dev/null || warn "Remove $KEEP_DIR before the next install (save/ and backups/ are already restored)."
+    KEEP_DIR=""
 fi
 
 cd "$INSTALL_DIR"

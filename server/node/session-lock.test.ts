@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import pkg from './session-lock.cjs'
 
 const { createSessionLock } = pkg as {
-    createSessionLock: (opts?: { now?: () => number }) => {
+    createSessionLock: (opts?: {
+        now?: () => number
+        initialActive?: unknown
+        onActiveChange?: (holder: { id: string | null, lastWriteAt: number } | null) => void
+    }) => {
         register: (id: string, missedWrites?: boolean) => void
         checkWrite: (id: string, userActive?: boolean) => { ok: boolean, tookOver?: boolean, passive?: boolean }
         peek: (id: string) => string
@@ -392,5 +396,72 @@ describe('session-lock', () => {
         expect(lock.activeId()).toBe('b-next')
         lock.unclaim('b-next')
         expect(lock.activeId()).toBe('home')                  // not a-next, which nobody will boot
+    })
+
+    describe('stored holder', () => {
+        // One clock for both "runs" of the server.
+        function restartable() {
+            let t = 1000
+            let stored: unknown = null
+            const start = () => createSessionLock({
+                now: () => ++t,
+                initialActive: stored,
+                onActiveChange: (holder) => { stored = JSON.parse(JSON.stringify(holder)) },
+            })
+            return { start }
+        }
+
+        it('after a restart, a page loaded before the last write is still rejected', () => {
+            const { start } = restartable()
+            const before = start()
+            before.register('phone')                          // loaded first
+            before.register('pc')
+            expect(before.checkWrite('pc', true).ok).toBe(true) // newer data, after the phone loaded
+            const after = start()                             // server restarted
+            expect(after.checkWrite('phone', true).ok).toBe(false)
+            expect(after.activeId()).toBe('pc')
+            expect(after.checkWrite('pc').ok).toBe(true)      // the holder keeps writing
+        })
+
+        it('after a restart, a page that reloads takes over with its first action', () => {
+            const { start } = restartable()
+            const before = start()
+            before.register('pc')
+            expect(before.checkWrite('pc').ok).toBe(true)
+            const after = start()
+            after.register('phone')                           // reloaded after the restart
+            expect(after.checkWrite('phone', true)).toMatchObject({ ok: true, tookOver: true })
+        })
+
+        it('keeps a revoke across a restart', () => {
+            const { start } = restartable()
+            const before = start()
+            before.register('pc')
+            before.checkWrite('pc')
+            before.revokeAll()
+            const after = start()
+            expect(after.checkWrite('pc', true).ok).toBe(false)
+            after.register('pc-reloaded')
+            expect(after.checkWrite('pc-reloaded', true)).toMatchObject({ ok: true, tookOver: true })
+        })
+
+        it('reports every change of the holder, a write included', () => {
+            const seen: Array<string | null> = []
+            const lock = createSessionLock({ now: (() => { let t = 0; return () => ++t })(), onActiveChange: (h) => seen.push(h?.id ?? null) })
+            lock.register('pc')
+            lock.checkWrite('pc')
+            expect(lock.claim('next')).toBe(true)
+            lock.unclaim('next')
+            lock.revokeAll()
+            expect(seen).toEqual(['pc', 'pc', 'next', 'pc', null])
+        })
+
+        it('ignores a stored value it did not write', () => {
+            for (const bad of [{ id: 5, lastWriteAt: 1 }, { id: 'pc' }, { id: '', lastWriteAt: 1 }, 'pc', 42]) {
+                const lock = createSessionLock({ initialActive: bad })
+                expect(lock.activeId()).toBe(null)
+                expect(lock.checkWrite('phone').ok).toBe(true)  // a free lock, as on a new install
+            }
+        })
     })
 })
