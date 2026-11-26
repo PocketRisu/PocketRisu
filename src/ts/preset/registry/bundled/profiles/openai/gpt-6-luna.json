@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-6-luna",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-6 Luna",
   "displayNameI18n": {
     "ko": "OpenAI GPT-6 Luna"
@@ -17,7 +17,7 @@
   ],
   "sortOrder": 92,
   "modelId": "gpt-6-luna",
-  "updatedAt": 1790149202175,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -95,6 +95,10 @@
       "mapsTo": {
         "target": "body",
         "path": "reasoning_effort"
+      },
+      "description": "Tool calling through Chat Completions works on GPT-6 Luna only with \"none\".",
+      "descriptionI18n": {
+        "ko": "GPT-6 Luna의 Chat Completions 툴 호출은 \"none\"에서만 동작합니다."
       }
     },
     {
@@ -192,27 +196,6 @@
       "mapsTo": {
         "target": "body",
         "path": "parallel_tool_calls"
-      }
-    },
-    {
-      "key": "logprobs",
-      "type": "boolean",
-      "label": "Logprobs",
-      "default": false,
-      "mapsTo": {
-        "target": "body",
-        "path": "logprobs"
-      }
-    },
-    {
-      "key": "top_logprobs",
-      "type": "integer",
-      "label": "Top Logprobs",
-      "min": 0,
-      "max": 20,
-      "mapsTo": {
-        "target": "body",
-        "path": "top_logprobs"
       }
     },
     {
@@ -355,24 +338,6 @@
         "visibility": "advanced",
         "group": "output",
         "order": 2
-      },
-      {
-        "key": "logprobs",
-        "widget": "toggle",
-        "visibility": "advanced",
-        "group": "output",
-        "order": 3
-      },
-      {
-        "key": "top_logprobs",
-        "widget": "number-input",
-        "visibility": "advanced",
-        "group": "output",
-        "order": 4,
-        "showIf": {
-          "key": "logprobs",
-          "equals": true
-        }
       },
       {
         "key": "user",

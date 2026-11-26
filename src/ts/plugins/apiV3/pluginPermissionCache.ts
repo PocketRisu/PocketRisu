@@ -8,9 +8,9 @@
 // 3-day reconfirm, denials are remembered as well, and dialogs are shown one
 // at a time.
 
-export type PluginPermission = 'fetchLogs' | 'db' | 'mainDom' | 'replacer' | 'provider' | 'sendChat' | 'inlay'
+export type PluginPermission = 'fetchLogs' | 'db' | 'dbWrite' | 'mainDom' | 'replacer' | 'provider' | 'sendChat' | 'inlay'
 
-export const pluginPermissions: PluginPermission[] = ['fetchLogs', 'db', 'mainDom', 'replacer', 'provider', 'sendChat', 'inlay']
+export const pluginPermissions: PluginPermission[] = ['fetchLogs', 'db', 'dbWrite', 'mainDom', 'replacer', 'provider', 'sendChat', 'inlay']
 
 type PluginScriptHasher = (data: Uint8Array) => Promise<string>
 
@@ -72,14 +72,17 @@ export function createPluginPermissionGate(deps: PluginPermissionGateDeps) {
         return writing
     }
 
-    async function request(
+    // Like `request`, but also reports whether the answer had to wait for a
+    // dialog (this call's or an earlier queued one). A caller holding data it
+    // read before asking can tell that the data may be stale by then.
+    async function requestDecision(
         pluginName: string,
         scriptHash: string,
         permission: PluginPermission,
         reconfirm: boolean | 'periodically' = false,
-    ): Promise<boolean> {
+    ): Promise<{ granted: boolean, waited: boolean }> {
         // `requestPluginPermission` hands plugins this call with any string.
-        if (!pluginPermissions.includes(permission)) return false
+        if (!pluginPermissions.includes(permission)) return { granted: false, waited: false }
         await load()
         const key = getPluginPermissionKey(scriptHash, permission)
 
@@ -92,7 +95,7 @@ export function createPluginPermissionGate(deps: PluginPermissionGateDeps) {
         // Fast path: if the answer is already known, skip the serialization queue
         // entirely so cached/granted permissions never block on a pending dialog.
         const early = known()
-        if (early !== undefined) return early
+        if (early !== undefined) return { granted: early, waited: false }
 
         const showDialog = async (): Promise<boolean> => {
             // Re-check under the lock: an earlier queued dialog for the same code
@@ -112,7 +115,16 @@ export function createPluginPermissionGate(deps: PluginPermissionGateDeps) {
         // deadlocks every later permission request.
         const run = dialogChain.catch(() => {}).then(showDialog)
         dialogChain = run.catch(() => {})
-        return run
+        return { granted: await run, waited: true }
+    }
+
+    async function request(
+        pluginName: string,
+        scriptHash: string,
+        permission: PluginPermission,
+        reconfirm: boolean | 'periodically' = false,
+    ): Promise<boolean> {
+        return (await requestDecision(pluginName, scriptHash, permission, reconfirm)).granted
     }
 
     // Clears every decision for one version of a plugin's code.
@@ -131,5 +143,5 @@ export function createPluginPermissionGate(deps: PluginPermissionGateDeps) {
         await writing
     }
 
-    return { request, resetScript, resetAll }
+    return { request, requestDecision, resetScript, resetAll }
 }

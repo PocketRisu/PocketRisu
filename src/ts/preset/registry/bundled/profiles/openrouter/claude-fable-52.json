@@ -1,0 +1,58 @@
+{
+  "id": "openrouter:claude-fable-52",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Claude Fable 5.2",
+  "displayNameI18n": {
+    "ko": "Claude Fable 5.2"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Claude Fable 5.2 via OpenRouter (anthropic/claude-fable-5.2).",
+  "descriptionI18n": {
+    "ko": "Claude Fable 5.2 (OpenRouter, anthropic/claude-fable-5.2)."
+  },
+  "tags": [
+    "openrouter",
+    "claude",
+    "fable"
+  ],
+  "sortOrder": 552,
+  "modelId": "anthropic/claude-fable-5.2",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

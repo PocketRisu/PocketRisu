@@ -1,7 +1,7 @@
 {
   "id": "openrouter:gpt-5",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1795078641125,
   "displayName": "GPT-5",
   "displayNameI18n": {
     "ko": "GPT-5"
@@ -53,5 +53,9 @@
     "maxOutputTokens": 128000
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-5 expires on OpenRouter on December 11, 2026, when OpenAI shuts it down.",
+  "statusSourceUrls": [
+    "https://openrouter.ai/api/v1/models"
+  ]
 }

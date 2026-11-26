@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-5",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-5",
   "displayNameI18n": {
     "ko": "OpenAI GPT-5"
@@ -17,7 +17,7 @@
   ],
   "sortOrder": 120,
   "modelId": "gpt-5",
-  "updatedAt": 1781103554581,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -402,5 +402,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-5 is deprecated and will be shut down on December 11, 2026. Migrate to GPT-6.1 Sol.",
+  "statusSourceUrls": [
+    "https://developers.openai.com/api/docs/deprecations"
+  ]
 }

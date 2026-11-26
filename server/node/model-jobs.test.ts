@@ -583,16 +583,16 @@ describe('model-jobs rotation', () => {
 
     function seedTerminal(
         saveDir: string,
-        rows: { id: string; claimed: number; endedAt: number; kind?: string }[],
+        rows: { id: string; claimed: number; endedAt: number; kind?: string; status?: string }[],
     ) {
         const raw = require('better-sqlite3')
         const db = new raw(path.join(saveDir, 'model-jobs.db'))
         const stmt = db.prepare(`
             INSERT INTO model_jobs (id, chat_id, kind, streaming, status, created_at, ended_at, bytes, claimed)
-            VALUES (?, ?, ?, 0, 'done', ?, ?, 0, ?)
+            VALUES (?, ?, ?, 0, ?, ?, ?, 0, ?)
         `)
         for (const row of rows) {
-            stmt.run(row.id, `chat-${row.id}`, row.kind ?? 'main', row.endedAt - 1000, row.endedAt, row.claimed)
+            stmt.run(row.id, `chat-${row.id}`, row.kind ?? 'main', row.status ?? 'done', row.endedAt - 1000, row.endedAt, row.claimed)
         }
         db.close()
     }
@@ -627,6 +627,48 @@ describe('model-jobs rotation', () => {
         store.cleanupTerminalJobs()
         expect(store.getJob('old-unclaimed-aux')).toBeNull()
         expect(store.getJob('old-unclaimed-main')).not.toBeNull()
+        store.close()
+        fs.rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('age expiry deletes unclaimed aborted MAIN jobs — the user stopped them', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-jobs-rot-'))
+        const store = createModelJobs({ saveDir: dir })
+        const old = Date.now() - 8 * DAY
+        seedTerminal(dir, [
+            { id: 'old-aborted', claimed: 0, endedAt: old, status: 'aborted' },
+            { id: 'old-failed', claimed: 0, endedAt: old, status: 'failed' },
+            { id: 'fresh-aborted', claimed: 0, endedAt: Date.now(), status: 'aborted' },
+        ])
+        store.cleanupTerminalJobs()
+        expect(store.getJob('old-aborted')).toBeNull()
+        expect(store.getJob('old-failed')).not.toBeNull()
+        expect(store.getJob('fresh-aborted')).not.toBeNull()
+        store.close()
+        fs.rmSync(dir, { recursive: true, force: true })
+    })
+
+    it('overflow eviction removes unclaimed aborted jobs before unclaimed done ones', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-jobs-rot-'))
+        const store = createModelJobs({ saveDir: dir })
+        const now = Date.now()
+        const rows: { id: string; claimed: number; endedAt: number; status?: string }[] = []
+        // Aborted rows are the newest: without the fix the keep order (unclaimed
+        // main first, then newest) evicts the oldest done rows instead.
+        for (let i = 0; i < 40; i++) rows.push({ id: `done-${i}`, claimed: 0, endedAt: now - 100_000 - i * 1000 })
+        for (let i = 0; i < 20; i++) rows.push({ id: `aborted-${i}`, claimed: 0, endedAt: now - i * 1000, status: 'aborted' })
+        seedTerminal(dir, rows)
+        store.cleanupTerminalJobs()
+        // 60 terminal jobs, cap 50 → 10 evicted, all of them aborted.
+        for (let i = 0; i < 40; i++) {
+            expect(store.getJob(`done-${i}`), `done-${i}`).not.toBeNull()
+        }
+        for (let i = 0; i < 10; i++) {
+            expect(store.getJob(`aborted-${i}`), `aborted-${i}`).not.toBeNull()
+        }
+        for (let i = 10; i < 20; i++) {
+            expect(store.getJob(`aborted-${i}`), `aborted-${i}`).toBeNull()
+        }
         store.close()
         fs.rmSync(dir, { recursive: true, force: true })
     })

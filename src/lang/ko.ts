@@ -607,6 +607,8 @@ export const languageKorean = {
   localLoreInfo: "챗 로어북은 이 채팅에만 적용됩니다.",
   removeConfirm: "정말로 삭제하시겠습니까: ",
   removeConfirm2: "정말로, 정말로 삭제하시겠습니까: ",
+  regexDeleteAll: "정규식 전체 삭제",
+  regexDeleteAllConfirm: (count: number) => `정규식 ${count}개를 모두 삭제할까요? 되돌릴 수 없습니다.`,
   exportConfirm: "엑스포트하시겠습니까?",
   insertOrder: "배치 순서",
   activationKeys: "활성화 키",
@@ -1884,6 +1886,10 @@ export const languageKorean = {
     "플러그인 {} 이(가) Provider 접근 권한을 요청합니다. 무단 API 호출이 발생할 수 있습니다. 허용하시겠습니까?",
   inlayPermissionConsent:
     "플러그인 {}이(가) 인레이에 접근할 권한을 요청하고 있습니다. 인레이 내용을 읽거나 쓰거나 수정할 수 있습니다. 허용하시겠습니까?",
+  dbWriteConsent:
+    "플러그인 {}이(가) 캐릭터, 채팅, 모듈, 설정 등 데이터베이스를 수정할 권한을 요청하고 있습니다. 허용하시겠습니까?",
+  dbWriteAllowedNextWrite:
+    '플러그인 "{}"의 데이터 수정을 허용했습니다. 권한을 묻는 동안 데이터가 바뀌었을 수 있어 방금 요청은 적용하지 않고 플러그인에 실패로 알렸습니다. 다음 요청부터 적용됩니다.',
   sendChatConsent:
     "플러그인 {} 이(가) 사용자 대신 채팅 메시지를 전송할 권한을 요청합니다. AI 응답이 트리거됩니다. 허용하시겠습니까?",
   pluginPermissionDenyGuide:
@@ -2853,4 +2859,10 @@ export const languageKorean = {
   protonImportPluginConfirm: (name: string) => `${name}은(는) 플러그인입니다. 플러그인은 앱 안에서 코드를 실행하므로 믿을 수 있는 출처일 때만 설치하세요.`,
   protonImportInstall: "설치",
   protonImportNotice: "파일은 브라우저에서 복호화됩니다. PocketRisu는 Proton 공식 앱이 아닙니다.",
+  protonImportCharxPrompt: "이 charx 파일을 어떻게 가져올까요?",
+  protonImportAsCharacter: "캐릭터로 가져오기",
+  protonImportAsModule: "모듈로 가져오기",
+  protonImportCharxModuleHint: "파일 이름이 .module.charx로 끝납니다. 모듈을 charx로 내보낸 파일입니다.",
+  comfyWorkflow: "워크플로 (API)",
+  comfyWorkflowInvalidJson: "올바르지 않은 워크플로 파일입니다. 유효한 JSON이어야 합니다.",
 } satisfies DeepPartial<typeof import("./en").languageEnglish>;

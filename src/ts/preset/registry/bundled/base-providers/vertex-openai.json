@@ -1,6 +1,6 @@
 {
   "id": "vertex-openai",
-  "version": 9,
+  "version": 11,
   "displayName": "Vertex AI (OpenAI-compatible)",
   "adapterKind": "openai-compatible",
   "authKinds": [
@@ -65,6 +65,18 @@
       "description": "Vertex OpenAI-compatible model id.",
       "required": true,
       "enum": [
+        {
+          "value": "google/gemini-4-neon",
+          "label": "Gemini 4 Neon"
+        },
+        {
+          "value": "google/gemini-4-hydrogen",
+          "label": "Gemini 4 Hydrogen"
+        },
+        {
+          "value": "google/gemini-4-carbon",
+          "label": "Gemini 4 Carbon"
+        },
         {
           "value": "google/gemini-4-argon",
           "label": "Gemini 4 Argon"

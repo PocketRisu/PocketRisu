@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-4",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-4",
   "displayNameI18n": {
     "ko": "OpenAI GPT-4"
@@ -16,7 +16,7 @@
   ],
   "sortOrder": 160,
   "modelId": "gpt-4",
-  "updatedAt": 1780591128566,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -261,6 +261,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "outdated",
-  "statusReason": "Previous-generation model, one major version below the current GPT-5 lineup."
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-4 was shut down on October 23, 2026; requests fail. Use GPT-5.6 Sol.",
+  "statusSourceUrls": [
+    "https://developers.openai.com/api/docs/deprecations"
+  ]
 }

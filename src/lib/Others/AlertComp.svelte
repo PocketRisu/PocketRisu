@@ -6,7 +6,7 @@
     import { ParseMarkdown } from '../../ts/parser/parser.svelte';
     import BarIcon from '../SideBars/BarIcon.svelte';
     import { ChevronRightIcon, User } from '@lucide/svelte';
-    import { hubURL, isCharacterHasAssets } from 'src/ts/characterCards';
+    import { hubURL, isCharacterHasAssets, isTrustedHubOrigin } from 'src/ts/characterCards';
     import TextInput from '../UI/GUI/TextInput.svelte';
     import { aiLawApplies, openURL, downloadFile } from 'src/ts/globalApi.svelte';
     import Button from '../UI/GUI/Button.svelte';
@@ -189,7 +189,7 @@
 </script>
 
 <svelte:window onmessage={async (e) => {
-    if(e.origin.startsWith("https://sv.risuai.xyz") || e.origin.startsWith("https://nightly.sv.risuai.xyz") || e.origin.startsWith("http://127.0.0.1") || e.origin === window.location.origin){
+    if(isTrustedHubOrigin(e.origin)){
         if(e.data.msg?.data?.vaild && $alertStore.type === 'login'){
             $alertStore = {
                 type: 'none',
@@ -200,7 +200,7 @@
 }}></svelte:window>
 
 {#if $alertStore.type !== 'none' &&  $alertStore.type !== 'cardexport' && $alertStore.type !== 'branches' && $alertStore.type !== 'selectModule' && $alertStore.type !== 'pukmakkurit' && $alertStore.type !== 'error' && $alertStore.type !== 'normal' && $alertStore.type !== 'markdown' && $alertStore.type !== 'ask' && $alertStore.type !== 'pluginconfirm' && $alertStore.type !== 'tos' && $alertStore.type !== 'input' && $alertStore.type !== 'select' && $alertStore.type !== 'wait' && $alertStore.type !== 'wait2' && $alertStore.type !== 'progress' && $alertStore.type !== 'confirmMulti'}
-    <div class="absolute w-full h-full z-50 bg-black/50 flex justify-center items-center">
+    <div class="absolute w-full h-full z-1100 bg-black/50 flex justify-center items-center">
         <div class="bg-darkbg p-4 break-any rounded-md flex flex-col max-w-3xl  max-h-full overflow-y-auto">
             {#if $alertStore.type === 'selectChar'}
                 <h2 class="text-green-700 mt-0 mb-2 w-40 max-w-full">Select</h2>
@@ -888,8 +888,9 @@
         <TextInput
             bind:value={input}
             id="alert-input"
+            hideText={$alertStore.hideText ?? false}
             autocomplete="off"
-            list="alert-input-list"
+            list={$alertStore.hideText ? undefined : 'alert-input-list'}
             fullwidth
             onkeydown={(e) => {
                 if (e.key === 'Enter' && !e.isComposing) {
@@ -902,7 +903,7 @@
                 }
             }}
         />
-        {#if $alertStore.datalist}
+        {#if !$alertStore.hideText && $alertStore.datalist}
             <datalist id="alert-input-list">
                 {#each $alertStore.datalist as item}
                     <option

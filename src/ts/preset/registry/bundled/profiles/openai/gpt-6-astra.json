@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-6-astra",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-6 Astra",
   "displayNameI18n": {
     "ko": "OpenAI GPT-6 Astra"
@@ -17,7 +17,7 @@
   ],
   "sortOrder": 94,
   "modelId": "gpt-6-astra",
-  "updatedAt": 1788701283677,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -195,27 +195,6 @@
       }
     },
     {
-      "key": "logprobs",
-      "type": "boolean",
-      "label": "Logprobs",
-      "default": false,
-      "mapsTo": {
-        "target": "body",
-        "path": "logprobs"
-      }
-    },
-    {
-      "key": "top_logprobs",
-      "type": "integer",
-      "label": "Top Logprobs",
-      "min": 0,
-      "max": 20,
-      "mapsTo": {
-        "target": "body",
-        "path": "top_logprobs"
-      }
-    },
-    {
       "key": "user",
       "type": "string",
       "label": "User",
@@ -357,24 +336,6 @@
         "order": 2
       },
       {
-        "key": "logprobs",
-        "widget": "toggle",
-        "visibility": "advanced",
-        "group": "output",
-        "order": 3
-      },
-      {
-        "key": "top_logprobs",
-        "widget": "number-input",
-        "visibility": "advanced",
-        "group": "output",
-        "order": 4,
-        "showIf": {
-          "key": "logprobs",
-          "equals": true
-        }
-      },
-      {
         "key": "user",
         "widget": "text",
         "visibility": "advanced",
@@ -394,7 +355,6 @@
     "streaming",
     "reasoning",
     "vision",
-    "tools",
     "json"
   ],
   "sourceUrls": [

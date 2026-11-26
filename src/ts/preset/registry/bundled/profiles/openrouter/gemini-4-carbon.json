@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:gemini-4-carbon",
+  "version": 1,
+  "updatedAt": 1794502759159,
+  "displayName": "Gemini 4 Carbon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Carbon"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Gemini 4 Carbon via OpenRouter (google/gemini-4-carbon).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Carbon (OpenRouter, google/gemini-4-carbon)."
+  },
+  "tags": [
+    "openrouter",
+    "gemini"
+  ],
+  "sortOrder": 551,
+  "modelId": "google/gemini-4-carbon",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

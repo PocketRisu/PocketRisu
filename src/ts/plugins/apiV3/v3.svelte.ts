@@ -10,9 +10,10 @@ import DOMPurify from 'dompurify';
 import { additionalChatMenu, additionalFloatingActionButtons, additionalHamburgerMenu, additionalSettingsMenu, alertStore as alertStateStore, bodyIntercepterStore, chatPanelStore, DBState, selectedCharID, type MenuDef } from "src/ts/stores.svelte";
 import { v4 } from "uuid";
 import { sleep } from "src/ts/util";
-import { alertConfirm, alertError, alertNormal, alertNormalWait } from "src/ts/alert";
+import { alertConfirm, alertError, alertNormal, alertNormalWait, notifyInfo } from "src/ts/alert";
 import { language } from "src/lang";
 import { checkCharOrder, forageStorage, getFetchLogs } from "src/ts/globalApi.svelte";
+import { fetchLogUrlForPlugin } from "./fetchLogUrl";
 import { changeColorScheme, updateColorScheme, updateTextThemeAndCSS, type ColorScheme } from "src/ts/gui/colorscheme";
 import { get } from "svelte/store";
 import { registerMCPModule, unregisterMCPModule } from "src/ts/process/mcp/pluginmcp";
@@ -32,6 +33,7 @@ import type { OpenAIChat } from "src/ts/process/index.svelte";
 import { getModuleLorebooks } from "src/ts/process/modules";
 import { hydratePluginCharacterSnapshot, hydratePluginDatabaseSnapshot, restorePluginCharacterManifest } from "../pluginCharacterSnapshot";
 import { PLUGIN_CUSTOM_STORAGE_KEY, wantsFullPluginStorage } from "../pluginDbProxy";
+import { createInlayFromData } from "src/ts/process/files/inlays";
 import {
     registerTTSPreprocessor,
     unregisterTTSPreprocessor,
@@ -607,6 +609,7 @@ const pluginPermissionConsent = (permission: PluginPermission): string => {
     const consent: Record<PluginPermission, string> = {
         fetchLogs: language.fetchLogConsent,
         db: language.getFullDatabaseConsent,
+        dbWrite: language.dbWriteConsent,
         mainDom: language.mainDomAccessConsent,
         replacer: language.replacerPermissionConsent,
         provider: language.providerPermissionConsent,
@@ -671,6 +674,26 @@ const urlBlacklist = [
     'sionyw.com',
 ]
 
+const assertPluginUrlAllowed = (url: string) => {
+    if(typeof url !== 'string'){
+        throw new Error('Invalid URL');
+    }
+    const hostnames: string[] = [];
+    for(const base of [undefined, location.href]){
+        try {
+            hostnames.push(new URL(url, base).hostname.toLowerCase().replace(/\.+$/, ''));
+        } catch {}
+    }
+    if(hostnames.length === 0){
+        throw new Error('Invalid URL');
+    }
+    for(const blocked of urlBlacklist){
+        if(hostnames.some((hostname) => hostname === blocked || hostname.endsWith('.' + blocked))){
+            throw new Error(`Requests to ${blocked} are blocked for security reasons.`);
+        }
+    }
+}
+
 const authorizationHeaders = [
     'x-api-key',
     'authorization',
@@ -683,6 +706,25 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
     const getPluginScriptHash = createPluginScriptHashGetter(plugin.script, hasher)
     const getPermission = async (permissionDesc: PluginPermission, reconfirm: boolean|'periodically' = false) => {
         return pluginPermissionGate.request(plugin.name, await getPluginScriptHash(), permissionDesc, reconfirm)
+    }
+    // Database writes need the dbWrite permission (upstream 43e5576df). A write
+    // whose permission had to be asked is rejected instead of applied: the plugin
+    // built its data before the dialog, and a reply may have streamed in while the
+    // dialog was open, so applying it could put back an older copy over newer
+    // messages. Rejecting (not returning) lets the plugin see that nothing was
+    // written. The answer is kept, so the plugin's next write goes through.
+    const withDbWrite = <A extends any[]>(write: (...args: A) => unknown) => {
+        return async (...args: A): Promise<void> => {
+            const { granted, waited } = await pluginPermissionGate.requestDecision(plugin.name, await getPluginScriptHash(), 'dbWrite', 'periodically')
+            if(!granted){
+                return
+            }
+            if(waited){
+                notifyInfo(language.dbWriteAllowedNextWrite.replace("{}", plugin.name))
+                throw new Error('dbWrite permission was just granted, so this write was not applied: the data may have changed while the user was asked. Read the data again and retry, or call requestPluginPermission("dbWrite") before writing.')
+            }
+            await write(...args)
+        }
     }
     // Same character as oldApis.getChar/setChar, but with lazy assets filled
     // on read and the manifest kept on an assets-unchanged write (#80).
@@ -703,11 +745,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
         //Old APIs from v2.1
         risuFetch: (url, options) => {
             console.error(`[DEPRECATION WARNING] risuFetch is deprecated and will be removed in future versions. Please use nativeFetch instead.`)
-            for(const blocked of urlBlacklist){
-                if(url.toLowerCase().includes(blocked)){
-                    throw new Error(`Requests to ${blocked} are blocked for security reasons.`);
-                }
-            }
+            assertPluginUrlAllowed(url);
 
             //scan headers
             const headers = options?.headers || {};
@@ -719,11 +757,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             return oldApis.risuFetch(url, withPluginName(options));
         },
         nativeFetch: (url, options) => {
-            for(const blocked of urlBlacklist){
-                if(url.toLowerCase().includes(blocked)){
-                    throw new Error(`Requests to ${blocked} are blocked for security reasons.`);
-                }
-            }
+            assertPluginUrlAllowed(url);
 
             //scan headers
             const headers = options?.headers || {};
@@ -735,7 +769,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             return oldApis.nativeFetch(url, withPluginName(options));
         },
         getChar: getCharacterForPlugin,
-        setChar: setCharacterForPlugin,
+        setChar: withDbWrite(setCharacterForPlugin),
         addProvider: (name: string, func: (arg: PluginV2ProviderArgument, abortSignal?: AbortSignal) => Promise<{ success: boolean, content: string | ReadableStream<string> }>, options?: PluginV3ProviderOptions) => {
             console.warn(`[WARN] addProvider is a powerful API that can potentially be unsafe if used incorrectly. addProvider's functionality might be limited or changed in future updates to ensure security. please use other APIs if possible.`);
             let provs = get(customProviderStore)
@@ -827,7 +861,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             addPluginUnloadCallback(plugin.name, () => oldApis.removeRisuChatListener(mode, func as any));
         },
         removeRisuChatListener: oldApis.removeRisuChatListener,
-        setDatabaseLite: (newDb: any) => {
+        setDatabaseLite: withDbWrite((newDb: any) => {
             if(newDb && Object.hasOwn(newDb, 'plugins')){
                 if(import.meta.env.DEV && !isEqual(newDb.plugins, $state.snapshot(DBState.db.plugins))){
                     console.warn(`Plugin "${plugin.name}" attempted to modify the plugin list using setDatabaseLite. The change was ignored.`);
@@ -839,8 +873,8 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
 
             return oldApis.setDatabaseLite(newDb);
-        },
-        setDatabase: oldApis.setDatabase,
+        }),
+        setDatabase: withDbWrite(oldApis.setDatabase),
         loadPlugins: oldApis.loadPlugins,
         readImage: oldApis.readImage,
         readInlay: async (id: string) => {
@@ -971,6 +1005,16 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
                 }
             }
         },
+        createInlay: async (data: Uint8Array | string, options?: { name?: string }) => {
+            if(typeof data !== 'string' && !(data instanceof Uint8Array)){
+                throw new Error('data must be a Uint8Array or an image data URI string')
+            }
+            const conf = await getPermission('inlay', 'periodically');
+            if(!conf){
+                return null;
+            }
+            return await createInlayFromData(data, options?.name)
+        },
         getCharacterFromIndex: async (index:number) => {
             const db = DBState.db
             const charIds = Object.keys(db.characters);
@@ -980,14 +1024,14 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             }
             return null;
         },
-        setCharacterToIndex: (index:number, char:any) => {
+        setCharacterToIndex: withDbWrite((index:number, char:any) => {
             const db = DBState.db
             const charIds = Object.keys(db.characters);
             const charId = charIds[index];
             if(charId){
                 DBState.db.characters[charId] = restorePluginCharacterManifest(char, db.characters[charId])
             }
-        },
+        }),
         getChatFromIndex: async (characterIndex:number, chatIndex:number) => {
             const db = DBState.db
             const charIds = Object.keys(db.characters);
@@ -1051,7 +1095,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
 
             return (await processScriptFull(char, parsed, 'editprocess', chatID, cbsConditions)).data;
         },
-        setChatToIndex: async (characterIndex:number, chatIndex:number, chat:any) => {
+        setChatToIndex: withDbWrite(async (characterIndex:number, chatIndex:number, chat:any) => {
             // A placeholder (an unopened chat taken from getCharacter* or
             // getDatabase) has no messages: writing it back would empty the
             // chat. Its contents come from getChatFromIndex.
@@ -1080,7 +1124,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
                     }
                 }
             }
-        },
+        }),
         getCurrentCharacterIndex: () => {
             return get(selectedCharID)
         },
@@ -1103,7 +1147,7 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
         },
         //New names for character APIs, to match API naming conventions
         getCharacter: getCharacterForPlugin,
-        setCharacter: setCharacterForPlugin,
+        setCharacter: withDbWrite(setCharacterForPlugin),
 
         showContainer: (
             //more types may be added in future
@@ -1359,10 +1403,8 @@ const makeRisuaiAPIV3 = (iframe:HTMLIFrameElement,plugin:RisuPlugin) => {
             // unchanged from when this came from the in-memory fetch log.
             const unsafeFetchLog = await getFetchLogs()
             return unsafeFetchLog.map(log => {
-
-                const url = new URL(log.url);
                 return {
-                    url: url.origin + url.pathname,
+                    url: fetchLogUrlForPlugin(log.url),
                     body: log.requestBody ?? '',
                     status: log.status,
                     response: log.responseBody,

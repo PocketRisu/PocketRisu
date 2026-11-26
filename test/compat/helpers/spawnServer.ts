@@ -19,6 +19,8 @@ export interface ServerHandle {
   port: number
   password: string
   cwd: string
+  /** The server process, for tests that signal it directly. */
+  child: ChildProcess
   /** Kill the server and clean up the temp directory. */
   cleanup: () => Promise<void>
 }
@@ -113,5 +115,5 @@ export async function spawnServer(opts: SpawnServerOptions = {}): Promise<Server
     await rm(tempDir, { recursive: true, force: true })
   }
 
-  return { port, password: TEST_PASSWORD, cwd: tempDir, cleanup }
+  return { port, password: TEST_PASSWORD, cwd: tempDir, child, cleanup }
 }

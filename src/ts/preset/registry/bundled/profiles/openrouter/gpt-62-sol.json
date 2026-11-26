@@ -1,0 +1,59 @@
+{
+  "id": "openrouter:gpt-62-sol",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "GPT-6.2 Sol",
+  "displayNameI18n": {
+    "ko": "GPT-6.2 Sol"
+  },
+  "providerBaseId": "openrouter",
+  "description": "GPT-6.2 Sol via OpenRouter (openai/gpt-6.2-sol).",
+  "descriptionI18n": {
+    "ko": "GPT-6.2 Sol (OpenRouter, openai/gpt-6.2-sol)."
+  },
+  "tags": [
+    "openrouter",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 554,
+  "modelId": "openai/gpt-6.2-sol",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

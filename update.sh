@@ -46,15 +46,10 @@ printf "Update from %s to %s? [Y/n]: " "$CURRENT" "$LATEST"
 read -r answer
 [ "$answer" = "n" ] || [ "$answer" = "N" ] && { info "Aborted."; exit 0; }
 
-# ── Backup save/ ───────────────────────────────────────────────────────────────
-
+# save/ is never touched below, so it is not copied: putting an early copy
+# back at the end dropped whatever a running server wrote in the meantime.
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
-
-if [ -d save ]; then
-    info "Backing up save/ ..."
-    cp -r save "$TMP_DIR/_save_backup"
-fi
 
 # ── Download and extract ───────────────────────────────────────────────────────
 
@@ -77,6 +72,15 @@ EXTRACTED_DIR=$(find "$TMP_DIR" -maxdepth 1 -type d \
     \( -name 'PocketRisu-*' -o -name 'Risuai-NodeOnly-*' \) \
     -print -quit)
 [ -d "$EXTRACTED_DIR" ] || error "Extraction failed."
+
+# The certificate folder is not in the package: carry it into the new server/
+# before the old one is removed (the in-app updater does the same).
+SSL_CERT_DIR="server/node/ssl/certificate"
+if [ -d "$SCRIPT_DIR/$SSL_CERT_DIR" ]; then
+    info "Keeping SSL certificates..."
+    mkdir -p "$EXTRACTED_DIR/server/node/ssl"
+    cp -Rp "$SCRIPT_DIR/$SSL_CERT_DIR" "$EXTRACTED_DIR/server/node/ssl/"
+fi
 
 # ── Replace files (preserve save/ and user files) ──────────────────────────────
 
@@ -129,12 +133,6 @@ mv "$EXTRACTED_DIR"/* "$EXTRACTED_DIR"/.[!.]* "$SCRIPT_DIR/" 2>/dev/null || true
 
 # Record what this release shipped for the next update's managed-entry check
 cp "$TMP_DIR/new-manifest" "$MANIFEST_FILE"
-
-# Restore save/
-if [ -d "$TMP_DIR/_save_backup" ]; then
-    rm -rf "$SCRIPT_DIR/save"
-    mv "$TMP_DIR/_save_backup" "$SCRIPT_DIR/save"
-fi
 
 # ── Rebuild ────────────────────────────────────────────────────────────────────
 

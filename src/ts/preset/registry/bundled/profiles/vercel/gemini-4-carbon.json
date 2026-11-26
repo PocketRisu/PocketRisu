@@ -1,0 +1,57 @@
+{
+  "id": "vercel:gemini-4-carbon",
+  "version": 1,
+  "updatedAt": 1794502759159,
+  "displayName": "Gemini 4 Carbon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Carbon"
+  },
+  "providerBaseId": "vercel",
+  "description": "Gemini 4 Carbon via Vercel AI Gateway (google/gemini-4-carbon).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Carbon (Vercel AI Gateway, google/gemini-4-carbon)."
+  },
+  "tags": [
+    "vercel",
+    "gemini"
+  ],
+  "sortOrder": 590,
+  "modelId": "google/gemini-4-carbon",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

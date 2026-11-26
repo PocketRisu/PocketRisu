@@ -215,6 +215,11 @@ function getSnapshotLimits() {
 // first, and that flush can take a new snapshot and trim the oldest one —
 // which may be the very snapshot being restored.
 let restoringSnapshotKey = null;
+// Snapshot taken right before a backup import replaces the database, kept
+// until the import is done: the plugin-storage split near its end forces
+// another snapshot, and with a small count or byte limit that trim dropped
+// the only copy from before the import.
+let preImportSnapshotKey = null;
 
 function trimSnapshotsToLimits() {
     const { maxCount, maxBytes } = getSnapshotLimits();
@@ -238,7 +243,7 @@ function trimSnapshotsToLimits() {
         const isFirst = i === 0;
         const fitsByCount = i < maxCount;
         const fitsByBytes = runningBytes + e.size <= maxBytes;
-        if (e.key === restoringSnapshotKey) continue;
+        if (e.key === restoringSnapshotKey || e.key === preImportSnapshotKey) continue;
         if (isFirst || (fitsByCount && fitsByBytes)) {
             runningBytes += e.size;
         } else {
@@ -306,6 +311,9 @@ function snapshotUsage() {
     return { count: keys.length, bytes, logicalBytes };
 }
 
+// Last snapshot number handed out by this process (see the stamp below).
+let lastSnapshotStamp = 0;
+
 // `force` skips the cooldown — used before one-way migrations, where a
 // snapshot of the pre-migration blob is the only rollback path.
 function createBackupAndRotate({ force = false } = {}) {
@@ -323,16 +331,36 @@ function createBackupAndRotate({ force = false } = {}) {
         return;
     }
 
-    const backupKey = `${DB_BACKUP_PREFIX}${(now / 100).toFixed()}.bin`;
+    // Keys have 100 ms resolution, and a new snapshot must sort newest (trim
+    // keeps the newest). Two snapshots inside one step (the forced one before
+    // a backup import, then the one the plugin-storage split forces right after
+    // it) shared a key, so the second overwrote the only pre-import copy; and a
+    // number below one already handed out would be trimmed at once. Count up
+    // from the last one, skipping keys left from before a restart. The key
+    // stays digits. The first time, start above the existing snapshots: a
+    // clock set back (a board without a clock booting before time sync) would
+    // otherwise give the new one the oldest number.
+    if (lastSnapshotStamp === 0) {
+        for (const key of listSnapshotKeys()) {
+            const existing = Number(key.slice(DB_BACKUP_PREFIX.length, -4));
+            if (Number.isFinite(existing) && existing > lastSnapshotStamp) lastSnapshotStamp = existing;
+        }
+    }
+    let stamp = Math.max(Number((now / 100).toFixed()), lastSnapshotStamp + 1);
+    let backupKey = '';
     // Blob + plugin rows land atomically so a snapshot never exists half-made.
     sqliteDb.transaction(() => {
+        while (kvSize(`${DB_BACKUP_PREFIX}${stamp}.bin`) !== null) stamp++;
+        backupKey = `${DB_BACKUP_PREFIX}${stamp}.bin`;
         kvCopyValue('database/database.bin', backupKey);
         pluginStorage.snapshotTo(snapshotPluginId(backupKey));
     })();
+    lastSnapshotStamp = stamp;
     // Advance the cooldown only once the snapshot is committed: a throw above
     // must not suppress the next attempt for the whole interval.
     lastBackupTime = now;
     trimSnapshotsToLimits();
+    return backupKey;
 }
 
 // The flush that took the persist timer, while it is still writing.
@@ -2148,7 +2176,27 @@ async function checkDiskSpace(requiredBytes) {
 // not kick a PC mid-session); ownership moves on the first WRITE from a
 // freshly-booted session, and only stale sessions get 423.
 const { createSessionLock } = require('./session-lock.cjs');
-const sessionLock = createSessionLock();
+// The holder is stored so a restart keeps it (session-lock.cjs). A config/
+// key: backups neither export nor replace it.
+const SESSION_LOCK_KEY = 'config/session-lock';
+function readStoredSessionHolder() {
+    try {
+        const raw = kvGet(SESSION_LOCK_KEY);
+        return raw ? JSON.parse(Buffer.from(raw).toString('utf-8')) : null;
+    } catch {
+        return null;
+    }
+}
+const sessionLock = createSessionLock({
+    initialActive: readStoredSessionHolder(),
+    onActiveChange: (holder) => {
+        try {
+            kvSet(SESSION_LOCK_KEY, Buffer.from(JSON.stringify(holder), 'utf-8'));
+        } catch (error) {
+            console.warn('[Session] Could not store the write lock holder:', error?.message);
+        }
+    },
+});
 const SESSION_WRITE_MAX_MS = process.env.POCKETRISU_SESSION_WRITE_MAX_MS
     ? Number(process.env.POCKETRISU_SESSION_WRITE_MAX_MS)
     : 5 * 60 * 1000;
@@ -2266,7 +2314,7 @@ function normalizeFilePathHeader(value) {
 }
 
 function isHex(str) {
-    return hexRegex.test(str.toUpperCase().trim()) || str === '__password';
+    return hexRegex.test(str.toUpperCase().trim());
 }
 
 async function hashJSON(json){
@@ -3009,7 +3057,16 @@ async function assertBackupDatabaseDecodable(raw) {
 
 // ─── Shared backup import logic ─────────────────────────────────────────────
 // Accepts any async iterable of Buffer chunks (HTTP request body, file stream, etc.)
-async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0, onProgress = null } = {}) {
+async function importBackupFromSource(dataSource, options) {
+    try {
+        return await importBackupFromSourceUnguarded(dataSource, options);
+    } finally {
+        // However the import ended, the pre-import snapshot rotates normally again.
+        preImportSnapshotKey = null;
+    }
+}
+
+async function importBackupFromSourceUnguarded(dataSource, { maxBytes = 0, totalBytes = 0, onProgress = null } = {}) {
     const BATCH_SIZE = 5000;
     // Defer Buffer.concat until enough bytes for the next entry are buffered.
     // Concatenating on every chunk arrival is O(n²) when a single entry (e.g.
@@ -3096,7 +3153,7 @@ async function importBackupFromSource(dataSource, { maxBytes = 0, totalBytes = 0
     // Always snapshot the live database right before it is replaced. The
     // default cooldown could skip this when an autosave snapshot landed
     // within the last few minutes, leaving no pre-import copy to restore.
-    createBackupAndRotate({ force: true });
+    preImportSnapshotKey = createBackupAndRotate({ force: true }) ?? null;
 
     sqliteDb.pragma('synchronous = OFF');
 
@@ -7314,17 +7371,34 @@ function jsonLength(value) {
 // chat messages. Mirrors INLAY_REF_REGEX in src/ts/process/files/inlays.ts.
 const INLAY_REF_RE = /\{\{(?:inlay|inlayed|inlayeddata)::(.+?)\}\}/g;
 
+// Bump when addInlayRefCounts reads more fields: archive index rows counted
+// by an older version are counted again from their payload.
+const INLAY_REFS_VERSION = 2;
+
+// Counts every place a chat keeps an inlay token: each message's text and its
+// other swipes, and the chat's script variables (image-generation triggers
+// store the token there). Mirrors scanLocalInlayReferences in inlays.ts.
 function addInlayRefCounts(refCounts, chats) {
     let messages = 0;
+    const scan = (text) => {
+        if (typeof text !== 'string') return;
+        INLAY_REF_RE.lastIndex = 0;
+        let m;
+        while ((m = INLAY_REF_RE.exec(text)) !== null) {
+            refCounts[m[1]] = (refCounts[m[1]] ?? 0) + 1;
+        }
+    };
     for (const chat of Array.isArray(chats) ? chats : []) {
+        if (chat?.scriptstate && typeof chat.scriptstate === 'object') {
+            for (const value of Object.values(chat.scriptstate)) scan(value);
+        }
         if (!Array.isArray(chat?.message)) continue;
         for (const msg of chat.message) {
             if (typeof msg?.data !== 'string') continue;
             messages++;
-            INLAY_REF_RE.lastIndex = 0;
-            let m;
-            while ((m = INLAY_REF_RE.exec(msg.data)) !== null) {
-                refCounts[m[1]] = (refCounts[m[1]] ?? 0) + 1;
+            scan(msg.data);
+            if (Array.isArray(msg.swipes)) {
+                for (const swipe of msg.swipes) scan(swipe);
             }
         }
     }
@@ -7354,11 +7428,26 @@ app.get('/api/inlays/references', async (req, res, next) => {
             let archived = 0;
             for (const meta of listArchiveMetas()) {
                 archived++;
-                const refs = meta.inlayRefs;
+                let refs = meta.inlayRefs;
                 // Fail closed: an index row without inlay counts cannot vouch
                 // for its chats, and skipping it would under-count.
                 if (!refs || typeof refs !== 'object') {
                     throw new Error(`archive index lacks inlay references: ${archiveRowId(meta.chaId, meta.archivedAt)}`);
+                }
+                if (meta.inlayRefsVersion !== INLAY_REFS_VERSION) {
+                    // Counted by an older scanner that missed swipes and script
+                    // variables: count again from the payload, once. An
+                    // unreadable payload keeps its old counts, as before.
+                    try {
+                        const decoded = await decodeArchivePayload(meta.chaId, meta.archivedAt);
+                        if (decoded) {
+                            refs = Object.create(null);
+                            addInlayRefCounts(refs, decoded.payload.character.chats);
+                            kvSet(archiveMetaKey(meta.chaId, meta.archivedAt), Buffer.from(JSON.stringify({ ...meta, inlayRefs: refs, inlayRefsVersion: INLAY_REFS_VERSION }), 'utf-8'));
+                        }
+                    } catch (err) {
+                        logger.warn(`[Inlay] archive ${archiveRowId(meta.chaId, meta.archivedAt)} kept its old inlay counts: ${err?.message || err}`);
+                    }
                 }
                 for (const [id, count] of Object.entries(refs)) {
                     if (typeof count === 'number' && count > 0) refCounts[id] = (refCounts[id] ?? 0) + count;
@@ -7435,6 +7524,7 @@ async function writeArchiveRow(db, chaId, { acceptLostChats = false } = {}) {
         assetRefs: Array.from(buildUncleanableSet({ characters: [full] })),
         // Inlay references of the archived chats, for /api/inlays/references.
         inlayRefs: (() => { const counts = Object.create(null); addInlayRefCounts(counts, fullChats); return counts; })(),
+        inlayRefsVersion: INLAY_REFS_VERSION,
     };
     kvSet(archiveMetaKey(chaId, archivedAt), Buffer.from(JSON.stringify(meta), 'utf-8'));
     logger.info(`[Archive] deactivated ${chaId}@${archivedAt} (${encoded.length} bytes, ${meta.chatCount} chats, ${meta.assetRefs.length} asset refs)`);
@@ -9141,6 +9231,10 @@ app.post('/api/self-update', async (req, res) => {
             for (const e of newEntries) {
                 if (skipMove.has(e)) continue;
                 const dest = path.join(appDir, e);
+                // Phase 1 left the keep entries in place, so the rm below would
+                // delete them: an older release shipped an empty backups/ (left by
+                // the build's boot test) and replaced the user's server backups.
+                if (keep.has(e) && existsSync(dest)) continue;
                 await fs.rm(dest, { recursive: true, force: true }).catch(() => {});
                 await moveAcrossVolumes(path.join(sourceDir, e), dest);
                 moved.push(e);
@@ -9519,8 +9613,10 @@ async function startServer() {
     }
 }
 
-// Graceful shutdown: flush pending patches and checkpoint WAL before exit
-for (const sig of ['SIGTERM', 'SIGINT']) {
+// Graceful shutdown: flush pending patches and checkpoint WAL before exit.
+// SIGHUP comes when the window or terminal closes (Windows console, Termux
+// session); without a listener Node dies on it at once, even under nohup.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
     process.on(sig, async () => {
         console.log(`[Server] Received ${sig}, flushing pending data...`);
         stopTunnel();

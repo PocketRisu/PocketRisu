@@ -6,7 +6,7 @@
     import LoreBookList from "src/lib/SideBars/LoreBook/LoreBookList.svelte";
     import { type CCLorebook, convertExternalLorebook } from "src/ts/process/lorebook.svelte";
     import type { RisuModule } from "src/ts/process/modules";
-    import { DownloadIcon, FolderPlusIcon, HardDriveUploadIcon, ImageIcon, PlusIcon, TrashIcon } from "@lucide/svelte";
+    import { DownloadIcon, FolderPlusIcon, HardDriveUploadIcon, ImageIcon, PlusIcon, Trash2Icon, TrashIcon } from "@lucide/svelte";
     import RegexList from "src/lib/SideBars/Scripts/RegexList.svelte";
     import TriggerList from "src/lib/SideBars/Scripts/TriggerList.svelte";
     import ShSwitch from "src/lib/UI/GUI/ShSwitch.svelte";
@@ -16,7 +16,7 @@
     import TextAreaInput from "src/lib/UI/GUI/TextAreaInput.svelte";
     import { appendAssetManifestItems, editAssetManifest, forageStorage, getFileSrc, loadAssetManifestItems, recoverAssetManifestConflict, saveAsset, downloadFile } from "src/ts/globalApi.svelte";
     import { alertError, notifySuccess } from "src/ts/alert";
-    import { exportRegex, importRegex } from "src/ts/process/scripts";
+    import { confirmDeleteAllRegex, exportRegex, importRegex } from "src/ts/process/scripts";
     import { selectMultipleFile } from "src/ts/util";
     import { openAssetViewer, hasImageAssets } from "src/ts/assetViewer.svelte";
     import ShButton from "src/lib/UI/GUI/ShButton.svelte";
@@ -337,6 +337,11 @@
             <ShButton variant="ghost" size="icon-sm" aria-label="Import" onclick={async () => {
                 currentModule.regex = await importRegex(currentModule.regex)
             }}><HardDriveUploadIcon /></ShButton>
+            <ShButton variant="ghost" size="icon-sm" title={language.regexDeleteAll} aria-label={language.regexDeleteAll} disabled={!currentModule.regex?.length} onclick={async () => {
+                if(await confirmDeleteAllRegex(currentModule.regex)){
+                    currentModule.regex = []
+                }
+            }}><Trash2Icon /></ShButton>
         </div>
     </div>
 {/if}

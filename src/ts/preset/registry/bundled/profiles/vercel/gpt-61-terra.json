@@ -1,0 +1,95 @@
+{
+  "id": "vercel:gpt-61-terra",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "GPT-6.1 Terra",
+  "displayNameI18n": {
+    "ko": "GPT-6.1 Terra"
+  },
+  "providerBaseId": "vercel",
+  "description": "GPT-6.1 Terra via Vercel AI Gateway (openai/gpt-6.1-terra).",
+  "descriptionI18n": {
+    "ko": "GPT-6.1 Terra (Vercel AI Gateway, openai/gpt-6.1-terra)."
+  },
+  "tags": [
+    "vercel",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 592,
+  "modelId": "openai/gpt-6.1-terra",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth. The gateway maps this to each model's native thinking config (e.g. Gemini thinkingLevel/thinkingBudget, OpenAI reasoning effort).",
+      "enum": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning.effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. 게이트웨이가 모델별 thinking 설정(Gemini thinkingLevel/thinkingBudget, OpenAI reasoning effort 등)으로 변환합니다."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

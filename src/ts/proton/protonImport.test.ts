@@ -7,8 +7,17 @@ vi.mock('src/ts/plugins/plugins.svelte', () => ({ importPlugin }))
 const checkCharOrder = vi.fn()
 vi.mock('src/ts/globalApi.svelte', () => ({ checkCharOrder }))
 const alertError = vi.fn()
-vi.mock('src/ts/alert', () => ({ notifySuccess: vi.fn(), alertError }))
-vi.mock('src/lang', () => ({ language: { successImport: 'ok', errors: { noData: 'no data' } } }))
+const alertConfirmMulti = vi.fn(async (_prompt: string, _actions: string[], _detail?: string) => 0)
+vi.mock('src/ts/alert', () => ({ notifySuccess: vi.fn(), alertError, alertConfirmMulti }))
+const importCharxAsModule = vi.fn(async (_name: string, _data: Uint8Array) => true)
+vi.mock('src/ts/process/modules', () => ({ importCharxAsModule }))
+const openSettings = vi.fn()
+vi.mock('src/ts/routing', () => ({ openSettings, SettingsRoute: { Module: 'module' } }))
+vi.mock('src/lang', () => ({ language: {
+    successImport: 'ok', errors: { noData: 'no data' },
+    protonImportCharxPrompt: 'prompt', protonImportAsCharacter: 'character', protonImportAsModule: 'module',
+    protonImportCharxModuleHint: 'module hint',
+} }))
 
 // Stand-in for the SDK's public link client.
 let claimedSize: number | undefined
@@ -87,6 +96,9 @@ describe('importProtonFile', () => {
         importPlugin.mockClear()
         checkCharOrder.mockClear()
         alertError.mockClear()
+        alertConfirmMulti.mockClear()
+        importCharxAsModule.mockClear()
+        openSettings.mockClear()
     })
 
     it('installs plugins itself, stripping a BOM', async () => {
@@ -113,6 +125,33 @@ describe('importProtonFile', () => {
         expect(importPlugin).not.toHaveBeenCalled()
         // A new character must also land in the sidebar order.
         expect(checkCharOrder).toHaveBeenCalled()
+        expect(alertConfirmMulti).not.toHaveBeenCalled()
+    })
+
+    it('asks whether a .charx is a character or a module', async () => {
+        const data = bytes('x')
+        alertConfirmMulti.mockResolvedValueOnce(0)
+        expect(await importProtonFile('Card.charx', data)).toBe(true)
+        expect(alertConfirmMulti).toHaveBeenCalledWith('prompt', ['character', 'module'], undefined)
+        expect(importFileByName).toHaveBeenCalledWith('Card.charx', data)
+        expect(importCharxAsModule).not.toHaveBeenCalled()
+    })
+
+    it('imports a .charx as a module when picked, hinting at .module.charx names', async () => {
+        const data = bytes('x')
+        alertConfirmMulti.mockResolvedValueOnce(1)
+        expect(await importProtonFile('Lore.module.CHARX', data)).toBe(true)
+        expect(alertConfirmMulti).toHaveBeenCalledWith('prompt', ['character', 'module'], 'module hint')
+        expect(importCharxAsModule).toHaveBeenCalledWith('Lore.module.charx', data)
+        expect(openSettings).toHaveBeenCalledWith('module')
+        expect(importFileByName).not.toHaveBeenCalled()
+    })
+
+    it('imports nothing when the .charx choice is cancelled', async () => {
+        alertConfirmMulti.mockResolvedValueOnce(-1)
+        expect(await importProtonFile('Card.charx', bytes('x'))).toBe(false)
+        expect(importFileByName).not.toHaveBeenCalled()
+        expect(importCharxAsModule).not.toHaveBeenCalled()
     })
 })
 

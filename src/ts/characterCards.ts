@@ -24,6 +24,13 @@ const EXTERNAL_HUB_URL = 'https://sv.risuai.xyz';
 const NIGHTLY_HUB_URL = 'https://nightly.sv.risuai.xyz'
 export const hubURL = '/hub-proxy';
 
+export function isTrustedHubOrigin(origin: string) {
+    if (origin === EXTERNAL_HUB_URL || origin === NIGHTLY_HUB_URL || origin === window.location.origin) {
+        return true;
+    }
+    return import.meta.env.DEV && (origin === 'http://127.0.0.1' || origin.startsWith('http://127.0.0.1:'));
+}
+
 export async function importCharacter() {
     try {
         const files = await selectFileByDom(["*"], 'multiple')
@@ -97,7 +104,8 @@ export async function importCharacterProcess<T extends boolean = false>(f:{
         }
         let lorebook:loreBook[] = null
         if(importer.moduleData){
-            const md = await readModule(Buffer.from(importer.moduleData))
+            // Asked once from the card after assets are saved; asking here gets hidden by the asset progress alert
+            const md = await readModule(Buffer.from(importer.moduleData), {confirmLowLevelAccess: false})
             card.data.extensions ??= {}
             card.data.extensions.risuai ??= {}
             card.data.extensions.risuai.triggerscript = md.trigger ?? []
@@ -282,7 +290,7 @@ export async function importCharacterProcess<T extends boolean = false>(f:{
             }
             const metaData:RccCardMetaData = JSON.parse(Buffer.from(parts[4], 'base64').toString('utf-8'))
             if(metaData.usePassword){
-                const password = await alertInput(language.inputCardPassword)
+                const password = await alertInput(language.inputCardPassword, undefined, undefined, { hideText: true })
                 if(!password){
                     return
                 }

@@ -22,7 +22,6 @@
       "core-js",
       "esbuild",
       "msgpackr-extract",
-      "onnxruntime-node",
       "protobufjs"
     ]
   }

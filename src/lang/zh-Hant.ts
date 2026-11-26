@@ -531,6 +531,8 @@ export const languageChineseTraditional = {
     "localLoreInfo": "對話 Lorebook 只套用至目前對話",
     "removeConfirm": "確定要移除：",
     "removeConfirm2": "真的確定要移除：",
+    "regexDeleteAll": "刪除全部 Regex 腳本",
+    "regexDeleteAllConfirm": (count: number) => `要刪除全部 ${count} 個 Regex 腳本嗎？此操作無法復原。`,
     "exportConfirm": "要匯出此項目嗎？",
     "insertOrder": "插入順序",
     "activationKeys": "啟用關鍵字",
@@ -1716,6 +1718,8 @@ export const languageChineseTraditional = {
     "replacerPermissionConsent": "外掛 {} 正要求替換對話內容的權限，這可能被用來操控對話。要允許嗎？",
     "providerPermissionConsent": "外掛 {} 正要求使用模型供應商功能，這可能讓它發出未經授權的 API 請求。要允許嗎？",
     "inlayPermissionConsent": "外掛 {} 正要求存取內嵌內容，這可能讓它讀取、寫入或編輯內嵌資料。要允許嗎？",
+    "dbWriteConsent": "外掛 {} 正要求修改資料庫的權限，包括角色、聊天、模組與設定。要允許嗎？",
+    "dbWriteAllowedNextWrite": "已允許外掛「{}」修改資料。詢問期間資料可能已變更，因此剛才要求的修改未套用，並已通知外掛；下一次修改將會套用。",
     "sendChatConsent": "外掛 {} 正要求以您的名義送出對話訊息，這會觸發 AI 回應。要允許嗎？",
     "pluginPermissionDenyGuide": "已拒絕外掛「{}」的權限要求。被拒絕的權限之後不會再次詢問。\n\n若您是不小心拒絕，可前往「設定 > 外掛」，在該外掛中使用「重設權限回應」復原",
     "pluginFullStorageAccess": "提供所有外掛資料（相容 Risuai）",
@@ -2599,6 +2603,12 @@ export const languageChineseTraditional = {
     "protonImportPluginConfirm": (name: string) => `${name} 是外掛。外掛會在應用程式內執行程式碼，請僅在信任其來源時安裝。`,
     "protonImportInstall": "安裝",
     "protonImportNotice": "檔案在瀏覽器中解密。PocketRisu 不是 Proton 官方應用程式。",
+    "protonImportCharxPrompt": "要如何匯入這個 .charx 檔案？",
+    "protonImportAsCharacter": "匯入為角色",
+    "protonImportAsModule": "匯入為模組",
+    "protonImportCharxModuleHint": "檔名以 .module.charx 結尾，這是以 .charx 格式匯出的模組。",
+    "comfyWorkflow": "工作流程 (API)",
+    "comfyWorkflowInvalidJson": "工作流程檔案無效，必須是有效的 JSON。",
 } satisfies I18nTranslation;
 
 type I18nTranslationFunction = (...args: any[]) => string;

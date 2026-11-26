@@ -280,6 +280,16 @@ async function main() {
         log('Bundled Node unchanged; skipping bin/ replacement.');
     }
 
+    // The certificate folder is not in the package: carry it into the new
+    // server/ before Phase 1 moves the old one out (the in-app updater does the same).
+    const sslSrc = path.join(ROOT, 'server', 'node', 'ssl', 'certificate');
+    if (fs.existsSync(sslSrc)) {
+        const sslDst = path.join(extractedRoot, 'server', 'node', 'ssl', 'certificate');
+        fs.mkdirSync(path.dirname(sslDst), { recursive: true });
+        fs.cpSync(sslSrc, sslDst, { recursive: true });
+        log('Keeping SSL certificates.');
+    }
+
     // Phase 1: move old files to backup (safer than immediate delete)
     log('Replacing files...');
     const keep = new Set(['save', 'backups', '.installed-version', MANIFEST_NAME, '.update-tmp', 'scripts', '.env', '.npmrc', '.portable']);
@@ -342,6 +352,10 @@ async function main() {
             if (skipMove.has(entry)) continue;
             const src = path.join(extractedRoot, entry);
             const dest = path.join(ROOT, entry);
+            // Phase 1 left the keep entries in place, so the rm below would
+            // delete them: an older release shipped an empty backups/ (left by
+            // the build's boot test) and replaced the user's server backups.
+            if (keep.has(entry) && fs.existsSync(dest)) continue;
             if (fs.existsSync(dest)) {
                 fs.rmSync(dest, { recursive: true, force: true });
             }

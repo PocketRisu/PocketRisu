@@ -136,7 +136,10 @@ export async function exportModuleLegacy(module:RisuModule, arg:{
     return apb.buffer
 }
 
-export async function readModule(buf:Buffer):Promise<RisuModule> {
+export async function readModule(buf:Buffer, arg:{
+    confirmLowLevelAccess?:boolean
+} = {}):Promise<RisuModule> {
+    const confirmLowLevelAccess = arg.confirmLowLevelAccess ?? true
     let pos = 0
 
     const readLength = () => {
@@ -265,7 +268,33 @@ export async function readModule(buf:Buffer):Promise<RisuModule> {
 
     module.id = v4()
     delete module.mcp
+    if(confirmLowLevelAccess && module.lowLevelAccess && !(await alertConfirm(language.lowLevelAccessConfirm))){
+        module.lowLevelAccess = false
+    }
     return module
+}
+
+// A .charx read as a module: the card is parsed without adding a character
+// (returnCharacter only works with v3 charx), then converted.
+export async function importCharxAsModule(name:string, data:Uint8Array):Promise<boolean>{
+    try {
+        const char = await importCharacterProcess({
+            name: name,
+            data: data,
+            returnCharacter: true
+        })
+        if(!char || typeof char === 'number'){
+            alertError(language.errors.noData)
+            return false
+        }
+        getDatabase().modules.push(convertCharacterToModule(char))
+    } catch (error) {
+        console.error(error)
+        alertError(language.errors.noData)
+        return false
+    }
+    notifySuccess(language.successImport)
+    return true
 }
 
 export async function importModule(){
@@ -276,24 +305,7 @@ export async function importModule(){
     let fileData = f.data
     const db = getDatabase()
     if(f.name.endsWith('.charx')){
-        try {
-            const buf = Buffer.from(fileData)
-            const char = await importCharacterProcess({
-                name: f.name,
-                data: buf,
-                returnCharacter: true
-            })
-            if(!char || typeof char === 'number'){
-                alertError(language.errors.noData)
-                return
-            }
-            const module = convertCharacterToModule(char)
-            db.modules.push(module)
-        } catch (error) {
-            console.error(error)
-            alertError(language.errors.noData)
-        }
-        notifySuccess(language.successImport)
+        await importCharxAsModule(f.name, fileData)
         return
     }
     if(f.name.endsWith('.risum')){

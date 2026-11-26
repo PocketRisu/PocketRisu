@@ -1,7 +1,8 @@
 import fc from 'fast-check'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { InlayAsset } from '../inlays'
 import {
+    createInlayFromData,
     getInlayAsset,
     getInlayAssetBlob,
     getCharacterChatIndex,
@@ -9,6 +10,7 @@ import {
     listInlayExplorerItems,
     postInlayAsset,
     removeInlayAsset,
+    scanLocalInlayReferences,
     setInlayAsset,
     writeInlayImage,
     __resetInlayStorageForTest,
@@ -607,6 +609,119 @@ describe('writeInlayImage', () => {
     })
 })
 
+describe('createInlayFromData', () => {
+    // happy-dom does not load images, so onload/onerror never fire naturally
+    class FakeImage {
+        onload: (() => void) | null = null
+        onerror: (() => void) | null = null
+        width = 200
+        height = 100
+        #src = ''
+        get src() {
+            return this.#src
+        }
+        set src(value: string) {
+            this.#src = value
+            queueMicrotask(() => {
+                if (value.includes('bad-image')) this.onerror?.()
+                else this.onload?.()
+            })
+        }
+    }
+
+    const origCreateObjectURL = URL.createObjectURL
+    const origRevokeObjectURL = URL.revokeObjectURL
+
+    beforeEach(() => {
+        vi.stubGlobal('Image', FakeImage)
+        URL.createObjectURL = vi.fn(() => 'blob:fake-url')
+        URL.revokeObjectURL = vi.fn()
+    })
+
+    afterEach(() => {
+        vi.unstubAllGlobals()
+        URL.createObjectURL = origCreateObjectURL
+        URL.revokeObjectURL = origRevokeObjectURL
+    })
+
+    test('creates an image inlay from a data URI string', async () => {
+        const result = await createInlayFromData('data:image/png;base64,aGVsbG8=')
+
+        expect(result).toBe('test-uuid-1234')
+        const stored = await getInlayAssetBlob('test-uuid-1234')
+        expect(stored).toMatchObject({
+            data: expect.any(Blob),
+            // PocketRisu stores inlay images as WebP unless inlayImageLossless is on
+            ext: 'webp',
+            name: 'test-uuid-1234',
+            type: 'image',
+        })
+    })
+
+    test('creates an image inlay from raw bytes and revokes the object URL', async () => {
+        const pngSignature = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        const result = await createInlayFromData(pngSignature, 'gen.png')
+
+        expect(result).toBe('test-uuid-1234')
+        expect(URL.createObjectURL).toHaveBeenCalledOnce()
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake-url')
+        const stored = await getInlayAssetBlob('test-uuid-1234')
+        expect(stored).toMatchObject({
+            name: 'gen.png',
+            type: 'image',
+        })
+    })
+
+    test('rejects and revokes the object URL when raw bytes cannot be decoded', async () => {
+        vi.mocked(URL.createObjectURL).mockReturnValue('blob:bad-image')
+
+        await expect(createInlayFromData(new Uint8Array([0x00, 0x01]))).rejects.toThrow(
+            /Failed to decode/,
+        )
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:bad-image')
+        expect(nodeStorageMap.size).toBe(0)
+    })
+
+    test('rejects instead of hanging when the image cannot be decoded', async () => {
+        await expect(createInlayFromData('data:bad-image')).rejects.toThrow(/Failed to decode/)
+        expect(nodeStorageMap.size).toBe(0)
+    })
+
+    test('rejects strings that are not data URIs', async () => {
+        await expect(createInlayFromData('https://example.com/x.png')).rejects.toThrow(
+            /must be an image data URI/,
+        )
+        expect(nodeStorageMap.size).toBe(0)
+    })
+
+    test('rejects and revokes the object URL when drawing the image throws', async () => {
+        fakeCtx.drawImage.mockImplementationOnce(() => {
+            throw new Error('draw failed')
+        })
+
+        await expect(createInlayFromData(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).rejects.toThrow(
+            /draw failed/,
+        )
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake-url')
+        expect(nodeStorageMap.size).toBe(0)
+    })
+
+    test('rejects when the canvas has no 2D context', async () => {
+        vi.mocked(document.createElement).mockImplementationOnce((tag: string, options?: any) => {
+            const el = origCreateElement(tag, options)
+            if (tag === 'canvas') {
+                ;(el as HTMLCanvasElement).getContext = (() => null) as any
+            }
+            return el
+        })
+
+        await expect(createInlayFromData('data:image/png;base64,aGVsbG8=')).rejects.toThrow(
+            /2D context/,
+        )
+        expect(nodeStorageMap.size).toBe(0)
+    })
+})
+
 // These properties run 100 samples with two asynchronous FileReader conversions
 // each. Allow slower Windows timers without reducing the sample coverage.
 const blobPropertyTestTimeout = 15_000
@@ -675,4 +790,25 @@ describe('set -> remove -> get', () => {
             }),
         )
     }, blobPropertyTestTimeout)
+})
+
+describe('scanLocalInlayReferences', () => {
+    test('counts the other swipes and script variables of a chat', () => {
+        getDatabaseMock.mockReturnValue({
+            characters: [{
+                chats: [{
+                    scriptstate: { $img: '{{inlay::from-var}}', $count: 3 },
+                    message: [{
+                        role: 'char',
+                        data: 'shown {{inlay::shown}}',
+                        swipes: ['older {{inlayed::from-swipe}}', 'shown {{inlay::shown}}'],
+                        swipeId: 1,
+                    }],
+                }],
+            }],
+        })
+        const { refCounts, totalMessages } = scanLocalInlayReferences()
+        for (const id of ['shown', 'from-swipe', 'from-var']) expect(refCounts[id]).toBeGreaterThan(0)
+        expect(totalMessages).toBe(1)
+    })
 })

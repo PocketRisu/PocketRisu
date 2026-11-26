@@ -441,31 +441,76 @@ export async function writeInlayImage(imgObj: HTMLImageElement, arg: { name?: st
     let drawWidth = 0
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
-    await new Promise((resolve) => {
+    if (!ctx) {
+        throw new Error('Canvas 2D context is unavailable')
+    }
+    await new Promise((resolve, reject) => {
         imgObj.onload = () => {
-            drawHeight = imgObj.height
-            drawWidth = imgObj.width
-            const maxPixels = 1024 * 1024
-            const currentPixels = drawHeight * drawWidth
-            if (currentPixels > maxPixels) {
-                const scaleFactor = Math.sqrt(maxPixels / currentPixels)
-                drawWidth = Math.floor(drawWidth * scaleFactor)
-                drawHeight = Math.floor(drawHeight * scaleFactor)
+            // A throw inside this callback would otherwise leave the promise pending forever.
+            try {
+                drawHeight = imgObj.height
+                drawWidth = imgObj.width
+                const maxPixels = 1024 * 1024
+                const currentPixels = drawHeight * drawWidth
+                if (currentPixels > maxPixels) {
+                    const scaleFactor = Math.sqrt(maxPixels / currentPixels)
+                    drawWidth = Math.floor(drawWidth * scaleFactor)
+                    drawHeight = Math.floor(drawHeight * scaleFactor)
+                }
+                canvas.width = drawWidth
+                canvas.height = drawHeight
+                ctx.drawImage(imgObj, 0, 0, drawWidth, drawHeight)
+                resolve(null)
+            } catch (error) {
+                reject(error)
             }
-            canvas.width = drawWidth
-            canvas.height = drawHeight
-            ctx.drawImage(imgObj, 0, 0, drawWidth, drawHeight)
-            resolve(null)
         }
     })
     const db = getDatabase()
     const [mimeType, ext, quality]: [string, string, number?] = db.inlayImageLossless
         ? ['image/png', 'png', undefined]
         : ['image/webp', 'webp', 0.85]
-    const imageBlob = await new Promise<Blob>(resolve => canvas.toBlob(resolve, mimeType, quality))
+    const imageBlob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType, quality))
+    if (!imageBlob) {
+        throw new Error('Failed to encode inlay image')
+    }
     const imgid = arg.id ?? v4()
     await setInlayAsset(imgid, { name: arg.name ?? imgid, data: imageBlob, ext, height: drawHeight, width: drawWidth, type: 'image' })
     return `${imgid}`
+}
+
+export async function createInlayFromData(data: Uint8Array | string, name?: string) {
+    if(typeof data === 'string'){
+        //reject remote URLs so plugins can't bypass nativeFetch's URL restrictions
+        if(!data.startsWith('data:')){
+            throw new Error('String input must be an image data URI')
+        }
+        return await writeInlayImageFromSrc(data, name)
+    }
+
+    //mime is only a hint; undecodable bytes reject via onerror in writeInlayImageFromSrc
+    const imageType = getImageType(data)
+    const mimeType = imageType === 'Unknown' ? 'application/octet-stream' : `image/${imageType.toLowerCase()}`
+
+    const src = URL.createObjectURL(new Blob([asBuffer(data)], {type: mimeType}))
+    try {
+        return await writeInlayImageFromSrc(src, name)
+    } finally {
+        URL.revokeObjectURL(src)
+    }
+}
+
+function writeInlayImageFromSrc(src: string, name?: string): Promise<string> {
+    const imgObj = new Image()
+
+    return new Promise((resolve, reject) => {
+        //writeInlayImage only waits for onload; reject undecodable input via onerror
+        imgObj.onerror = () => {
+            reject(new Error('Failed to decode inlay image data'))
+        }
+        imgObj.src = src
+        writeInlayImage(imgObj, { name }).then(resolve, reject)
+    })
 }
 
 export type InlaySignature = {
@@ -717,19 +762,32 @@ export function scanLocalInlayReferences(): InlayScanResult {
     const refCounts: Record<string, number> = Object.create(null)
     let totalMessages = 0
 
+    const scan = (text: unknown) => {
+        if (typeof text !== 'string') return
+        // Reset regex state and create fresh instance to avoid lastIndex issues
+        const regex = new RegExp(INLAY_REF_REGEX.source, 'g')
+        let m: RegExpExecArray | null
+        while ((m = regex.exec(text)) !== null) {
+            const id = m[1]
+            refCounts[id] = (refCounts[id] ?? 0) + 1
+        }
+    }
+
+    // Same places as addInlayRefCounts on the server: message text, the
+    // other swipes, and chat script variables (image-generation triggers).
     for (const char of characters) {
         if (!Array.isArray(char?.chats)) continue
         for (const chat of char.chats) {
+            if (chat?.scriptstate && typeof chat.scriptstate === 'object') {
+                for (const value of Object.values(chat.scriptstate)) scan(value)
+            }
             if (!Array.isArray(chat?.message)) continue
             for (const msg of chat.message) {
                 if (typeof msg?.data !== 'string') continue
                 totalMessages++
-                // Reset regex state and create fresh instance to avoid lastIndex issues
-                const regex = new RegExp(INLAY_REF_REGEX.source, 'g')
-                let m: RegExpExecArray | null
-                while ((m = regex.exec(msg.data)) !== null) {
-                    const id = m[1]
-                    refCounts[id] = (refCounts[id] ?? 0) + 1
+                scan(msg.data)
+                if (Array.isArray(msg.swipes)) {
+                    for (const swipe of msg.swipes) scan(swipe)
                 }
             }
         }

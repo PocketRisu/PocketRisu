@@ -1,0 +1,61 @@
+{
+  "id": "nanogpt:gemini-4-carbon",
+  "version": 1,
+  "updatedAt": 1794502759159,
+  "displayName": "Gemini 4 Carbon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Carbon"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "Gemini 4 Carbon via NanoGPT (google/gemini-4-carbon).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Carbon (NanoGPT, google/gemini-4-carbon)."
+  },
+  "tags": [
+    "nanogpt",
+    "gemini"
+  ],
+  "sortOrder": 548,
+  "modelId": "google/gemini-4-carbon",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

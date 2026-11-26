@@ -24,6 +24,72 @@ const RISU_ACCOUNT_REQUEST_TIMEOUT_MS = 30_000
 // app, boot included. Each is cut off after this long, headers and body;
 // only the password prompt waits for the user without a limit.
 const AUTH_REQUEST_TIMEOUT_MS = 30_000
+// The autosave requests (chat bodies, patch, full write, and the reads of a
+// rebase). The save loop runs one save at a time, so one of them that never
+// answers (dropped phone link) would stop every later save (#114). Each is
+// cut off when its response headers have not arrived within the base time
+// plus an allowance for uploading the body, or when its body stops arriving
+// for SAVE_BODY_IDLE_MS. fetch reports no upload progress, so the allowance
+// assumes a slow link; the server's own request timeout (Node's 300 s)
+// already ends any longer upload. The base also covers the server's storage
+// queue, where a database optimize or restore can sit ahead of the save.
+// A live download of a large database.bin is not cut off however long it
+// takes, as long as data keeps coming.
+const SAVE_RESPONSE_BASE_MS = 120_000
+const SAVE_UPLOAD_MIN_BYTES_PER_SECOND = 16 * 1024
+const SAVE_UPLOAD_ALLOWANCE_MAX_MS = 300_000
+const SAVE_BODY_IDLE_MS = 60_000
+
+export function saveResponseDeadlineMs(uploadBytes: number): number {
+    const allowance = Math.ceil(uploadBytes / SAVE_UPLOAD_MIN_BYTES_PER_SECOND * 1000)
+    return SAVE_RESPONSE_BASE_MS + Math.min(SAVE_UPLOAD_ALLOWANCE_MAX_MS, allowance)
+}
+
+/** A request cut off for getting no answer in time (a save deadline or an auth request). */
+export function isRequestTimeout(error: unknown): boolean {
+    return (error instanceof DOMException || error instanceof Error) && error.name === 'TimeoutError'
+}
+
+/**
+ * The same response with its body read through an idle watchdog: a read that
+ * gets no data for idleMs fails, and abort() ends the request. The watchdog
+ * fails the stream itself, since a fetch that ignores the abort never rejects
+ * read().
+ */
+function withBodyIdleTimeout(response: Response, idleMs: number, abort: () => void, label: string): Response {
+    const source = response.body
+    if (!source) return response
+    const reader = source.getReader()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+            const idle = new Promise<never>((_resolve, reject) => {
+                timer = setTimeout(() => {
+                    reject(new DOMException(`No response data for ${idleMs}ms: ${label}`, 'TimeoutError'))
+                }, idleMs)
+            })
+            try {
+                const chunk = await Promise.race([reader.read(), idle])
+                if (chunk.done) controller.close()
+                else controller.enqueue(chunk.value)
+            } catch (error) {
+                abort()
+                reader.cancel(error).catch(() => {})
+                controller.error(error)
+            } finally {
+                clearTimeout(timer)
+            }
+        },
+        cancel(reason) {
+            clearTimeout(timer)
+            abort()
+            return reader.cancel(reason)
+        },
+    // Pulled only while the caller reads: a body nobody reads (a chat save
+    // answered 200) is not watched.
+    }, { highWaterMark: 0 })
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers })
+}
 
 export type StorageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
@@ -522,6 +588,28 @@ export class NodeStorage{
         }
     }
 
+    /** authFetch for an autosave request, with the deadlines at SAVE_RESPONSE_BASE_MS. */
+    private async authFetchForSave(input: string, init: RequestInit, uploadBytes: number): Promise<Response> {
+        const controller = new AbortController()
+        const deadlineMs = saveResponseDeadlineMs(uploadBytes)
+        let timer: ReturnType<typeof setTimeout> | undefined
+        // Raced as well as aborted: the auth and session pre-flight inside
+        // authFetch use their own fetches, which do not carry this signal.
+        const timeout = new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+                controller.abort()
+                reject(new DOMException(`No response within ${deadlineMs}ms: ${input}`, 'TimeoutError'))
+            }, deadlineMs)
+        })
+        let response: Response
+        try {
+            response = await Promise.race([this.authFetch(input, { ...init, signal: controller.signal }), timeout])
+        } finally {
+            clearTimeout(timer)
+        }
+        return withBodyIdleTimeout(response, SAVE_BODY_IDLE_MS, () => controller.abort(), input)
+    }
+
     private async authFetchOnce(input: RequestInfo | URL, init: RequestInit = {}, retry = true) {
         await this.checkAuth()
         const headers = new Headers(init.headers)
@@ -557,7 +645,10 @@ export class NodeStorage{
         try {
             const data = await response.clone().json()
             return typeof data?.error === 'string' ? data.error : undefined
-        } catch {
+        } catch (error) {
+            // A save request whose error body stopped arriving: report that,
+            // not an error without detail (see SAVE_RESPONSE_BASE_MS).
+            if (isRequestTimeout(error)) throw error
             return undefined
         }
     }
@@ -582,7 +673,8 @@ export class NodeStorage{
         )
     }
 
-    async setItem(key:string, value:Uint8Array, etag?:string) {
+    /** saveDeadline: an autosave write, cut off like the other save requests (SAVE_RESPONSE_BASE_MS). */
+    async setItem(key:string, value:Uint8Array, etag?:string, options?: { saveDeadline?: boolean }) {
         const headers: Record<string, string> = {
             'content-type': 'application/octet-stream',
             'file-path': Buffer.from(key, 'utf-8').toString('hex')
@@ -590,11 +682,14 @@ export class NodeStorage{
         if (etag) {
             headers['x-if-match'] = etag
         }
-        const da = await this.authFetch('/api/write', {
+        const init: RequestInit = {
             method: "POST",
             body: value as any,
             headers
-        })
+        }
+        const da = options?.saveDeadline
+            ? await this.authFetchForSave('/api/write', init, value.byteLength)
+            : await this.authFetch('/api/write', init)
         if(da.status === 409){
             const data = await da.json()
             throw new ConflictError(data.error, data.currentEtag, typeof data.code === 'string' ? data.code : undefined)
@@ -621,23 +716,29 @@ export class NodeStorage{
         this._lastDbWriteDiagnostics = null
         return diagnostics
     }
-    async getItem(key:string):Promise<Buffer> {
+    /** saveDeadline: a read of the autosave cycle, cut off like the save requests (SAVE_RESPONSE_BASE_MS). */
+    async getItem(key:string, options?: { saveDeadline?: boolean }):Promise<Buffer> {
         const headers: Record<string, string> = {
             'file-path': Buffer.from(key, 'utf-8').toString('hex')
         }
 
-        const da = await this.authFetch('/api/read', { method: "GET", headers })
+        const init: RequestInit = { method: "GET", headers }
+        const da = options?.saveDeadline
+            ? await this.authFetchForSave('/api/read', init, 0)
+            : await this.authFetch('/api/read', init)
         if(da.status < 200 || da.status >= 300){
             throw await this.storageRequestError('getItem', da)
         }
 
-        // Capture ETag for database.bin
+        const data = Buffer.from(await da.arrayBuffer())
+
+        // Capture ETag for database.bin, only once its data has arrived: a
+        // read that fails midway must leave the revision this client holds.
         const etag = da.headers.get('x-db-etag')
         if (etag) {
             this._lastDbEtag = etag
         }
 
-        const data = Buffer.from(await da.arrayBuffer())
         if (data.length === 0){
             return null
         }
@@ -705,7 +806,7 @@ export class NodeStorage{
             }, (res) => res.json())
 
             if(data.status === 'unset'){
-                const input = await digestPassword(await alertInput(language.setNodePassword))
+                const input = await digestPassword(await alertInput(language.setNodePassword, undefined, undefined, { hideText: true }))
                 const status = await authRequest('/api/set_password',{
                     method: "POST",
                     body:JSON.stringify({
@@ -725,7 +826,7 @@ export class NodeStorage{
                 return
             }
             else if(data.status === 'incorrect'){
-                const input = await digestPassword(await alertInput(language.inputNodePassword))
+                const input = await digestPassword(await alertInput(language.inputNodePassword, undefined, undefined, { hideText: true }))
                 await this.loginWithPassword(input)
                 await this.initSession()
                 return
@@ -792,14 +893,15 @@ export class NodeStorage{
     }
 
     async patchItem(key: string, patchData: { patch: any[], expectedHash: string }): Promise<PatchItemResult> {
-        const da = await this.authFetch('/api/patch', {
+        const body = JSON.stringify(patchData)
+        const da = await this.authFetchForSave('/api/patch', {
             method: "POST",
-            body: JSON.stringify(patchData),
+            body,
             headers: {
                 'content-type': 'application/json',
                 'file-path': Buffer.from(key, 'utf-8').toString('hex')
             }
-        })
+        }, new TextEncoder().encode(body).byteLength)
 
         if (da.status === 409) {
             const data = await da.json()
@@ -827,7 +929,10 @@ export class NodeStorage{
             // Surface the server's error detail — without this the browser
             // console shows nothing while every save silently falls back to
             // a full write.
-            const body = await da.text().catch(() => '')
+            const body = await da.text().catch((error) => {
+                if (isRequestTimeout(error)) throw error
+                return ''
+            })
             console.error(`[Patch] Server rejected patch (${da.status}):`, body)
             return { success: false }
         }
@@ -1404,13 +1509,17 @@ export class NodeStorage{
         }
         const gzipped = await gzipForUpload(encoded)
         if (gzipped) headers['content-encoding'] = 'gzip'
-        const da = await this.authFetch(`/api/chat-content/${encodeURIComponent(chaId)}/${chatIndex}`, {
+        const body = gzipped ?? encoded
+        const da = await this.authFetchForSave(`/api/chat-content/${encodeURIComponent(chaId)}/${chatIndex}`, {
             method: 'POST',
             headers,
-            body: (gzipped ?? encoded) as BodyInit,
-        })
+            body: body as BodyInit,
+        }, body.byteLength)
         if (base && da.status === 409) {
-            const body = await da.json().catch(() => ({})) as { code?: string }
+            const body = await da.json().catch((error) => {
+                if (isRequestTimeout(error)) throw error
+                return {}
+            }) as { code?: string }
             if (body?.code === 'CHAT_DELTA_BASE_MISMATCH') return 'base-mismatch'
         }
         if (da.status < 200 || da.status >= 300) throw new Error(`saveChatContent error: ${da.status}`)

@@ -30,7 +30,7 @@ import { isMobile } from 'src/ts/platform'
     import MainMenu from '../UI/MainMenu.svelte';
     import AssetInput from './AssetInput.svelte';
     import { scrollWithinContainer } from './scrollWithin';
-    import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile } from 'src/ts/globalApi.svelte';
+    import { aiLawApplies, chatFoldedState, chatFoldedStateMessageIndex, downloadFile, requestImmediateSave, trackChatForSave } from 'src/ts/globalApi.svelte';
     import { runTrigger } from 'src/ts/process/triggers';
     import { v4 } from 'uuid';
     import { processMultiCommand } from 'src/ts/process/command';
@@ -485,8 +485,7 @@ import { isMobile } from 'src/ts/platform'
         return msgs[msgs.length - 1].role === 'user'
     })
 
-    function getLastCharMsg() {
-        const msgs = DBState.db.characters[$selectedCharID]?.chats[DBState.db.characters[$selectedCharID].chatPage]?.message
+    function getLastCharMsg(msgs = DBState.db.characters[$selectedCharID]?.chats[DBState.db.characters[$selectedCharID].chatPage]?.message) {
         if (!msgs || msgs.length === 0) return null
         for (let i = msgs.length - 1; i >= 0; i--) {
             if (msgs[i].role === 'char' && !msgs[i].isComment && !msgs[i].disabled) return msgs[i]
@@ -501,6 +500,19 @@ import { isMobile } from 'src/ts/platform'
 
         // Save existing swipes before clone replaces the array
         const savedSwipes = lastMsg.swipes ? [...lastMsg.swipes] : [lastMsg.data]
+
+        // The user can switch chats or characters while it generates: write
+        // back by id to the chat this reroll started in, not the one on screen.
+        const startChar = DBState.db.characters[$selectedCharID]
+        const startChat = startChar.chats[startChar.chatPage]
+        if (!startChat) return
+        // A chat made this session can lack an id until boot fills it in. Its
+        // messages too: sendChat stamps them later, and the check after it must
+        // tell the new reply from these.
+        startChat.id ??= v4()
+        for (const message of startChat.message) message.chatId ??= v4()
+        const charId = startChar.chaId
+        const chatId = startChat.id
 
         // Generate new response
         // Preserve trailing comment/disabled messages (e.g. branch comments)
@@ -528,23 +540,42 @@ import { isMobile } from 'src/ts/platform'
         DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = cha
         const generated = await sendChatMain()
 
-        const currentMsgs = DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message
+        const target = DBState.db.characters.find((c) => c.chaId === charId)?.chats.find((c) => c.id === chatId)
+        // Gone, or reloaded as an unloaded placeholder: nothing safe to write.
+        if (!target || target._placeholder) return
+        // Only the chat on screen is saved on its own: queue this one if the
+        // user moved away, or the writes below are lost on reload. The save
+        // waits a tick, so it sees them (nothing below awaits).
+        const shown = DBState.db.characters[$selectedCharID]
+        if (shown?.chaId !== charId || shown.chats[shown.chatPage]?.id !== chatId) {
+            trackChatForSave(charId, chatId)
+            void requestImmediateSave()
+        }
+        const currentMsgs = target.message
 
         // If generation failed, restore original messages
         if (!generated) {
-            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = originalMessages
+            target.message = originalMessages
+            return
+        }
+
+        // The reply this reroll made. sendChat writes by index, so if the chat
+        // list shifted meanwhile it landed elsewhere: put the original back.
+        const originalIds = new Set(originalMessages.map((m) => m.chatId).filter(Boolean))
+        const newLastMsg = getLastCharMsg(currentMsgs)
+        if (!newLastMsg?.chatId || originalIds.has(newLastMsg.chatId)) {
+            target.message = originalMessages
             return
         }
 
         // Restore trailing comments after the new message
         if (trailingComments.length > 0) {
             currentMsgs.push(...trailingComments)
-            DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].message = currentMsgs
+            target.message = currentMsgs
         }
 
         // Save new response to swipes
-        const newLastMsg = getLastCharMsg()
-        if (newLastMsg && !newLastMsg.swipes) {
+        if (!newLastMsg.swipes) {
             newLastMsg.swipes = [...savedSwipes, newLastMsg.data]
             newLastMsg.swipeId = newLastMsg.swipes.length - 1
         }
@@ -1429,6 +1460,7 @@ import { isMobile } from 'src/ts/platform'
                     role='char'
                     img={getCharImage(DBState.db.characters[$selectedCharID].image, 'css')}
                     idx={-1}
+                    totalLength={currentChat.length}
                     altGreeting={DBState.db.characters[$selectedCharID].alternateGreetings.length > 0}
                     disabled={DBState.db.characters[$selectedCharID].chats[DBState.db.characters[$selectedCharID].chatPage].firstMessageDisabled === true}
                     largePortrait={DBState.db.characters[$selectedCharID].largePortrait}

@@ -1,7 +1,7 @@
 {
   "name": "pocketrisu",
   "private": true,
-  "version": "1.17.0",
+  "version": "1.18.0",
   "packageManager": "pnpm@10.34.1",
   "engines": {
     "node": ">=22.12.0"
@@ -130,8 +130,10 @@
       "core-js",
       "esbuild",
       "msgpackr-extract",
-      "onnxruntime-node",
       "protobufjs"
+    ],
+    "ignoredBuiltDependencies": [
+      "onnxruntime-node"
     ],
     "patchedDependencies": {
       "@protontech/crypto@2.2.0": "patches/@protontech__crypto@2.2.0.patch"

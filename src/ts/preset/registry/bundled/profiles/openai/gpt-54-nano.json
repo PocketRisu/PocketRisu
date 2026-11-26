@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-54-nano",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-5.4 Nano",
   "displayNameI18n": {
     "ko": "OpenAI GPT-5.4 Nano"
@@ -17,7 +17,7 @@
   ],
   "sortOrder": 107,
   "modelId": "gpt-5.4-nano",
-  "updatedAt": 1781103554581,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -410,5 +410,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-5.4 nano is deprecated and will be shut down on April 1, 2027. Migrate to GPT-6 Luna.",
+  "statusSourceUrls": [
+    "https://developers.openai.com/api/docs/deprecations"
+  ]
 }

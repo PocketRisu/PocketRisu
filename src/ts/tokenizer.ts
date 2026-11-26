@@ -4,7 +4,6 @@ import { type character, type Chat, getCurrentCharacter, getDatabase } from "./s
 import type { MultiModal, OpenAIChat } from "./process/index.svelte";
 import { supportsInlayImage } from "./process/files/inlays";
 import { risuChatParser } from "./parser/parser.svelte";
-import { tokenizeGGUFModel } from "./process/models/local";
 import { globalFetch } from "./globalApi.svelte";
 import { getModelInfo, LLMTokenizer, type LLMModel } from "./model/modellist";
 import { pluginV2 } from "./plugins/plugins.svelte";
@@ -160,8 +159,6 @@ export async function encode(data:string, modelId?:string):Promise<(number[]|Uin
             result = await tokenizeWebTokenizers(data, 'mistral');
         } else if(modelInfo.tokenizer === LLMTokenizer.Llama){
             result = await tokenizeWebTokenizers(data, 'llama');
-        } else if(modelInfo.tokenizer === LLMTokenizer.Local){
-            result = await tokenizeGGUFModel(data);
         } else if(modelInfo.tokenizer === LLMTokenizer.tiktokenO200Base){
             result = await tikJS(data, 'o200k_base');
         } else if(modelInfo.tokenizer === LLMTokenizer.GoogleCloud && db.googleClaudeTokenizing){
@@ -259,7 +256,9 @@ async function tikJS(text:string, model='cl100k_base') {
         tikParsers.set(model, pending)
         pending.catch(() => tikParsers.delete(model))
     }
-    return (await pending).encode(text)
+    // Count special token strings such as <|endoftext|> as plain text: by default
+    // tiktoken throws on them, which stopped generation when a chat contained one (#110).
+    return (await pending).encode(text, [], [])
 }
 
 async function geminiTokenizer(text:string) {

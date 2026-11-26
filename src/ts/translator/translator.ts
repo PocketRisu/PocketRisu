@@ -28,6 +28,18 @@ let bergamotTranslate: (text: string, from: string, to: string, html?: boolean) 
 const llmTranslateCache = new Map<string, string>()
 const llmTranslateCachePrefix = 'cache/llm-translate/'
 
+// An empty translation (a blocked or blank reply) is not a translation: it
+// changes nothing in the cache (an empty regenerate keeps the translation that
+// was there), and stored empty entries (from before this check, or a
+// translation edited to nothing) are skipped. When no translation is cached,
+// it is remembered for this session only, so the next view does not ask (and
+// bill) again; a reload or a regenerate does.
+const llmEmptyReplies = new Set<string>()
+
+function isUsableTranslation(value: string | null | undefined): value is string {
+    return typeof value === 'string' && value.trim() !== ''
+}
+
 async function getPersistentLLMCache(text: string): Promise<string | null> {
     const storageKey = await makeHashedStorageKey(llmTranslateCachePrefix, text)
     const payload = await readPersistentJson<{ key: string, value: string }>(storageKey)
@@ -426,7 +438,7 @@ export async function translateHTML(html: string, reverse:boolean, charArg:simpl
             }
 
             // Replace the old node with the new one
-            const newNode = document.createElement(
+            const newNode = dom.createElement(
                 node.nodeType === Node.TEXT_NODE ? "span" : node.nodeName
             );
             newNode.innerHTML = processedTranslated;
@@ -525,16 +537,25 @@ function needSuperChunkedTranslate(){
 }
 
 async function translateLLM(text:string, arg:{to:string, from:string, regenerate?:boolean,translatorNote?:string, onCacheState?:(cached:boolean) => void}):Promise<string>{
+    if(!text.trim()){
+        return text
+    }
     if(!arg.regenerate){
+        // A cached translation (stored, imported or edited) wins over the
+        // session's empty-reply marker.
         const cacheMatch = llmTranslateCache.get(text)
-        if(cacheMatch !== undefined){
+        if(isUsableTranslation(cacheMatch)){
             arg.onCacheState?.(true)
             return cacheMatch
         }
         const persistedCacheMatch = await getPersistentLLMCache(text)
-        if (persistedCacheMatch !== null) {
+        if (isUsableTranslation(persistedCacheMatch)) {
             arg.onCacheState?.(true)
             return persistedCacheMatch
+        }
+        if(llmEmptyReplies.has(text)){
+            arg.onCacheState?.(true)
+            return ''
         }
     }
     // The cache is looked up (above) with the original text, so it must be stored
@@ -603,19 +624,27 @@ async function translateLLM(text:string, arg:{to:string, from:string, regenerate
     const result = rq.result.replace(/<style-data style-index="(\d+)" ?\/?>/g, (match, p1) => {
         return styleDecodes[parseInt(p1)] ?? ''
     }).replace(/<\/style-data>/g, '')
-    llmTranslateCache.set(cacheKey, result)
-    void setPersistentLLMCache(cacheKey, result)
+    if(isUsableTranslation(result)){
+        llmEmptyReplies.delete(cacheKey)
+        llmTranslateCache.set(cacheKey, result)
+        void setPersistentLLMCache(cacheKey, result)
+    }
+    else{
+        llmEmptyReplies.add(cacheKey)
+    }
     arg.onCacheState?.(false)
     return result
 }
 
 export async function clearLLMCache(): Promise<void> {
     llmTranslateCache.clear()
+    llmEmptyReplies.clear()
     await clearPersistentPrefix(llmTranslateCachePrefix)
 }
 
 export async function getLLMCache(text:string):Promise<string | null>{
-    return llmTranslateCache.get(text) ?? await getPersistentLLMCache(text)
+    const cached = llmTranslateCache.get(text) ?? await getPersistentLLMCache(text)
+    return isUsableTranslation(cached) ? cached : null
 }
 
 export async function searchLLMCache(partialKey:string):Promise<{key: string, value: string}[]>{
@@ -641,6 +670,8 @@ export async function searchLLMCache(partialKey:string):Promise<{key: string, va
 }
 
 export async function setLLMCache(key:string, value:string):Promise<void>{
+    if(isUsableTranslation(value)) llmEmptyReplies.delete(key)
+    else llmEmptyReplies.add(key)
     llmTranslateCache.set(key, value)
     await setPersistentLLMCache(key, value)
 }

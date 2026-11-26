@@ -1343,3 +1343,75 @@ describe('baselineArchivedCharacterIds', () => {
         expect(bare.baselineArchivedCharacterIds().size).toBe(0)
     })
 })
+
+describe('RisuSavePatcher snapshot/restore (#114)', () => {
+    const baseline = () => ({
+        characters: [{ chaId: 'c1', name: 'A', chats: [] }, { chaId: 'c2', name: 'X', chats: [] }],
+        botPresets: [{ id: 'p1', name: 'P' }],
+        modules: [{ id: 'm1', name: 'M' }],
+        first: 0,
+    })
+    const edited = () => {
+        const db = baseline()
+        db.characters[0].name = 'B'
+        db.botPresets[0].name = 'Q'
+        db.modules[0].name = 'N'
+        db.first = 1
+        return db
+    }
+    const all = { character: ['c1'], chat: [], root: true, botPreset: true, modules: true, plugins: false, pluginCustomStorage: false } as any
+
+    test('restoring undoes a set(): the next set() sends the same patch from the same hash', async () => {
+        const fresh = new RisuSavePatcher()
+        await fresh.init(baseline())
+        const expected = await fresh.set(edited(), all)
+
+        const patcher = new RisuSavePatcher()
+        await patcher.init(baseline())
+        const snapshot = patcher.snapshot()
+        await patcher.set(edited(), all)
+        patcher.restore(snapshot)
+        const again = await patcher.set(edited(), all)
+
+        expect(again.expectedHash).toBe(expected.expectedHash)
+        expect(again.patch).toEqual(expected.patch)
+        expect(patcher.changedCharacterIdsOfLastSet()).toEqual(['c1'])
+        expect(patcher.estimatePayloadBytes()).toBe(fresh.estimatePayloadBytes())
+    })
+
+    test('the snapshot\'s baseline keeps characters, modules and presets as they were before set()', async () => {
+        const patcher = new RisuSavePatcher()
+        await patcher.init(baseline())
+        const snapshot = patcher.snapshot()
+        await patcher.set(edited(), all)
+        expect(snapshot.baselineDb.characters[0].name).toBe('A')
+        expect(snapshot.baselineDb.modules[0].name).toBe('M')
+        expect(snapshot.baselineDb.botPresets[0].name).toBe('P')
+        expect(snapshot.baselineDb.first).toBe(0)
+        // the live baseline did move
+        expect(patcher.baselineDb().characters[0].name).toBe('B')
+    })
+
+    test('restoring keeps the keys a baseline has, so a database without modules hashes the same', async () => {
+        const db = { characters: [{ chaId: 'c1', name: 'A', chats: [] }], botPresets: [{ id: 'p1', name: 'P' }], first: 0 }
+        const patcher = new RisuSavePatcher()
+        await patcher.init(db)
+        const hash = patcher.hash()
+        patcher.restore(patcher.snapshot())
+        expect(patcher.hash()).toBe(hash)
+        expect(Object.hasOwn(patcher.baselineDb(), 'modules')).toBe(false)
+    })
+
+    test('a snapshot can be restored more than once', async () => {
+        const patcher = new RisuSavePatcher()
+        await patcher.init(baseline())
+        const hash = patcher.hash()
+        const snapshot = patcher.snapshot()
+        await patcher.set(edited(), all)
+        patcher.restore(snapshot)
+        await patcher.set(edited(), all)
+        patcher.restore(snapshot)
+        expect(patcher.hash()).toBe(hash)
+        expect(patcher.baselineDb().characters[0].name).toBe('A')
+    })
+})

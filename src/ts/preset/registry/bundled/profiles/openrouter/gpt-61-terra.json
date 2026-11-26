@@ -1,0 +1,59 @@
+{
+  "id": "openrouter:gpt-61-terra",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "GPT-6.1 Terra",
+  "displayNameI18n": {
+    "ko": "GPT-6.1 Terra"
+  },
+  "providerBaseId": "openrouter",
+  "description": "GPT-6.1 Terra via OpenRouter (openai/gpt-6.1-terra).",
+  "descriptionI18n": {
+    "ko": "GPT-6.1 Terra (OpenRouter, openai/gpt-6.1-terra)."
+  },
+  "tags": [
+    "openrouter",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 553,
+  "modelId": "openai/gpt-6.1-terra",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

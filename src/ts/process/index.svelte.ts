@@ -30,9 +30,11 @@ import { resolveModelPresetContextBudget } from "./request/contextBudget"
 import { getModuleAssets, getModuleLorebooks, getModules, getModuleToggles, getModuleTriggers } from "./modules";
 import { hydrateAssetListsForCbs, serializeForCbsScan } from "../parser/assetListHydration";
 import { forageStorage, readImage, resolvePrioritizedAssetManifestNames } from "../globalApi.svelte";
+import { getSendTarget, saveSendTargetIfHidden } from "./sendTarget";
 import { pluginV2 } from "../plugins/plugins.svelte";
 import { abortGeneration, chatGenKey, chatProcessStage, endGeneration, isChatGenerating, onDatabaseRebased, registerAbort, setGenerationStage, startGeneration } from "./generationState";
 import { clearPendingSend, registerPendingSend } from "./request/pendingSends";
+import { writeContinuedMessage } from "./continueMessage";
 
 export interface OpenAIChat{
     role: 'system'|'user'|'assistant'|'function'
@@ -115,7 +117,17 @@ function promptCbsSources(char:character, chat:Chat):string[] {
     ])]
 }
 
-export async function sendChat(chatProcessIndex = -1,arg:{
+export async function sendChat(chatProcessIndex = -1, arg:Parameters<typeof runSendChat>[1] = {}):Promise<boolean> {
+    const target = getSendTarget()
+    try {
+        return await runSendChat(chatProcessIndex, arg)
+    }
+    finally {
+        if (!arg.preview && !arg.previewPrompt) saveSendTargetIfHidden(target)
+    }
+}
+
+async function runSendChat(chatProcessIndex = -1,arg:{
     chatAdditonalTokens?:number,
     signal?:AbortSignal,
     continue?:boolean,
@@ -1864,17 +1876,15 @@ export async function sendChat(chatProcessIndex = -1,arg:{
             result = inlayResult.text
             emoChanged = result2.emoChanged
             if(i === 0 && arg.continue){
-                DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex] = {
+                // In place, keeping the original chatId — see the continue restamp note.
+                writeContinuedMessage(DBState.db.characters[selectedChar].chats[selectedChat].message, msgIndex, {
                     role: 'char',
                     data: result,
                     saying: currentChar.chaId,
                     time: Date.now(),
                     generationInfo,
                     promptInfo,
-                    // Keep the original message identity: older jobs match on it
-                    // (jobRecovery secondary match) — see the continue restamp note.
-                    chatId: DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex]?.chatId ?? generationId,
-                }       
+                }, generationId)
                 if(inlayResult.promise){
                     const p = await inlayResult.promise
                     DBState.db.characters[selectedChar].chats[selectedChat].message[msgIndex].data = p

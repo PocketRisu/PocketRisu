@@ -1,0 +1,332 @@
+{
+  "id": "google:gemini-4-carbon",
+  "version": 2,
+  "displayName": "Gemini 4 Carbon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Carbon"
+  },
+  "providerBaseId": "google",
+  "description": "Gemini 4 Carbon via Google AI Studio (generateContent).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Carbon (Google AI Studio, generateContent)."
+  },
+  "tags": [
+    "google",
+    "gemini",
+    "reasoning",
+    "vision"
+  ],
+  "sortOrder": 294,
+  "modelId": "gemini-4-carbon",
+  "updatedAt": 1795078641125,
+  "endpoint": {
+    "kind": "static",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models"
+  },
+  "auth": {
+    "kind": "x-goog-api-key",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Gemini model identifier.",
+      "required": true,
+      "enum": [
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Gemini 모델 ID."
+      }
+    },
+    {
+      "key": "maxOutputTokens",
+      "type": "integer",
+      "label": "Max Output Tokens",
+      "min": 1,
+      "max": 65536,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.maxOutputTokens"
+      },
+      "default": 32768
+    },
+    {
+      "key": "stopSequences",
+      "type": "stringArray",
+      "label": "Stop Sequences",
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.stopSequences"
+      }
+    },
+    {
+      "key": "seed",
+      "type": "integer",
+      "label": "Seed",
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.seed"
+      }
+    },
+    {
+      "key": "thinkingLevel",
+      "type": "string",
+      "label": "Thinking Level",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.thinkingConfig.thinkingLevel"
+      }
+    },
+    {
+      "key": "includeThoughts",
+      "type": "boolean",
+      "label": "Include Thoughts",
+      "default": false,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.thinkingConfig.includeThoughts"
+      }
+    },
+    {
+      "key": "responseMimeType",
+      "type": "string",
+      "label": "Response Mime Type",
+      "enum": [
+        {
+          "value": "text/plain",
+          "label": "Text"
+        },
+        {
+          "value": "application/json",
+          "label": "JSON"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.responseMimeType"
+      }
+    },
+    {
+      "key": "responseSchema",
+      "type": "json",
+      "label": "Response Schema",
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.responseSchema"
+      }
+    },
+    {
+      "key": "responseLogprobs",
+      "type": "boolean",
+      "label": "Response Logprobs",
+      "default": false,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.responseLogprobs"
+      }
+    },
+    {
+      "key": "logprobs",
+      "type": "integer",
+      "label": "Top Logprobs",
+      "min": 1,
+      "max": 20,
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.logprobs"
+      }
+    },
+    {
+      "key": "safetySettings",
+      "type": "json",
+      "label": "Safety Settings",
+      "mapsTo": {
+        "target": "body",
+        "path": "safetySettings"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      },
+      {
+        "id": "output",
+        "label": "Output",
+        "order": 5,
+        "labelI18n": {
+          "ko": "출력"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "maxOutputTokens",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 2
+      },
+      {
+        "key": "stopSequences",
+        "widget": "string-array",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 5
+      },
+      {
+        "key": "seed",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "generation",
+        "order": 6
+      },
+      {
+        "key": "thinkingLevel",
+        "widget": "select",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "includeThoughts",
+        "widget": "toggle",
+        "visibility": "advanced",
+        "group": "reasoning",
+        "order": 2
+      },
+      {
+        "key": "responseMimeType",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 1
+      },
+      {
+        "key": "responseSchema",
+        "widget": "json",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 2
+      },
+      {
+        "key": "responseLogprobs",
+        "widget": "toggle",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 3
+      },
+      {
+        "key": "logprobs",
+        "widget": "number-input",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 4,
+        "showIf": {
+          "key": "responseLogprobs",
+          "equals": true
+        }
+      },
+      {
+        "key": "safetySettings",
+        "widget": "json",
+        "visibility": "advanced",
+        "group": "output",
+        "order": 5
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://aistudio.google.com/docs/models/gemini-4-carbon",
+    "https://aistudio.google.com/docs/latest-model",
+    "https://aistudio.google.com/api-reference/generate-content"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "maxOutputTokens": 65536,
+    "sourceUrls": [
+      "https://aistudio.google.com/docs/models/gemini-4-carbon"
+    ]
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

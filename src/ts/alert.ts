@@ -28,6 +28,7 @@ export interface alertData{
     datalist?: [string, string][],
     stackTrace?: string;
     defaultValue?: string
+    hideText?: boolean
     actions?: AlertAction[]
 }
 
@@ -396,12 +397,13 @@ export async function alertTOS(){
     return false
 }
 
-export async function alertInput(msg:string, datalist?:[string, string][], defaultValue?:string) {
+export async function alertInput(msg:string, datalist?:[string, string][], defaultValue?:string, options: { hideText?: boolean } = {}) {
 
     alertStoreImported.set({
         'type': 'input',
         'msg': msg,
         'datalist': datalist ?? [],
+        'hideText': options.hideText ?? false,
         'defaultValue': defaultValue ?? ''
     })
 

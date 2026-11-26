@@ -5,7 +5,8 @@
     import { language } from "src/lang";
     import type { PromptItem } from "src/ts/process/prompt";
     import type { character } from "src/ts/storage/database.svelte";
-    import { getCurrentChat, getToggleUnsetValues, snapshotToggleBinding, snapshotToggleValues, saveTogglesToChat } from "src/ts/storage/database.svelte";
+    import { getCurrentChat, getToggleKeys, getToggleUnsetValues, parseToggleKeysFromTemplate, snapshotToggleBinding, snapshotToggleValues, saveTogglesToChat } from "src/ts/storage/database.svelte";
+    import { getTogglePinScope } from "src/ts/togglePinScope";
     import { alertConfirm, alertConfirmMulti, alertTogglePresets, notifySuccess } from "src/ts/alert";
     import { requestImmediateSave } from "src/ts/globalApi.svelte";
     import { tooltip } from "src/ts/gui/tooltip";
@@ -43,20 +44,34 @@
     // An unset select reads as its first option ('0'); see getToggleUnsetValues.
     let unsetToggleValues = $derived(getToggleUnsetValues(toggleTemplate))
     const normToggle = (key: string, v: string | undefined) => v ?? unsetToggleValues[key] ?? ''
+    // Only the keys loading the pin restores count as changed; toggles the pin
+    // says nothing about keep their value on chat entry (see getTogglePinScope).
+    let pinScope = $derived.by(() => {
+        void toggleTemplate // re-derive on chat, character and module changes
+        return getTogglePinScope(
+            currentChat?.savedToggleValues ?? {},
+            currentChat?.savedToggleUnsetKeys,
+            getToggleKeys(),
+            { keys: parseToggleKeysFromTemplate(toggleTemplate), values: snapshotToggleValues() },
+        )
+    })
+    let pinnedKeys = $derived(pinScope.pinnedKeys)
 
     let dirtyCount = $derived.by(() => {
         if (DBState.db.disableToggleBinding) return 0
         const saved = currentChat?.savedToggleValues
         if (!saved) return 0
         const current = snapshotToggleValues()
-        const allKeys = new Set([...Object.keys(saved), ...Object.keys(current)])
         let count = 0
-        for (const key of allKeys) {
+        for (const key of pinnedKeys) {
             if (normToggle(key, saved[key]) !== normToggle(key, current[key])) count++
         }
         return count
     })
     let isDirty = $derived(dirtyCount > 0)
+    // Updating also takes in toggles the pin does not cover yet, which never
+    // count as changed.
+    let canUpdatePin = $derived(isDirty || pinScope.uncoveredKeys.length > 0)
 
     async function pinToChat() {
         const chat = getCurrentChat()
@@ -145,6 +160,7 @@
         const saved = currentChat?.savedToggleValues
         if (!saved) return false
         const fullKey = `toggle_${key}`
+        if (!pinnedKeys.has(fullKey)) return false
         return normToggle(fullKey, DBState.db.globalChatVariables[fullKey]) !== normToggle(fullKey, saved[fullKey])
     }
 
@@ -259,9 +275,9 @@
         <span class="flex-1 min-w-0 flex" use:tooltip={language.togglePinUpdate}>
             <ShButton
                 variant={isDirty ? 'destructive' : 'default'}
-                disabled={!isDirty}
+                disabled={!canUpdatePin}
                 className="w-full"
-                onclick={isDirty ? updatePin : undefined}
+                onclick={canUpdatePin ? updatePin : undefined}
             >
                 <SaveIcon size={16} class="shrink-0" />
                 <span class="truncate">{isDirty ? dirtyCount : language.togglePinUpdateLabel}</span>

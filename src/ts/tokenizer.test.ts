@@ -30,7 +30,6 @@ vi.mock("./plugins/plugins.svelte", () => ({
 }));
 vi.mock("./process/files/inlays", () => ({ supportsInlayImage: () => false }));
 vi.mock("./parser/parser.svelte", () => ({ risuChatParser: (data: string) => data }));
-vi.mock("./process/models/local", () => ({ tokenizeGGUFModel: async () => [] }));
 vi.mock("./globalApi.svelte", () => ({ globalFetch: async () => ({ ok: false }) }));
 vi.mock("./storage/persistentKv", () => ({
     makeHashedStorageKey: async (prefix: string, key: string) => prefix + key,
@@ -124,6 +123,28 @@ describe("strongBan cache", () => {
         const [llama3Hi] = await ids(encodeWithTokenizer("Hi", "llama3"));
         expect(bias).not.toEqual({ 1: -100 });
         expect(bias[llama3Hi]).toBe(-100);
+    });
+});
+
+describe("tiktoken special token text (#110)", () => {
+    // Chat text can contain these strings literally (pasted prompts, model output).
+    const text = "before <|endoftext|> middle <|im_start|> after";
+
+    it("counts cl100k special token strings as ordinary text instead of throwing", async () => {
+        const tokens = await ids(encodeWithTokenizer(text, "tik"));
+        expect(tokens.length).toBeGreaterThan(6);
+        // 100257 is <|endoftext|> as a single special token in cl100k
+        expect(tokens).not.toContain(100257);
+    });
+
+    it("counts o200k special token strings as ordinary text instead of throwing", async () => {
+        database.aiModel = "o200k-test";
+        modelTokenizers.set("o200k-test", LLMTokenizer.tiktokenO200Base);
+
+        const tokens = await ids(encode(text));
+        expect(tokens.length).toBeGreaterThan(6);
+        // 199999 is <|endoftext|> as a single special token in o200k
+        expect(tokens).not.toContain(199999);
     });
 });
 

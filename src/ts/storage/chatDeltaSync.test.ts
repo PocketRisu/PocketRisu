@@ -148,6 +148,30 @@ describe('chat delta sync — saving', () => {
     })
 })
 
+describe('chat delta sync — a save whose answer was lost (#114)', () => {
+    test('the retry after an applied save keeps each message once', async () => {
+        const server = fakeServer(chatOf(50))
+        const sync = createChatDeltaSync(server.transport, memoryCopies())
+        await sync.fetchChat('char', 0, 'chat')
+        const save = server.transport.saveChatContentDelta as ReturnType<typeof vi.fn>
+        const apply = save.getMockImplementation()! as ChatDeltaTransport['saveChatContentDelta']
+        // The server applies the save, then the answer never arrives.
+        save.mockImplementationOnce(async (...args: Parameters<ChatDeltaTransport['saveChatContentDelta']>) => {
+            await apply(...args)
+            throw new DOMException('No response', 'TimeoutError')
+        })
+
+        const once = { ...server.stored, message: [...server.stored.message, msg(50)] }
+        await expect(sync.saveChat('char', 0, 'chat', once)).rejects.toThrow('No response')
+        expect(server.stored.message).toHaveLength(51)
+
+        const twice = { ...once, message: [...once.message, msg(51)] }
+        await sync.saveChat('char', 0, 'chat', twice)
+        expect(server.stored).toEqual(twice)
+        expect(server.stored.message.map((m: any) => m.chatId)).toEqual(Array.from({ length: 52 }, (_, i) => `m${i}`))
+    })
+})
+
 describe('chat delta sync — save ordering', () => {
     // A slow earlier save (a plugin writing an unopened chat) must not land
     // after a newer one (the autosave after the user opened and edited it).

@@ -664,22 +664,29 @@ export async function importCharacterPackage(): Promise<void> {
                 alertError('Character file not found in package')
                 return
             }
-            const result = await importCharacterProcess({
+            // Take the card itself and add it here. A declined low-level access
+            // prompt or an invalid card adds nothing, yet the importer still
+            // returns the last index, and a count can match a character another
+            // device added meanwhile: either would hand the package's chats to
+            // an existing character.
+            const imported = await importCharacterProcess({
                 name: manifest.character.file.split('/').pop() || 'package.charx',
-                data: charxBytes
+                data: charxBytes,
+                returnCharacter: true
             })
-            if (result === undefined || result === null) {
+            if (!imported || typeof imported === 'number') {
                 alertError('Failed to import character from package')
                 return
             }
-            newCharIndex = result
+            const importDb = getDatabase()
+            importDb.characters.push(imported)
+            newCharIndex = importDb.characters.length - 1
         }
 
         let db = getDatabase()
+        const newChar = db.characters[newCharIndex] as character
 
         try {
-            const newChar = db.characters[newCharIndex] as character
-
             const personaIdMap = await importPersonas(manifest, unzipped, importProgress)
             importChatsToCharacter(manifest, unzipped, newChar, personaIdMap, importProgress)
             await importInlays(manifest, unzipped, newChar.chaId, importCurrentStep, importTotalSteps, progressLabel)
@@ -688,7 +695,9 @@ export async function importCharacterPackage(): Promise<void> {
             checkCharOrder()
             notifySuccess(language.characterPackageImportSuccess)
         } catch (error) {
-            db.characters.splice(newCharIndex, 1)
+            // By id: the list can change while personas and inlays import.
+            const index = db.characters.findIndex((c) => c.chaId === newChar.chaId)
+            if (index !== -1) db.characters.splice(index, 1)
             setDatabase(db)
             throw error
         }

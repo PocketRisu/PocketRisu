@@ -562,6 +562,11 @@ export function setDatabase(data:Database){
             if(Array.isArray(preset.promptTemplate)){
                 preset.promptTemplate = normalizePromptTemplate(preset.promptTemplate)
             }
+            // Fill a partial one: selecting it in upstream RisuAI after a .bin
+            // export would otherwise break that install's next boot.
+            if(preset.fallbackModels && fallbackModelSlots.some((slot) => !Array.isArray(preset.fallbackModels[slot]))){
+                preset.fallbackModels = normalizeFallbackModels(preset.fallbackModels)
+            }
             if (typeof preset.openrouterProvider === 'string') {
                 const oldProvider = preset.openrouterProvider as unknown as string;
                 preset.openrouterProvider = {
@@ -712,20 +717,7 @@ export function setDatabase(data:Database){
         data.hotkeys = data.hotkeys.filter(h => h.action !== 'scrollToActiveChar')
     }
     
-    data.fallbackModels ??= {
-        memory: [],
-        emotion: [],
-        translate: [],
-        otherAx: [],
-        model: []
-    }
-    data.fallbackModels = {
-        model: data.fallbackModels.model.filter((v) => v !== ''),
-        memory: data.fallbackModels.memory.filter((v) => v !== ''),
-        emotion: data.fallbackModels.emotion.filter((v) => v !== ''),
-        translate: data.fallbackModels.translate.filter((v) => v !== ''),
-        otherAx: data.fallbackModels.otherAx.filter((v) => v !== '')
-    }
+    data.fallbackModels = normalizeFallbackModels(data.fallbackModels, { dropBlank: true })
     data.customModels ??= []
     data.authRefreshes ??= []
     data.rememberToolUsage ??= true
@@ -830,6 +822,21 @@ export function setDatabaseLite(data:Database){
     DBState.db = data
 }
 
+const fallbackModelSlots = ['model', 'memory', 'emotion', 'translate', 'otherAx'] as const
+
+// Every fallback slot as an array. A preset written by hand or by another tool
+// can carry only some slots; a missing one made setDatabase throw on boot, and
+// boot then loaded an older snapshot instead of the database.
+export function normalizeFallbackModels(value: unknown, opts: { dropBlank?: boolean } = {}): NonNullable<botPreset['fallbackModels']> {
+    const source = (value && typeof value === 'object') ? value as Record<string, unknown> : {}
+    const out = {} as NonNullable<botPreset['fallbackModels']>
+    for (const slot of fallbackModelSlots) {
+        const list = Array.isArray(source[slot]) ? source[slot] as string[] : []
+        out[slot] = opts.dropBlank ? list.filter((v) => v !== '') : list
+    }
+    return out
+}
+
 interface getDatabaseOptions{
     snapshot?:boolean
 }
@@ -911,7 +918,7 @@ export function newChatModelDefaults(): Partial<Pick<Chat, 'useModelPreset' | 'm
 
 // ── Prompt Option State (per-chat toggle sync) ──────────────────────
 
-function parseToggleKeysFromTemplate(template:string){
+export function parseToggleKeysFromTemplate(template:string){
     const keys = new Set<string>()
     for(const rawLine of template.split('\n')){
         const line = rawLine.trim()
@@ -2923,13 +2930,7 @@ export function setPreset(db:Database, newPres: botPreset){
     // switching a prompt preset no longer overwrites db.seperateModels. The global
     // db.seperateModels is the single source of truth (preset copies are inert).
     if(!db.doNotChangeFallbackModels){
-        db.fallbackModels = safeStructuredClone(newPres.fallbackModels) ?? {
-            memory: [],
-            emotion: [],
-            translate: [],
-            otherAx: [],
-            model: []
-        }
+        db.fallbackModels = normalizeFallbackModels(safeStructuredClone(newPres.fallbackModels))
         db.fallbackWhenBlankResponse = newPres.fallbackWhenBlankResponse ?? false
     }
     if(db.disableSeperateParameterChangeOnPresetChange){
@@ -3366,6 +3367,10 @@ export async function importPreset(f:{
     }
     pre.name ??= "Imported"
     pre.id = uuidv4()
+    // Stored complete, so exporting it again (to upstream too) is safe.
+    if(pre.fallbackModels !== undefined){
+        pre.fallbackModels = normalizeFallbackModels(pre.fallbackModels)
+    }
     if(!Array.isArray(db.botPresets)){
         db.botPresets = []
     }
