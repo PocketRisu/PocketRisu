@@ -10,6 +10,7 @@ import {
     listInlayExplorerItems,
     postInlayAsset,
     removeInlayAsset,
+    scanLocalInlayReferences,
     setInlayAsset,
     writeInlayImage,
     __resetInlayStorageForTest,
@@ -789,4 +790,25 @@ describe('set -> remove -> get', () => {
             }),
         )
     }, blobPropertyTestTimeout)
+})
+
+describe('scanLocalInlayReferences', () => {
+    test('counts the other swipes and script variables of a chat', () => {
+        getDatabaseMock.mockReturnValue({
+            characters: [{
+                chats: [{
+                    scriptstate: { $img: '{{inlay::from-var}}', $count: 3 },
+                    message: [{
+                        role: 'char',
+                        data: 'shown {{inlay::shown}}',
+                        swipes: ['older {{inlayed::from-swipe}}', 'shown {{inlay::shown}}'],
+                        swipeId: 1,
+                    }],
+                }],
+            }],
+        })
+        const { refCounts, totalMessages } = scanLocalInlayReferences()
+        for (const id of ['shown', 'from-swipe', 'from-var']) expect(refCounts[id]).toBeGreaterThan(0)
+        expect(totalMessages).toBe(1)
+    })
 })

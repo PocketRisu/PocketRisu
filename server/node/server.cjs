@@ -7371,17 +7371,34 @@ function jsonLength(value) {
 // chat messages. Mirrors INLAY_REF_REGEX in src/ts/process/files/inlays.ts.
 const INLAY_REF_RE = /\{\{(?:inlay|inlayed|inlayeddata)::(.+?)\}\}/g;
 
+// Bump when addInlayRefCounts reads more fields: archive index rows counted
+// by an older version are counted again from their payload.
+const INLAY_REFS_VERSION = 2;
+
+// Counts every place a chat keeps an inlay token: each message's text and its
+// other swipes, and the chat's script variables (image-generation triggers
+// store the token there). Mirrors scanLocalInlayReferences in inlays.ts.
 function addInlayRefCounts(refCounts, chats) {
     let messages = 0;
+    const scan = (text) => {
+        if (typeof text !== 'string') return;
+        INLAY_REF_RE.lastIndex = 0;
+        let m;
+        while ((m = INLAY_REF_RE.exec(text)) !== null) {
+            refCounts[m[1]] = (refCounts[m[1]] ?? 0) + 1;
+        }
+    };
     for (const chat of Array.isArray(chats) ? chats : []) {
+        if (chat?.scriptstate && typeof chat.scriptstate === 'object') {
+            for (const value of Object.values(chat.scriptstate)) scan(value);
+        }
         if (!Array.isArray(chat?.message)) continue;
         for (const msg of chat.message) {
             if (typeof msg?.data !== 'string') continue;
             messages++;
-            INLAY_REF_RE.lastIndex = 0;
-            let m;
-            while ((m = INLAY_REF_RE.exec(msg.data)) !== null) {
-                refCounts[m[1]] = (refCounts[m[1]] ?? 0) + 1;
+            scan(msg.data);
+            if (Array.isArray(msg.swipes)) {
+                for (const swipe of msg.swipes) scan(swipe);
             }
         }
     }
@@ -7411,11 +7428,26 @@ app.get('/api/inlays/references', async (req, res, next) => {
             let archived = 0;
             for (const meta of listArchiveMetas()) {
                 archived++;
-                const refs = meta.inlayRefs;
+                let refs = meta.inlayRefs;
                 // Fail closed: an index row without inlay counts cannot vouch
                 // for its chats, and skipping it would under-count.
                 if (!refs || typeof refs !== 'object') {
                     throw new Error(`archive index lacks inlay references: ${archiveRowId(meta.chaId, meta.archivedAt)}`);
+                }
+                if (meta.inlayRefsVersion !== INLAY_REFS_VERSION) {
+                    // Counted by an older scanner that missed swipes and script
+                    // variables: count again from the payload, once. An
+                    // unreadable payload keeps its old counts, as before.
+                    try {
+                        const decoded = await decodeArchivePayload(meta.chaId, meta.archivedAt);
+                        if (decoded) {
+                            refs = Object.create(null);
+                            addInlayRefCounts(refs, decoded.payload.character.chats);
+                            kvSet(archiveMetaKey(meta.chaId, meta.archivedAt), Buffer.from(JSON.stringify({ ...meta, inlayRefs: refs, inlayRefsVersion: INLAY_REFS_VERSION }), 'utf-8'));
+                        }
+                    } catch (err) {
+                        logger.warn(`[Inlay] archive ${archiveRowId(meta.chaId, meta.archivedAt)} kept its old inlay counts: ${err?.message || err}`);
+                    }
                 }
                 for (const [id, count] of Object.entries(refs)) {
                     if (typeof count === 'number' && count > 0) refCounts[id] = (refCounts[id] ?? 0) + count;
@@ -7492,6 +7524,7 @@ async function writeArchiveRow(db, chaId, { acceptLostChats = false } = {}) {
         assetRefs: Array.from(buildUncleanableSet({ characters: [full] })),
         // Inlay references of the archived chats, for /api/inlays/references.
         inlayRefs: (() => { const counts = Object.create(null); addInlayRefCounts(counts, fullChats); return counts; })(),
+        inlayRefsVersion: INLAY_REFS_VERSION,
     };
     kvSet(archiveMetaKey(chaId, archivedAt), Buffer.from(JSON.stringify(meta), 'utf-8'));
     logger.info(`[Archive] deactivated ${chaId}@${archivedAt} (${encoded.length} bytes, ${meta.chatCount} chats, ${meta.assetRefs.length} asset refs)`);

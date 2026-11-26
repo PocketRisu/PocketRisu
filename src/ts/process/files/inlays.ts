@@ -762,19 +762,32 @@ export function scanLocalInlayReferences(): InlayScanResult {
     const refCounts: Record<string, number> = Object.create(null)
     let totalMessages = 0
 
+    const scan = (text: unknown) => {
+        if (typeof text !== 'string') return
+        // Reset regex state and create fresh instance to avoid lastIndex issues
+        const regex = new RegExp(INLAY_REF_REGEX.source, 'g')
+        let m: RegExpExecArray | null
+        while ((m = regex.exec(text)) !== null) {
+            const id = m[1]
+            refCounts[id] = (refCounts[id] ?? 0) + 1
+        }
+    }
+
+    // Same places as addInlayRefCounts on the server: message text, the
+    // other swipes, and chat script variables (image-generation triggers).
     for (const char of characters) {
         if (!Array.isArray(char?.chats)) continue
         for (const chat of char.chats) {
+            if (chat?.scriptstate && typeof chat.scriptstate === 'object') {
+                for (const value of Object.values(chat.scriptstate)) scan(value)
+            }
             if (!Array.isArray(chat?.message)) continue
             for (const msg of chat.message) {
                 if (typeof msg?.data !== 'string') continue
                 totalMessages++
-                // Reset regex state and create fresh instance to avoid lastIndex issues
-                const regex = new RegExp(INLAY_REF_REGEX.source, 'g')
-                let m: RegExpExecArray | null
-                while ((m = regex.exec(msg.data)) !== null) {
-                    const id = m[1]
-                    refCounts[id] = (refCounts[id] ?? 0) + 1
+                scan(msg.data)
+                if (Array.isArray(msg.swipes)) {
+                    for (const swipe of msg.swipes) scan(swipe)
                 }
             }
         }
