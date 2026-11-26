@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:gemini-4-neon",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Gemini 4 Neon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Neon"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Gemini 4 Neon via OpenRouter (google/gemini-4-neon).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Neon (OpenRouter, google/gemini-4-neon)."
+  },
+  "tags": [
+    "openrouter",
+    "gemini"
+  ],
+  "sortOrder": 557,
+  "modelId": "google/gemini-4-neon",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

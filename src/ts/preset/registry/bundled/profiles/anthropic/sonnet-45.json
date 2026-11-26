@@ -1,7 +1,7 @@
 {
   "id": "anthropic:sonnet-45",
-  "version": 1,
-  "updatedAt": 1780592606461,
+  "version": 2,
+  "updatedAt": 1795078641125,
   "displayName": "Claude Sonnet 4.5",
   "displayNameI18n": {
     "ko": "Claude Sonnet 4.5"
@@ -317,6 +317,9 @@
     ]
   },
   "recommendedTokenizer": "claude",
-  "profileStatus": "outdated",
-  "statusReason": "Below the current Claude 4.6 threshold; superseded by a newer release."
+  "profileStatus": "deprecated",
+  "statusReason": "Claude Sonnet 4.5 is deprecated and will be retired on November 30, 2026. Migrate to Claude Sonnet 5.5.",
+  "statusSourceUrls": [
+    "https://platform.claude.com/docs/en/about-claude/model-deprecations"
+  ]
 }

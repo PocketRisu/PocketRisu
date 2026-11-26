@@ -1,0 +1,300 @@
+{
+  "id": "anthropic:fable-52",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Claude Fable 5.2",
+  "displayNameI18n": {
+    "ko": "Claude Fable 5.2"
+  },
+  "providerBaseId": "anthropic",
+  "description": "Claude Fable 5.2 via the Anthropic Messages API. Adaptive thinking is always on (thinking cannot be disabled); control depth with effort.",
+  "descriptionI18n": {
+    "ko": "Claude Fable 5.2 (Anthropic Messages API). 적응형 thinking 상시 활성(비활성화 불가), effort로 추론 강도 조절."
+  },
+  "tags": [
+    "anthropic",
+    "claude",
+    "fable",
+    "flagship",
+    "reasoning",
+    "long-context"
+  ],
+  "sortOrder": 193,
+  "modelId": "claude-fable-5-2",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://api.anthropic.com/v1/messages"
+  },
+  "auth": {
+    "kind": "x-api-key",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {
+    "max_tokens": 16384
+  },
+  "schema": [
+    {
+      "key": "modelId",
+      "type": "string",
+      "label": "Model ID",
+      "description": "Claude model identifier.",
+      "required": true,
+      "enum": [
+        {
+          "value": "claude-fable-5-2",
+          "label": "Claude Fable 5.2"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "model"
+      },
+      "descriptionI18n": {
+        "ko": "Claude 모델 ID."
+      }
+    },
+    {
+      "key": "max_tokens",
+      "type": "integer",
+      "label": "Max Tokens",
+      "min": 1,
+      "max": 128000,
+      "mapsTo": {
+        "target": "body",
+        "path": "max_tokens"
+      },
+      "default": 16384
+    },
+    {
+      "key": "thinking_type",
+      "type": "string",
+      "label": "Thinking Mode",
+      "description": "Adaptive thinking is always on for Claude Fable 5.2; it cannot be disabled.",
+      "enum": [
+        {
+          "value": "adaptive",
+          "label": "Adaptive"
+        }
+      ],
+      "default": "adaptive",
+      "mapsTo": {
+        "target": "body",
+        "path": "thinking.type"
+      },
+      "descriptionI18n": {
+        "ko": "Claude Fable 5.2는 적응형 thinking이 상시 활성이며 비활성화할 수 없습니다."
+      }
+    },
+    {
+      "key": "effort",
+      "type": "string",
+      "label": "Thinking Effort",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        },
+        {
+          "value": "max",
+          "label": "Max"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "output_config.effort"
+      }
+    },
+    {
+      "key": "thinking_display",
+      "type": "string",
+      "label": "Thinking Display",
+      "enum": [
+        {
+          "value": "summarized",
+          "label": "Summarized"
+        },
+        {
+          "value": "omitted",
+          "label": "Omitted"
+        }
+      ],
+      "default": "summarized",
+      "mapsTo": {
+        "target": "body",
+        "path": "thinking.display"
+      },
+      "description": "Summarized returns a readable summary of the thinking; Omitted returns thinking blocks with empty text (faster first token, same cost). The API default on this model is Omitted.",
+      "descriptionI18n": {
+        "ko": "Summarized는 thinking 요약 텍스트를 돌려주고, Omitted는 텍스트 없이 빈 thinking 블록만 돌려줍니다(첫 토큰이 빨라지고 비용은 같음). 이 모델의 API 기본값은 Omitted입니다."
+      }
+    },
+    {
+      "key": "service_tier",
+      "type": "string",
+      "label": "Service Tier",
+      "enum": [
+        {
+          "value": "auto",
+          "label": "Auto"
+        },
+        {
+          "value": "standard_only",
+          "label": "Standard only"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "service_tier"
+      }
+    },
+    {
+      "key": "user_id",
+      "type": "string",
+      "label": "User ID (metadata)",
+      "mapsTo": {
+        "target": "body",
+        "path": "metadata.user_id"
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [
+      {
+        "id": "credentials",
+        "label": "Credentials",
+        "order": 1,
+        "labelI18n": {
+          "ko": "인증 정보"
+        }
+      },
+      {
+        "id": "model",
+        "label": "Model",
+        "order": 2,
+        "labelI18n": {
+          "ko": "모델"
+        }
+      },
+      {
+        "id": "generation",
+        "label": "Generation",
+        "order": 3,
+        "labelI18n": {
+          "ko": "생성"
+        }
+      },
+      {
+        "id": "reasoning",
+        "label": "Reasoning",
+        "order": 4,
+        "labelI18n": {
+          "ko": "추론"
+        }
+      },
+      {
+        "id": "control",
+        "label": "Control",
+        "order": 5,
+        "labelI18n": {
+          "ko": "요청 제어"
+        }
+      }
+    ],
+    "fields": [
+      {
+        "key": "apiKey",
+        "widget": "secret",
+        "visibility": "basic",
+        "group": "credentials",
+        "order": 1
+      },
+      {
+        "key": "modelId",
+        "widget": "combobox",
+        "visibility": "basic",
+        "group": "model",
+        "order": 1
+      },
+      {
+        "key": "max_tokens",
+        "widget": "slider",
+        "visibility": "basic",
+        "group": "generation",
+        "order": 1
+      },
+      {
+        "key": "thinking_type",
+        "widget": "select",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 1
+      },
+      {
+        "key": "effort",
+        "widget": "select",
+        "visibility": "basic",
+        "group": "reasoning",
+        "order": 2
+      },
+      {
+        "key": "thinking_display",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "reasoning",
+        "order": 3
+      },
+      {
+        "key": "service_tier",
+        "widget": "select",
+        "visibility": "advanced",
+        "group": "control",
+        "order": 1
+      },
+      {
+        "key": "user_id",
+        "widget": "text",
+        "visibility": "advanced",
+        "group": "control",
+        "order": 2
+      }
+    ]
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+    "https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2",
+    "https://platform.claude.com/docs/en/about-claude/models/overview",
+    "https://platform.claude.com/docs/en/build-with-claude/effort",
+    "https://platform.claude.com/docs/en/build-with-claude/thinking"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "sourceUrls": [
+      "https://platform.claude.com/docs/en/about-claude/models/overview"
+    ]
+  },
+  "recommendedTokenizer": "claude",
+  "profileStatus": "current"
+}

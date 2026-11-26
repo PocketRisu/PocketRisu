@@ -1,6 +1,6 @@
 {
   "id": "google:gemini-4-argon",
-  "version": 1,
+  "version": 2,
   "displayName": "Gemini 4 Argon",
   "displayNameI18n": {
     "ko": "Gemini 4 Argon"
@@ -18,7 +18,7 @@
   ],
   "sortOrder": 295,
   "modelId": "gemini-4-argon",
-  "updatedAt": 1791965031276,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"
@@ -312,8 +312,7 @@
     "reasoning",
     "vision",
     "tools",
-    "json",
-    "cache"
+    "json"
   ],
   "sourceUrls": [
     "https://ai.google.dev/gemini-api/docs/models/gemini-4-argon",

@@ -1,0 +1,95 @@
+{
+  "id": "nanogpt:gpt-62-astra",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "GPT-6.2 Astra",
+  "displayNameI18n": {
+    "ko": "GPT-6.2 Astra"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "GPT-6.2 Astra via NanoGPT (openai/gpt-6.2-astra).",
+  "descriptionI18n": {
+    "ko": "GPT-6.2 Astra (NanoGPT, openai/gpt-6.2-astra)."
+  },
+  "tags": [
+    "nanogpt",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 552,
+  "modelId": "openai/gpt-6.2-astra",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth for thinking models. 'none' disables thinking.",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning_effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. thinking 모델에 적용 (none은 비활성)."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

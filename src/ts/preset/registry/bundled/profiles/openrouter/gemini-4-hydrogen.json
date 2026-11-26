@@ -1,0 +1,57 @@
+{
+  "id": "openrouter:gemini-4-hydrogen",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Gemini 4 Hydrogen",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Hydrogen"
+  },
+  "providerBaseId": "openrouter",
+  "description": "Gemini 4 Hydrogen via OpenRouter (google/gemini-4-hydrogen).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Hydrogen (OpenRouter, google/gemini-4-hydrogen)."
+  },
+  "tags": [
+    "openrouter",
+    "gemini"
+  ],
+  "sortOrder": 556,
+  "modelId": "google/gemini-4-hydrogen",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

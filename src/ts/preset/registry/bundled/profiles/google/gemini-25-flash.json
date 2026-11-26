@@ -1,6 +1,6 @@
 {
   "id": "google:gemini-25-flash",
-  "version": 2,
+  "version": 3,
   "displayName": "Gemini 2.5 Flash",
   "displayNameI18n": {
     "ko": "Gemini 2.5 Flash"
@@ -18,7 +18,7 @@
   ],
   "sortOrder": 311,
   "modelId": "gemini-2.5-flash",
-  "updatedAt": 1781283722406,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"
@@ -414,6 +414,9 @@
     ]
   },
   "recommendedTokenizer": "gemma",
-  "profileStatus": "outdated",
-  "statusReason": "Previous-generation model, one major version below the current Gemini 3 lineup."
+  "profileStatus": "deprecated",
+  "statusReason": "Gemini 2.5 Flash is deprecated. From December 1, 2026, requests are routed to Gemini 3.5 Flash-Lite and billed at its rates.",
+  "statusSourceUrls": [
+    "https://aistudio.google.com/docs/deprecations"
+  ]
 }

@@ -1,7 +1,7 @@
 {
   "id": "openrouter:gpt-5-nano",
-  "version": 1,
-  "updatedAt": 1781103554581,
+  "version": 2,
+  "updatedAt": 1795078641125,
   "displayName": "GPT-5 Nano",
   "displayNameI18n": {
     "ko": "GPT-5 Nano"
@@ -52,5 +52,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "current"
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-5 nano expires on OpenRouter on December 11, 2026, when OpenAI shuts it down.",
+  "statusSourceUrls": [
+    "https://openrouter.ai/api/v1/models"
+  ]
 }

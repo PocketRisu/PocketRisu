@@ -1,0 +1,93 @@
+{
+  "id": "nanogpt:gemini-4-hydrogen",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Gemini 4 Hydrogen",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Hydrogen"
+  },
+  "providerBaseId": "nanogpt",
+  "description": "Gemini 4 Hydrogen via NanoGPT (google/gemini-4-hydrogen).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Hydrogen (NanoGPT, google/gemini-4-hydrogen)."
+  },
+  "tags": [
+    "nanogpt",
+    "gemini"
+  ],
+  "sortOrder": 553,
+  "modelId": "google/gemini-4-hydrogen",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://nano-gpt.com/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth for thinking models. 'none' disables thinking.",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning_effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. thinking 모델에 적용 (none은 비활성)."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://nano-gpt.com/api/v1/models",
+    "https://nano-gpt.com/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1048576,
+    "notes": "Native model spec; NanoGPT does not expose per-model limits via /api/v1/models.",
+    "notesI18n": {
+      "ko": "모델 자체 스펙 기준. NanoGPT는 /api/v1/models로 모델별 한도를 노출하지 않습니다."
+    },
+    "sourceUrls": [
+      "https://nano-gpt.com/api/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

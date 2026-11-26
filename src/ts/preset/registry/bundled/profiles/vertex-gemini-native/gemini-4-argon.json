@@ -1,7 +1,7 @@
 {
   "id": "vertex-gemini-native:gemini-4-argon",
-  "version": 1,
-  "updatedAt": 1791965031276,
+  "version": 2,
+  "updatedAt": 1795078641125,
   "displayName": "Vertex AI - Gemini 4 Argon",
   "providerBaseId": "vertex-gemini-native",
   "description": "Gemini 4 Argon on Vertex AI (native generateContent).",
@@ -27,6 +27,29 @@
       "mapsTo": {
         "target": "body",
         "path": "generationConfig.maxOutputTokens"
+      }
+    },
+    {
+      "key": "thinkingLevel",
+      "type": "string",
+      "label": "Thinking Level",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "generationConfig.thinkingConfig.thinkingLevel"
       }
     }
   ],
@@ -75,8 +98,7 @@
     "reasoning",
     "vision",
     "tools",
-    "json",
-    "cache"
+    "json"
   ],
   "sourceUrls": [
     "https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference",

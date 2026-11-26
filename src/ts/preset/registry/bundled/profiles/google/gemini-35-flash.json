@@ -1,6 +1,6 @@
 {
   "id": "google:gemini-35-flash",
-  "version": 3,
+  "version": 4,
   "displayName": "Gemini 3.5 Flash",
   "displayNameI18n": {
     "ko": "Gemini 3.5 Flash"
@@ -18,7 +18,7 @@
   ],
   "sortOrder": 300,
   "modelId": "gemini-3.5-flash",
-  "updatedAt": 1786685377000,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://generativelanguage.googleapis.com/v1beta/models"
@@ -388,5 +388,9 @@
     ]
   },
   "recommendedTokenizer": "gemma",
-  "profileStatus": "current"
+  "profileStatus": "outdated",
+  "statusReason": "Google AI Studio now routes gemini-3.5-flash requests to Gemini 3.6 Flash.",
+  "statusSourceUrls": [
+    "https://aistudio.google.com/docs/deprecations"
+  ]
 }

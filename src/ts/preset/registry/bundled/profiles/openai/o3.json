@@ -1,6 +1,6 @@
 {
   "id": "openai:o3",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI o3",
   "displayNameI18n": {
     "ko": "OpenAI o3"
@@ -17,7 +17,7 @@
   ],
   "sortOrder": 130,
   "modelId": "o3",
-  "updatedAt": 1781103554581,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -372,6 +372,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "outdated",
-  "statusReason": "Previous-generation model, one major version below the current GPT-5 lineup."
+  "profileStatus": "deprecated",
+  "statusReason": "o3 is deprecated and will be shut down on December 11, 2026. Migrate to GPT-6.1 Sol.",
+  "statusSourceUrls": [
+    "https://developers.openai.com/api/docs/deprecations"
+  ]
 }

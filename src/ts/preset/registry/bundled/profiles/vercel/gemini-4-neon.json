@@ -1,0 +1,89 @@
+{
+  "id": "vercel:gemini-4-neon",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "Gemini 4 Neon",
+  "displayNameI18n": {
+    "ko": "Gemini 4 Neon"
+  },
+  "providerBaseId": "vercel",
+  "description": "Gemini 4 Neon via Vercel AI Gateway (google/gemini-4-neon).",
+  "descriptionI18n": {
+    "ko": "Gemini 4 Neon (Vercel AI Gateway, google/gemini-4-neon)."
+  },
+  "tags": [
+    "vercel",
+    "gemini"
+  ],
+  "sortOrder": 596,
+  "modelId": "google/gemini-4-neon",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://ai-gateway.vercel.sh/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [
+    {
+      "key": "reasoning_effort",
+      "type": "string",
+      "label": "Reasoning Effort",
+      "description": "Reasoning depth. The gateway maps this to each model's native thinking config (e.g. Gemini thinkingLevel/thinkingBudget, OpenAI reasoning effort).",
+      "enum": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "xhigh",
+          "label": "Extra High"
+        }
+      ],
+      "mapsTo": {
+        "target": "body",
+        "path": "reasoning.effort"
+      },
+      "descriptionI18n": {
+        "ko": "추론(사고) 강도. 게이트웨이가 모델별 thinking 설정(Gemini thinkingLevel/thinkingBudget, OpenAI reasoning effort 등)으로 변환합니다."
+      }
+    }
+  ],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://ai-gateway.vercel.sh/v1/models",
+    "https://vercel.com/docs/ai-gateway"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1000000,
+    "sourceUrls": [
+      "https://ai-gateway.vercel.sh/v1/models"
+    ],
+    "maxOutputTokens": 65536
+  },
+  "recommendedTokenizer": "gemma",
+  "profileStatus": "current"
+}

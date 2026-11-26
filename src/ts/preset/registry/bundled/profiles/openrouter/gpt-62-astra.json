@@ -1,0 +1,59 @@
+{
+  "id": "openrouter:gpt-62-astra",
+  "version": 1,
+  "updatedAt": 1795078641125,
+  "displayName": "GPT-6.2 Astra",
+  "displayNameI18n": {
+    "ko": "GPT-6.2 Astra"
+  },
+  "providerBaseId": "openrouter",
+  "description": "GPT-6.2 Astra via OpenRouter (openai/gpt-6.2-astra).",
+  "descriptionI18n": {
+    "ko": "GPT-6.2 Astra (OpenRouter, openai/gpt-6.2-astra)."
+  },
+  "tags": [
+    "openrouter",
+    "openai",
+    "gpt",
+    "reasoning"
+  ],
+  "sortOrder": 555,
+  "modelId": "openai/gpt-6.2-astra",
+  "endpoint": {
+    "kind": "static",
+    "url": "https://openrouter.ai/api/v1/chat/completions"
+  },
+  "auth": {
+    "kind": "bearer",
+    "fields": [
+      "apiKey"
+    ]
+  },
+  "defaults": {},
+  "schema": [],
+  "uiSchema": {
+    "groups": [],
+    "fields": []
+  },
+  "capabilities": [
+    "streaming",
+    "reasoning",
+    "vision",
+    "tools",
+    "json"
+  ],
+  "sourceUrls": [
+    "https://openrouter.ai/api/v1/models",
+    "https://openrouter.ai/docs"
+  ],
+  "limits": {
+    "known": true,
+    "contextWindowTokens": 1050000,
+    "sourceUrls": [
+      "https://openrouter.ai/api/v1/models"
+    ],
+    "maxOutputTokens": 128000
+  },
+  "recommendedTokenizer": "tik",
+  "profileStatus": "current"
+}

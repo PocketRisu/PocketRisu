@@ -1,6 +1,6 @@
 {
   "id": "openai:gpt-4o",
-  "version": 1,
+  "version": 2,
   "displayName": "OpenAI GPT-4o",
   "displayNameI18n": {
     "ko": "OpenAI GPT-4o"
@@ -16,7 +16,7 @@
   ],
   "sortOrder": 150,
   "modelId": "gpt-4o",
-  "updatedAt": 1780591128566,
+  "updatedAt": 1795078641125,
   "endpoint": {
     "kind": "static",
     "url": "https://api.openai.com/v1/chat/completions"
@@ -404,6 +404,9 @@
     ]
   },
   "recommendedTokenizer": "tik",
-  "profileStatus": "outdated",
-  "statusReason": "Previous-generation model, one major version below the current GPT-5 lineup."
+  "profileStatus": "deprecated",
+  "statusReason": "GPT-4o is deprecated and will be shut down on January 14, 2027. Migrate to GPT-6 Luna.",
+  "statusSourceUrls": [
+    "https://developers.openai.com/api/docs/deprecations"
+  ]
 }
