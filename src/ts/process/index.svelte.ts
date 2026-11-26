@@ -30,6 +30,7 @@ import { resolveModelPresetContextBudget } from "./request/contextBudget"
 import { getModuleAssets, getModuleLorebooks, getModules, getModuleToggles, getModuleTriggers } from "./modules";
 import { hydrateAssetListsForCbs, serializeForCbsScan } from "../parser/assetListHydration";
 import { forageStorage, readImage, resolvePrioritizedAssetManifestNames } from "../globalApi.svelte";
+import { getSendTarget, saveSendTargetIfHidden } from "./sendTarget";
 import { pluginV2 } from "../plugins/plugins.svelte";
 import { abortGeneration, chatGenKey, chatProcessStage, endGeneration, isChatGenerating, onDatabaseRebased, registerAbort, setGenerationStage, startGeneration } from "./generationState";
 import { clearPendingSend, registerPendingSend } from "./request/pendingSends";
@@ -116,7 +117,17 @@ function promptCbsSources(char:character, chat:Chat):string[] {
     ])]
 }
 
-export async function sendChat(chatProcessIndex = -1,arg:{
+export async function sendChat(chatProcessIndex = -1, arg:Parameters<typeof runSendChat>[1] = {}):Promise<boolean> {
+    const target = getSendTarget()
+    try {
+        return await runSendChat(chatProcessIndex, arg)
+    }
+    finally {
+        if (!arg.preview && !arg.previewPrompt) saveSendTargetIfHidden(target)
+    }
+}
+
+async function runSendChat(chatProcessIndex = -1,arg:{
     chatAdditonalTokens?:number,
     signal?:AbortSignal,
     continue?:boolean,
